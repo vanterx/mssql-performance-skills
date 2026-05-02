@@ -1,0 +1,80 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple
+          StatementText="SELECT o.OrderId, c.Name, SUM(ol.LineTotal) AS Total
+                         FROM dbo.Orders o
+                         JOIN dbo.Customers c ON c.Id = o.CustomerId
+                         JOIN dbo.OrderLines ol ON ol.OrderId = o.OrderId
+                         WHERE o.CreatedDate >= @startDate
+                         GROUP BY o.OrderId, c.Name
+                         ORDER BY Total DESC"
+          StatementSubTreeCost="4821.340"
+          CardinalityEstimationModelVersion="160">
+
+          <QueryPlan DegreeOfParallelism="4" MemoryGrant="524288" CompileTime="84">
+            <MemoryGrantInfo SerialRequiredMemory="524288" GrantedMemory="524288"
+                             MaxUsedMemory="524288" GrantWaitTime="0"/>
+            <MissingIndexes>
+              <MissingIndexGroup Impact="82.1">
+                <MissingIndex Database="[ProdDB]" Schema="[dbo]" Table="[OrderLines]">
+                  <ColumnGroup Usage="EQUALITY">
+                    <Column Name="OrderId"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INCLUDE">
+                    <Column Name="LineTotal"/>
+                  </ColumnGroup>
+                </MissingIndex>
+              </MissingIndexGroup>
+            </MissingIndexes>
+
+            <RelOp NodeId="0" PhysicalOp="Parallelism" LogicalOp="Gather Streams"
+                   EstimateRows="100" ActualRows="842100">
+              <RelOp NodeId="1" PhysicalOp="Sort" LogicalOp="Sort"
+                     EstimateRows="100" ActualRows="842100">
+                <Warnings>
+                  <SpillToTempDb SpillLevel="1" SpilledThreadCount="4"/>
+                </Warnings>
+                <RelOp NodeId="2" PhysicalOp="Hash Match" LogicalOp="Aggregate"
+                       EstimateRows="100" ActualRows="842100">
+                  <RelOp NodeId="3" PhysicalOp="Hash Match" LogicalOp="Inner Join"
+                         EstimateRows="100" ActualRows="4820000">
+                    <RelOp NodeId="4" PhysicalOp="Hash Match" LogicalOp="Inner Join"
+                           EstimateRows="100" ActualRows="842100">
+                      <RelOp NodeId="5" PhysicalOp="Clustered Index Scan"
+                             LogicalOp="Clustered Index Scan"
+                             EstimateRows="100" ActualRows="842100">
+                        <Predicate>
+                          <ScalarOperator ScalarString="[Orders].[CreatedDate] >= @startDate"/>
+                        </Predicate>
+                        <IndexScan PhysicalOp="Clustered Index Scan">
+                          <Object Schema="[dbo]" Table="[Orders]" Index="[PK_Orders]" IndexKind="Clustered"/>
+                        </IndexScan>
+                      </RelOp>
+                      <RelOp NodeId="6" PhysicalOp="Clustered Index Scan"
+                             LogicalOp="Clustered Index Scan"
+                             EstimateRows="100" ActualRows="50000">
+                        <IndexScan PhysicalOp="Clustered Index Scan">
+                          <Object Schema="[dbo]" Table="[Customers]" Index="[PK_Customers]" IndexKind="Clustered"/>
+                        </IndexScan>
+                      </RelOp>
+                    </RelOp>
+                    <RelOp NodeId="7" PhysicalOp="Clustered Index Scan"
+                           LogicalOp="Clustered Index Scan"
+                           EstimateRows="1000" ActualRows="4820000">
+                      <IndexScan PhysicalOp="Clustered Index Scan">
+                        <Object Schema="[dbo]" Table="[OrderLines]" Index="[PK_OrderLines]" IndexKind="Clustered"/>
+                      </IndexScan>
+                    </RelOp>
+                  </RelOp>
+                </RelOp>
+              </RelOp>
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

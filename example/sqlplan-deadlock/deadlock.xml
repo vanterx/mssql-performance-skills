@@ -1,0 +1,65 @@
+<deadlock>
+  <victim-list>
+    <victimProcess id="process1a2b3c4d5"/>
+  </victim-list>
+  <process-list>
+    <!-- Victim: UPDATE on Orders -->
+    <process id="process1a2b3c4d5" taskpriority="0" logused="4096"
+             waitresource="KEY: 5:72057594042515456 (8194443284a0)"
+             waittype="0x0004" transactionname="user_transaction"
+             lasttranstarted="2025-05-01T10:32:14.820" XDES="0x12ab3456"
+             lockMode="U" schedulerid="3" kpid="7842" status="suspended"
+             spid="54" sbid="0" ecid="0" priority="0" trancount="1"
+             lastbatchstarted="2025-05-01T10:32:14.820"
+             hostname="APPSERVER01" loginname="AppUser" isolationlevel="read committed">
+      <executionStack>
+        <frame procname="dbo.UpdateOrderStatus" line="12" stmtstart="480" stmtend="620"
+               sqlhandle="0x0300050000000000000000000000000000000000"/>
+      </executionStack>
+      <inputbuf>
+        UPDATE dbo.Orders SET Status = 'Shipped', ShippedAt = GETDATE()
+        WHERE OrderId = 1001 AND Status = 'Processing'
+      </inputbuf>
+    </process>
+    <!-- Winner: UPDATE on OrderLines then Orders (reverse order) -->
+    <process id="process9f8e7d6c5" taskpriority="0" logused="8192"
+             waitresource="KEY: 5:72057594038321152 (a1b2c3d4e5f6)"
+             waittype="0x0004" transactionname="user_transaction"
+             lasttranstarted="2025-05-01T10:32:14.715" XDES="0x98fe7654"
+             lockMode="X" schedulerid="5" kpid="8104" status="suspended"
+             spid="61" sbid="0" ecid="0" priority="0" trancount="1"
+             lastbatchstarted="2025-05-01T10:32:14.715"
+             hostname="APPSERVER02" loginname="AppUser" isolationlevel="read committed">
+      <executionStack>
+        <frame procname="dbo.FulfillOrder" line="8" stmtstart="320" stmtend="480"
+               sqlhandle="0x0300050000000000000000000000000000000001"/>
+      </executionStack>
+      <inputbuf>
+        UPDATE dbo.OrderLines SET PickedAt = GETDATE() WHERE OrderId = 1001;
+        UPDATE dbo.Orders SET Status = 'Processing' WHERE OrderId = 1001;
+      </inputbuf>
+    </process>
+  </process-list>
+  <resource-list>
+    <!-- Orders row: victim (SPID 54) holds U, winner (SPID 61) wants X -->
+    <keylock hobtid="72057594042515456" dbid="5" objectname="ProdDB.dbo.Orders"
+             indexname="PK_Orders" id="lock1aa2bb3cc" mode="U" associatedObjectId="72057594042515456">
+      <owner-list>
+        <owner id="process1a2b3c4d5" mode="U"/>
+      </owner-list>
+      <waiter-list>
+        <waiter id="process9f8e7d6c5" mode="X" requestType="convert"/>
+      </waiter-list>
+    </keylock>
+    <!-- OrderLines row: winner (SPID 61) holds X, victim (SPID 54) wants U -->
+    <keylock hobtid="72057594038321152" dbid="5" objectname="ProdDB.dbo.OrderLines"
+             indexname="IX_OrderLines_OrderId" id="lock4dd5ee6ff" mode="X" associatedObjectId="72057594038321152">
+      <owner-list>
+        <owner id="process9f8e7d6c5" mode="X"/>
+      </owner-list>
+      <waiter-list>
+        <waiter id="process1a2b3c4d5" mode="U" requestType="wait"/>
+      </waiter-list>
+    </keylock>
+  </resource-list>
+</deadlock>

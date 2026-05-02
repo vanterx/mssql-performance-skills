@@ -1,0 +1,34 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple
+          StatementText="SELECT c.CustomerId, c.Name, c.Email FROM dbo.Customers c WHERE c.Email = @email"
+          StatementSubTreeCost="0.003"
+          CardinalityEstimationModelVersion="160">
+          <QueryPlan DegreeOfParallelism="1" MemoryGrant="0" CompileTime="2">
+            <RelOp NodeId="0" PhysicalOp="Clustered Index Seek"
+                   LogicalOp="Clustered Index Seek"
+                   EstimateRows="1" ActualRows="1">
+              <IndexScan Ordered="false" PhysicalOp="Clustered Index Seek">
+                <Object Schema="[dbo]" Table="[Customers]" Index="[PK_Customers]" IndexKind="Clustered"/>
+                <SeekPredicates>
+                  <SeekPredicateNew>
+                    <SeekKeys>
+                      <Prefix ScanType="EQ">
+                        <RangeColumns>
+                          <ColumnReference Table="[Customers]" Column="Email"/>
+                        </RangeColumns>
+                      </Prefix>
+                    </SeekKeys>
+                  </SeekPredicateNew>
+                </SeekPredicates>
+              </IndexScan>
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

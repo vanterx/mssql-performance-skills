@@ -1,0 +1,147 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple StatementText="
+          SELECT u.*, o.*, p.*
+          FROM Users u
+          JOIN Orders o ON u.Id = o.UserId
+          JOIN Payments p ON o.Id = p.OrderId
+          WHERE u.Email LIKE '%gmail.com'
+            AND o.CreatedDate >= @StartDate"
+          StatementId="1"
+          StatementSubTreeCost="98765.4321"
+          StatementEstRows="1"
+          CardinalityEstimationModelVersion="160">
+
+          <QueryPlan DegreeOfParallelism="8"
+                     MemoryGrant="1048576"
+                     CachedPlanSize="2048"
+                     CompileTime="512"
+                     CompileCPU="512">
+
+            <!-- Parallelism root -->
+            <RelOp NodeId="0" PhysicalOp="Parallelism" LogicalOp="Gather Streams">
+              
+              <RunTimeInformation>
+                <RunTimeCountersPerThread Thread="0" ActualRows="1" ActualEndOfScans="1"/>
+                <RunTimeCountersPerThread Thread="1" ActualRows="9999999" ActualEndOfScans="1"/>
+              </RunTimeInformation>
+
+              <RelOp NodeId="1" PhysicalOp="Hash Match" LogicalOp="Inner Join"
+                     EstimatedRows="1" ActualRows="9999999">
+
+                <!-- Massive misestimate -->
+                <Hash>
+                  <DefinedValues />
+                  <HashKeysBuild>
+                    <ColumnReference Table="[Orders]" Column="Id"/>
+                  </HashKeysBuild>
+                  <HashKeysProbe>
+                    <ColumnReference Table="[Payments]" Column="OrderId"/>
+                  </HashKeysProbe>
+                </Hash>
+
+                <!-- Left branch -->
+                <RelOp NodeId="2" PhysicalOp="Nested Loops" LogicalOp="Inner Join"
+                       EstimatedRows="1" ActualRows="5000000">
+
+                  <!-- Users scan with non-SARGable filter -->
+                  <RelOp NodeId="3" PhysicalOp="Clustered Index Scan"
+                         LogicalOp="Clustered Index Scan"
+                         EstimatedRows="1" ActualRows="2000000">
+
+                    <Predicate>
+                      <ScalarOperator ScalarString="[Users].[Email] like '%gmail.com'">
+                        <Compare CompareOp="LIKE"/>
+                      </ScalarOperator>
+                    </Predicate>
+
+                  </RelOp>
+
+                  <!-- Key lookup explosion -->
+                  <RelOp NodeId="4" PhysicalOp="Key Lookup" LogicalOp="Key Lookup"
+                         EstimatedRows="1" ActualRows="5000000">
+
+                    <RunTimeInformation>
+                      <RunTimeCountersPerThread Thread="0"
+                        ActualRows="5000000"
+                        ActualExecutions="5000000"/>
+                    </RunTimeInformation>
+
+                  </RelOp>
+
+                </RelOp>
+
+                <!-- Right branch -->
+                <RelOp NodeId="5" PhysicalOp="Sort" LogicalOp="Sort"
+                       EstimatedRows="1" ActualRows="9999999">
+
+                  <Warnings>
+                    <SpillToTempDb SpillLevel="2"
+                                   SpilledThreadCount="8"/>
+                  </Warnings>
+
+                  <RelOp NodeId="6" PhysicalOp="Hash Match" LogicalOp="Aggregate"
+                         EstimatedRows="1" ActualRows="9999999">
+
+                    <Warnings>
+                      <HashSpillDetails SpillLevel="3"/>
+                    </Warnings>
+
+                    <RelOp NodeId="7" PhysicalOp="Parallelism" LogicalOp="Repartition Streams">
+
+                      <RelOp NodeId="8" PhysicalOp="Index Scan" LogicalOp="Index Scan"
+                             EstimatedRows="1000" ActualRows="9999999">
+
+                        <!-- Implicit conversion killing index -->
+                        <Predicate>
+                          <ScalarOperator ScalarString="CONVERT_IMPLICIT(datetime,[Orders].[CreatedDate]) >= @StartDate">
+                            <Compare CompareOp="GE"/>
+                          </ScalarOperator>
+                        </Predicate>
+
+                      </RelOp>
+
+                    </RelOp>
+
+                  </RelOp>
+
+                </RelOp>
+
+              </RelOp>
+
+            </RelOp>
+
+            <!-- Memory warning -->
+            <MemoryGrantInfo SerialRequiredMemory="1024"
+                             GrantedMemory="1048576"
+                             MaxUsedMemory="2097152"
+                             RequestedMemory="1048576"
+                             GrantWaitTime="5000" />
+
+            <!-- Missing index suggestion -->
+            <MissingIndexes>
+              <MissingIndexGroup Impact="99.999">
+                <MissingIndex Database="[ProdDB]" Schema="[dbo]" Table="[Users]">
+                  <ColumnGroup Usage="EQUALITY">
+                    <Column Name="Email"/>
+                  </ColumnGroup>
+                </MissingIndex>
+              </MissingIndexGroup>
+            </MissingIndexes>
+
+            <!-- Parameter sniffing hint -->
+            <ParameterList>
+              <ColumnReference Column="@StartDate"
+                               ParameterCompiledValue="'1900-01-01'"
+                               ParameterRuntimeValue="'2025-01-01'"/>
+            </ParameterList>
+
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

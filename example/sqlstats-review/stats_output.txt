@@ -1,0 +1,20 @@
+SQL Server parse and compile time:
+   CPU time = 0 ms, elapsed time = 2 ms.
+
+(48291 row(s) affected)
+Table 'Worktable'. Scan count 4, logical reads 182140, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+Table 'OrderLines'. Scan count 48291, logical reads 2568900, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+Table 'Orders'. Scan count 1, logical reads 84210, physical reads 12, read-ahead reads 82150, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+Table 'Customers'. Scan count 1, logical reads 4820, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+
+SQL Server Execution Times:
+   CPU time = 18420 ms,  elapsed time = 142800 ms.
+
+SQL Server parse and compile time:
+   CPU time = 0 ms, elapsed time = 0 ms.
+
+(1 row(s) affected)
+Table 'Orders'. Scan count 1, logical reads 8, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+
+SQL Server Execution Times:
+   CPU time = 0 ms,  elapsed time = 1 ms.

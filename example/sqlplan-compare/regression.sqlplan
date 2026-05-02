@@ -1,0 +1,40 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple StatementText="SELECT o.OrderId, o.Total, c.Name FROM dbo.Orders o JOIN dbo.Customers c ON c.Id = o.CustomerId WHERE o.Status = @status"
+          StatementSubTreeCost="142.6830"
+          CardinalityEstimationModelVersion="160">
+          <QueryPlan DegreeOfParallelism="1" MemoryGrant="2097152" CompileTime="8" CompileCPU="8">
+            <MemoryGrantInfo SerialRequiredMemory="2097152" GrantedMemory="2097152" MaxUsedMemory="2097152" GrantWaitTime="3200"/>
+            <Warnings>
+              <PlanAffectingConvert ConvertIssue="Seek Plan" Expression="[Orders].[Status]"/>
+            </Warnings>
+            <!-- Hash Match: full scans after statistics staleness caused plan regression -->
+            <RelOp NodeId="0" PhysicalOp="Hash Match" LogicalOp="Inner Join"
+                   EstimateRows="1" EstimatedTotalSubtreeCost="142.6830">
+              <!-- Build side: full clustered index scan on Orders (no seek — implicit conversion) -->
+              <RelOp NodeId="1" PhysicalOp="Clustered Index Scan" LogicalOp="Clustered Index Scan"
+                     EstimateRows="1" EstimatedTotalSubtreeCost="98.4120">
+                <RunTimeInformation>
+                  <RunTimeCountersPerThread Thread="0" ActualRows="4800000" ActualElapsedms="84210"/>
+                </RunTimeInformation>
+                <Warnings>
+                  <PlanAffectingConvert ConvertIssue="Seek Plan" Expression="CONVERT_IMPLICIT(nvarchar,[Orders].[Status])"/>
+                </Warnings>
+              </RelOp>
+              <!-- Probe side: full clustered index scan on Customers -->
+              <RelOp NodeId="2" PhysicalOp="Clustered Index Scan" LogicalOp="Clustered Index Scan"
+                     EstimateRows="1" EstimatedTotalSubtreeCost="44.2710">
+                <RunTimeInformation>
+                  <RunTimeCountersPerThread Thread="0" ActualRows="1200000" ActualElapsedms="18420"/>
+                </RunTimeInformation>
+              </RelOp>
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

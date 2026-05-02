@@ -1,0 +1,628 @@
+---
+name: sqlwait-review
+description: Analyze SQL Server wait statistics to identify why the server or a session is slow. Applies 29 checks (V1–V29) covering I/O, locks, parallelism, memory, CPU, TempDB, log I/O, network, latch contention, log space exhaustion, poison/throttle waits, backup I/O, insert hotspots, cumulative skew detection, and multi-snapshot trend analysis. Based on Paul Randal and Brent Ozar methodologies. Use when pasting sys.dm_os_wait_stats or sys.dm_exec_requests output.
+triggers:
+  - /sqlwait-review
+  - /wait-review
+  - /waits
+---
+
+# SQL Server Wait Statistics Review Skill
+
+## Purpose
+
+Analyze SQL Server wait statistics and identify the dominant bottleneck using the **Waits and Queues** methodology (Paul Randal, SQLskills.com; Brent Ozar First Responder Kit). Applies 29 checks (V1–V29): V1–V18 classify each significant wait type into its root cause and produce a prioritized remediation plan; V19–V26 perform multi-snapshot trend analysis when 3+ time windows are provided — detecting worsening trends, spikes, peak periods, and emerging bottlenecks; V27–V29 cover specialized scenarios (PAGELATCH on user databases, backup I/O, cumulative skew from outlier events).
+
+The Waits and Queues methodology is based on how SQL Server's thread scheduler works: threads are always in one of three states — **RUNNING** (on CPU), **RUNNABLE** (queued for CPU), or **SUSPENDED** (waiting for a resource). Every time a thread suspends, SQL Server records the wait type and duration. Analyzing the top accumulated waits reveals the dominant bottleneck — not by guessing, but by measuring exactly what the server spent its time waiting for.
+
+Wait analysis answers the question execution plans cannot: *why* is the server slow when no individual query has a bad plan? The answer is almost always in the wait types — I/O, locks, CPU, memory, or network.
+
+## Input
+
+Accept any of:
+- Output from the `sys.dm_os_wait_stats` capture query below (paste the result grid)
+- Output from `sys.dm_exec_requests` for current active session waits
+- A `.txt` or `.csv` file containing either of the above
+- A natural language description of the top wait types ("PAGEIOLATCH_SH is 78% of waits, CXPACKET is 12%")
+
+### Recommended capture query
+
+Run on the SQL Server instance and paste the results:
+
+```sql
+-- Wait statistics since last SQL Server restart or DBCC SQLPERF('sys.dm_os_wait_stats', CLEAR)
+-- Benign exclusion list based on Paul Randal's SQLskills.com methodology (sqlskills.com/help/waits/)
+SELECT TOP 20
+    wait_type,
+    waiting_tasks_count,
+    wait_time_ms,
+    max_wait_time_ms,
+    signal_wait_time_ms,
+    CAST(100.0 * wait_time_ms
+         / NULLIF(SUM(wait_time_ms) OVER (), 0) AS DECIMAL(5,2)) AS pct_total
+FROM sys.dm_os_wait_stats
+WHERE wait_type NOT IN (
+    -- Broker / Service Broker
+    'BROKER_EVENTHANDLER','BROKER_RECEIVE_WAITFOR','BROKER_TASK_STOP',
+    'BROKER_TO_FLUSH','BROKER_TRANSMITTER',
+    -- Checkpoint / CLR
+    'CHECKPOINT_QUEUE','CHKPT','CLR_AUTO_EVENT','CLR_MANUAL_EVENT','CLR_SEMAPHORE',
+    -- Mirroring / HADR background (idle components only — not HADR_SYNC_COMMIT)
+    'DBMIRROR_DBM_EVENT','DBMIRROR_DBM_MUTEX','DBMIRROR_EVENTS_QUEUE',
+    'DBMIRROR_WORKER_QUEUE','DBMIRRORING_CMD',
+    'HADR_CLUSAPI_CALL','HADR_FABRIC_CALLBACK','HADR_FILESTREAM_IOMGR_IOCOMPLETION',
+    'HADR_LOGCAPTURE_WAIT','HADR_NOTIFICATION_DEQUEUE','HADR_TIMER_TASK',
+    'HADR_WORK_QUEUE',
+    -- Background / dispatcher
+    'DIRTY_PAGE_POLL','DISPATCHER_QUEUE_SEMAPHORE',
+    'EXECSYNC','FSAGENT',
+    'FT_IFTS_SCHEDULER_IDLE_WAIT','FT_IFTSHC_MUTEX',
+    'KSOURCE_WAKEUP','LAZYWRITER_SLEEP','LOGMGR_QUEUE',
+    'MEMORY_ALLOCATION_EXT',
+    'ONDEMAND_TASK_QUEUE',
+    'PARALLEL_REDO_DRAIN_WORKER','PARALLEL_REDO_LOG_CACHE',
+    'PARALLEL_REDO_TRAN_LIST','PARALLEL_REDO_WORKER_SYNC',
+    'PARALLEL_REDO_WORKER_WAIT_WORK','POPULATE_LOCK_ORDINALS',
+    'PREEMPTIVE_HADR_LEASE_MECHANISM','PREEMPTIVE_OS_FLUSHFILEBUFFERS',
+    'PREEMPTIVE_SP_SERVER_DIAGNOSTICS','PREEMPTIVE_XE_GETTARGETSTATE',
+    'PVS_PREALLOCATE',
+    'PWAIT_ALL_COMPONENTS_INITIALIZED','PWAIT_DIRECTLOGCONSUMER_GETNEXT',
+    'PWAIT_EXTENSIBILITY_CLEANUP_TASK',
+    'QDS_ASYNC_QUEUE','QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+    'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP','QDS_SHUTDOWN_QUEUE',
+    'REDO_THREAD_PENDING_WORK',
+    'REQUEST_FOR_DEADLOCK_SEARCH','RESOURCE_QUEUE',
+    'SERVER_IDLE_CHECK','SLEEP_BPOOL_FLUSH',
+    'SLEEP_DBSTARTUP','SLEEP_DBTASK','SLEEP_DCOMSTARTUP',
+    'SLEEP_MASTERDBREADY','SLEEP_MASTERMDREADY','SLEEP_MASTERUPGRADED',
+    'SLEEP_MSDBSTARTUP','SLEEP_SYSTEMTASK','SLEEP_TASK','SLEEP_TEMPDBSTARTUP',
+    'SNI_HTTP_ACCEPT','SOS_WORK_DISPATCHER',
+    'SP_SERVER_DIAGNOSTICS_SLEEP',
+    'SQLTRACE_BUFFER_FLUSH','SQLTRACE_INCREMENTAL_FLUSH_SLEEP',
+    'UCS_SESSION_REGISTRATION','VDI_CLIENT_OTHER',
+    'WAIT_FOR_RESULTS','WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+    'WAITFOR','WAITFOR_TASKSHUTDOWN',
+    'XE_DISPATCHER_WAIT','XE_LIVE_TARGET_TVF','XE_TIMER_EVENT'
+)
+ORDER BY wait_time_ms DESC;
+```
+
+### Two-snapshot differential query (Paul Randal's recommended approach)
+
+Cumulative waits since restart can be misleading — a busy nightly backup from 2 weeks ago dominates. Capture a differential over 30 minutes instead:
+
+```sql
+-- Snapshot 1 (run at T0)
+-- Note: shorter exclusion list is acceptable here because delta subtraction between identical
+-- snapshots cancels out idle waits. For non-differential capture, use the full list above.
+SELECT wait_type, wait_time_ms, signal_wait_time_ms, waiting_tasks_count
+INTO #waits_before FROM sys.dm_os_wait_stats
+WHERE wait_type NOT IN ('SLEEP_TASK','WAITFOR','LAZYWRITER_SLEEP',
+    'CHECKPOINT_QUEUE','REQUEST_FOR_DEADLOCK_SEARCH','XE_DISPATCHER_WAIT');
+
+WAITFOR DELAY '00:30:00';   -- wait 30 minutes (adjust as needed)
+
+-- Snapshot 2 (run at T30)
+SELECT
+    a.wait_type,
+    b.wait_time_ms - a.wait_time_ms               AS wait_time_ms_delta,
+    b.signal_wait_time_ms - a.signal_wait_time_ms AS signal_wait_ms_delta,
+    b.waiting_tasks_count - a.waiting_tasks_count  AS tasks_delta,
+    CAST(100.0 * (b.wait_time_ms - a.wait_time_ms)
+         / NULLIF(SUM(b.wait_time_ms - a.wait_time_ms) OVER (), 0)
+         AS DECIMAL(5,2))                          AS pct_of_period
+FROM #waits_before a
+JOIN sys.dm_os_wait_stats b ON b.wait_type = a.wait_type
+WHERE b.wait_time_ms > a.wait_time_ms
+ORDER BY wait_time_ms_delta DESC;
+
+DROP TABLE #waits_before;
+```
+
+### Current session waits (point-in-time)
+
+```sql
+SELECT
+    r.session_id,
+    r.wait_type,
+    r.wait_time / 1000.0 AS wait_sec,
+    r.blocking_session_id,
+    r.status,
+    DB_NAME(r.database_id) AS database_name,
+    SUBSTRING(t.text, (r.statement_start_offset/2)+1,
+        ((CASE r.statement_end_offset WHEN -1 THEN DATALENGTH(t.text)
+          ELSE r.statement_end_offset END - r.statement_start_offset)/2)+1) AS current_statement
+FROM sys.dm_exec_requests r
+CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t
+WHERE r.session_id > 50
+  AND r.session_id <> @@SPID
+ORDER BY r.wait_time DESC;
+```
+
+### Server configuration capture (recommended)
+
+Paste this alongside your wait statistics. The skill uses these values to adjust check interpretations — e.g., CXPACKET is interpreted differently based on MAXDOP and Cost Threshold for Parallelism; LCK_M_* changes based on RCSI state.
+
+```sql
+-- sp_configure values
+SELECT name AS config_name, CAST(value_in_use AS INT) AS current_value
+FROM sys.configurations
+WHERE name IN (
+    'max degree of parallelism',
+    'cost threshold for parallelism',
+    'max server memory (MB)',
+    'optimize for ad hoc workloads',
+    'max worker threads',
+    'xp_cmdshell',
+    'clr enabled',
+    'lightweight pooling',
+    'blocked process threshold (s)',
+    'query governor cost limit'
+);
+
+-- Per-database settings (run for the database under investigation)
+SELECT
+    name AS database_name,
+    is_read_committed_snapshot_on,
+    recovery_model_desc,
+    delayed_durability_desc
+FROM sys.databases
+WHERE database_id = DB_ID();
+
+-- TempDB file count
+SELECT COUNT(*) AS tempdb_data_file_count
+FROM sys.master_files
+WHERE database_id = 2 AND type = 0;
+
+-- Always On commit mode (if configured)
+SELECT ag.name AS ag_name, ar.availability_mode_desc AS commit_mode, ars.role_desc
+FROM sys.availability_replicas ar
+JOIN sys.availability_groups ag ON ag.group_id = ar.group_id
+JOIN sys.dm_hadr_availability_replica_states ars ON ars.replica_id = ar.replica_id
+WHERE ars.is_local = 1;
+```
+
+If configuration is not provided, the skill still runs all 26 checks and notes where config would change the interpretation.
+
+### Multi-snapshot trend capture (activates V19–V26)
+
+Trend mode activates automatically when the input contains **3 or more distinct timestamps**. Single-snapshot mode (V1–V18) is unchanged when only one time window is present.
+
+**Approach A — Staging table with SQL Agent job (recommended for automated capture)**
+
+```sql
+-- Create once per server (or use tempdb.dbo for session-scoped capture)
+CREATE TABLE dbo.WaitStatsTrend (
+    snapshot_time       DATETIME2    NOT NULL DEFAULT SYSDATETIME(),
+    wait_type           NVARCHAR(120) NOT NULL,
+    wait_time_ms        BIGINT       NOT NULL,
+    signal_wait_time_ms BIGINT       NOT NULL,
+    waiting_tasks_count BIGINT       NOT NULL
+);
+
+-- Run every N minutes via SQL Agent job (or execute manually N times)
+INSERT INTO dbo.WaitStatsTrend (wait_type, wait_time_ms, signal_wait_time_ms, waiting_tasks_count)
+SELECT wait_type, wait_time_ms, signal_wait_time_ms, waiting_tasks_count
+FROM sys.dm_os_wait_stats
+WHERE wait_type NOT IN (
+    'SLEEP_TASK','WAITFOR','LAZYWRITER_SLEEP','CHECKPOINT_QUEUE',
+    'REQUEST_FOR_DEADLOCK_SEARCH','XE_DISPATCHER_WAIT','XE_TIMER_EVENT',
+    'BROKER_TO_FLUSH','BROKER_TRANSMITTER','SLEEP_DBSTARTUP','SLEEP_DBTASK',
+    'SLEEP_MASTERDBREADY','SLEEP_MASTERMDREADY','SLEEP_MASTERUPGRADED',
+    'SLEEP_MSDBSTARTUP','SLEEP_SYSTEMTASK','SLEEP_TEMPDBSTARTUP',
+    'SNI_HTTP_ACCEPT','SOS_WORK_DISPATCHER','SP_SERVER_DIAGNOSTICS_SLEEP',
+    'SQLTRACE_BUFFER_FLUSH','SQLTRACE_INCREMENTAL_FLUSH_SLEEP'
+);
+
+-- Query for trend analysis — paste result to /sqlwait-review alongside configuration
+SELECT
+    snapshot_time,
+    wait_type,
+    wait_time_ms   - LAG(wait_time_ms)   OVER (PARTITION BY wait_type ORDER BY snapshot_time) AS delta_wait_ms,
+    signal_wait_time_ms - LAG(signal_wait_time_ms) OVER (PARTITION BY wait_type ORDER BY snapshot_time) AS delta_signal_ms,
+    waiting_tasks_count - LAG(waiting_tasks_count) OVER (PARTITION BY wait_type ORDER BY snapshot_time) AS delta_tasks
+FROM dbo.WaitStatsTrend
+WHERE snapshot_time >= DATEADD(HOUR, -2, SYSDATETIME())
+ORDER BY snapshot_time, delta_wait_ms DESC;
+```
+
+**Approach B — Manual multi-run (no staging table)**
+
+```sql
+-- Run every N minutes and paste all result sets together (labeled with a comment for each run)
+-- The skill detects multiple timestamp values and activates trend mode automatically
+-- Note: shorter exclusion list is acceptable for differential trend mode; delta subtraction
+-- between consecutive cumulative snapshots cancels out idle waits. For the full exclusion
+-- list, use the staging-table approach (Approach A) above.
+SELECT
+    CONVERT(NVARCHAR(20), SYSDATETIME(), 120) AS snapshot_time,
+    wait_type, wait_time_ms, signal_wait_time_ms, waiting_tasks_count,
+    CAST(100.0 * wait_time_ms / NULLIF(SUM(wait_time_ms) OVER(), 0) AS DECIMAL(5,2)) AS pct_total
+FROM sys.dm_os_wait_stats
+WHERE wait_type NOT IN (
+    'SLEEP_TASK','WAITFOR','LAZYWRITER_SLEEP','CHECKPOINT_QUEUE',
+    'REQUEST_FOR_DEADLOCK_SEARCH','XE_DISPATCHER_WAIT','XE_TIMER_EVENT'
+)
+ORDER BY wait_time_ms DESC;
+```
+
+With Approach B, the skill computes per-period deltas by subtracting consecutive cumulative values within each wait_type across snapshots.
+
+**Minimum snapshots:** 2 periods for V20/V21/V23; 3+ periods for V19/V22/V24/V25/V26 (full trend analysis).
+
+## How to Run
+
+1. **Parse the input** into rows of: `wait_type`, `wait_time_ms`, `waiting_tasks_count`, `signal_wait_time_ms`, `pct_total`.
+1a. **Detect capture window duration** — this determines whether absolute ms thresholds and the "In context" metric are computable:
+   - **Trend mode:** Compute the time difference between consecutive `snapshot_time` values for each wait_type. Report the median interval in minutes as the period length. If any consecutive pair differs by more than 20% from the median, flag unequal intervals — V21 and V22 must use per-minute normalization in that case.
+   - **Single snapshot — timestamp present:** Parse any window declaration from the input (e.g., a header comment stating "30-minute differential"). Use that value.
+   - **Single snapshot — no timestamp:** Flag: *"Capture window unknown — state the differential interval or elapsed time for accurate 'In context' calculation and V18 threshold scaling. Percentage thresholds (V1–V17) remain fully valid."*
+   - **Cumulative since restart:** Note that absolute ms totals reflect the entire uptime period; percentage thresholds are still fully valid, but absolute ms comparisons and "In context" are not meaningful.
+2. **Compute total actionable wait time** = SUM(wait_time_ms) across all rows provided.
+3. **Compute signal wait ratio** = SUM(signal_wait_time_ms) / SUM(wait_time_ms) × 100.
+4. **Run V1–V18** — check each wait type's presence and share of total. V17 always fires (top-5 summary). V18 (poison waits) uses the window-scaled threshold from step 1a.
+5. **Flag any unknown wait types** — if a wait type accounts for ≥ 2% of total wait time but does not match any V1–V18 or V27–V29 pattern, flag as Info: *"Unknown wait type '<name>' at <N>% — may be new in your SQL Server version; review current Microsoft documentation."* These are not errors but should be surfaced so the user is aware of gaps in automated analysis.
+6. **Check for known cross-wait correlations in single-snapshot mode** — when V24 (correlated spikes) cannot fire because trend data is absent, flag these known co-occurring pairs if both exceed their individual thresholds in the same snapshot: (a) PAGEIOLATCH ≥ 10% + RESOURCE_SEMAPHORE > 0 ms → *"These often share a root cause — a missing index causing large scans (driving I/O) that also request large memory grants."* (b) WRITELOG ≥ 10% + HADR_SYNC_COMMIT ≥ 5% → *"Log I/O pressure — the synchronous secondary may be unable to keep up with the primary's commit rate."* (c) LCK_M_* ≥ 1% + SOS_SCHEDULER_YIELD ≥ 15% → *"Long-running scans may be holding locks while burning CPU quanta."* These are Info-level correlations, not independent findings — they guide the user to a common root cause.
+7. **Note the capture window** — if cumulative since restart, high values for rare events (nightly backup, weekly DBCC) can skew results. Prefer the differential query output if available.
+6. **Output** the single-snapshot report as defined in Output Format (V1–V18, V27–V29 findings).
+9. **Detect trend mode** — count distinct timestamp values in the input. If ≥ 3: activate trend analysis for V19–V26.
+   - Approach A input (pre-computed deltas): use `delta_wait_ms` and compute `pct_of_period = delta_wait_ms / SUM(delta_wait_ms per snapshot) × 100` per time window.
+   - Approach B input (cumulative values): for each consecutive pair of snapshots, compute `delta = value[T] − value[T−1]` per wait_type; then compute `pct_of_period` per window from those deltas.
+10. **Run V19–V26** using the per-period delta series. Also run V27–V29 (they work in both modes).
+11. **Append Trend Analysis section** to the output after `### Passed Checks`.
+
+---
+
+## Thresholds Reference
+
+**Important:** There are no universal thresholds for wait statistics. Compare against *your own system's baseline*, not industry averages. A CXPACKET percentage that is normal for a large analytics workload would be alarming on a pure OLTP system. The values below are investigative triggers — always verify with context.
+
+**Window dependency:** All percentage thresholds are window-independent — they reflect the proportion of wait time and are valid at any capture interval (5 min, 30 min, cumulative). Absolute ms thresholds scale with the window; per-minute rate equivalents are provided where applicable.
+
+| Metric | Investigative threshold |
+|--------|------------------------|
+| PAGEIOLATCH — I/O pressure | ≥ 10% investigate; ≥ 40% critical |
+| LCK_M — lock wait | any presence; ≥ 20% critical |
+| CXPACKET alone (not CXCONSUMER) | ≥ 15% investigate; ≥ 40% critical |
+| CXCONSUMER (SQL 2016 SP2 CU3+) | generally benign — only investigate alongside very high CXPACKET |
+| RESOURCE_SEMAPHORE — memory grant queue | any presence > 0 ms |
+| RESOURCE_SEMAPHORE — critical | ≥ 5% of total wait time |
+| WRITELOG — log I/O | ≥ 10% investigate |
+| ASYNC_NETWORK_IO | ≥ 20% — but this is almost always a client-side problem, not SQL Server |
+| SOS_SCHEDULER_YIELD | ≥ 15% investigate — requires context; VM environments inflate this |
+| Signal wait ratio — CPU saturation | ≥ 15% warning; ≥ 25% critical |
+| THREADPOOL — thread exhaustion | any presence = Critical |
+| PAGELATCH (TempDB pages 1/2/3) | any presence = Warning |
+| LATCH_EX/SH (non-page latches) | ≥ 5% investigate |
+| LOGMGR_RESERVE_APPEND | any presence = Critical |
+| Single wait type dominance | ≥ 60% = focus all effort on this type |
+| Poison waits — window-scaled (V18) | `wait_time_ms > 1,000 × window_minutes` — e.g., > 5,000 ms for 5-min, > 30,000 ms for 30-min, > 60,000 ms for 60-min. If window unknown, use > 10,000 ms (conservative minimum). Cumulative: use Brent Ozar formula `> 60,000 ms AND > (5,000 × hours_since_startup)`. |
+| "In context" concurrent sessions | `total_wait_ms ÷ window_ms`; requires known window — report N/A if window is unknown or cumulative |
+| Trend — spike (V20) | Single period ≥ 200% of that wait type's own average across all periods |
+| Trend — worsening (V19) | Delta % increases monotonically across ≥ 3 consecutive periods |
+| Trend — emerging (V23) | < 0.5% in period 1, ≥ 2.0% in any later period |
+| Trend — correlated (V24) | 2+ wait types each ≥ 150% of own average in the same period |
+
+---
+
+## Wait Statistics Checks (V1–V29)
+
+### V1 — Physical I/O Wait (PAGEIOLATCH)
+- **Trigger:** `PAGEIOLATCH_SH`, `PAGEIOLATCH_EX`, or `PAGEIOLATCH_UP` present AND combined ≥ 10% of total wait time
+- **Severity:** Warning (10–39%); Critical (≥ 40%)
+- **Fix:** Pages are being read from disk into the buffer pool. **Important:** do not blame the I/O subsystem first — the real question is *why is SQL Server reading so much data?* Inefficient queries (scans instead of seeks, missing indexes, stale statistics) are the root cause in most cases; the I/O subsystem is just the messenger. Fix options ranked: (1) Identify the heaviest-read queries with `/sqlstats-review` or `/sqltrace-review` and add covering indexes; (2) Add RAM to expand the buffer pool after addressing query efficiency; (3) Move data files to faster storage (SSD/NVMe) as a tertiary fix; (4) Identify hot tables with `sys.dm_os_buffer_descriptors`.
+
+### V2 — Lock Waits (LCK_M)
+- **Trigger:** Any `LCK_M_*` wait type present AND combined ≥ 1% of total wait time
+- **Severity:** Warning (LCK_M combined 1–19%); Critical (≥ 20%)
+- **Fix:** Sessions are blocked waiting for row, page, or table locks. Key variants: `LCK_M_IX` (Intent Exclusive) — the most worrying lock wait, often caused by lock escalation or schema modification conflicts; `LCK_M_RS_*`, `LCK_M_RIn_*`, `LCK_M_RX_*` — range lock waits that indicate **SERIALIZABLE isolation level** is in use, holding range locks to prevent phantom reads. Fix options: (1) Use `sys.dm_os_waiting_tasks` to identify the blocking resource and head blocker; (2) Add indexes on WHERE clause columns to reduce scan-based lock scope; (3) Enable READ_COMMITTED_SNAPSHOT (`ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT ON`) to eliminate reader/writer shared lock conflicts; (4) For SERIALIZABLE range locks specifically: switch to SNAPSHOT isolation (`ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION ON; SET TRANSACTION ISOLATION LEVEL SNAPSHOT`) — it provides consistent reads without range locks; (5) Use `/sqlblock-review` for the full blocking chain analysis.
+- **Configuration note:** If RCSI is **OFF** — enabling RCSI eliminates all reader-caused `LCK_M_S` and shared-lock conflicts in a single command; this is the highest-leverage fix and should be the first action. If RCSI is already **ON** — the remaining LCK_M waits come from explicit writers or lock escalation, which RCSI cannot resolve; focus on reducing scan scope with indexes and shortening transaction duration.
+
+### V3 — Parallelism (CXPACKET / CXCONSUMER)
+- **Trigger:** `CXPACKET` ≥ 15% of total wait time. `CXCONSUMER` alone is generally benign — only investigate if CXPACKET is also elevated.
+- **Severity:** Warning (CXPACKET 15–39%); Critical (≥ 40%) — but **CXPACKET is not always a problem**
+- **Fix:** **Do not reflexively reduce MAXDOP.** CXPACKET records the control thread waiting for parallel worker threads to complete — this is normal and expected for parallel plans. The critical distinction: (1) If work is *evenly distributed* across threads and the query benefits from parallelism, high CXPACKET is fine; (2) If work is *skewed* (one thread does 90% of the work while others wait), that is the problem to fix. On SQL Server 2016 SP2 CU3+, `CXCONSUMER` was separated out — `CXPACKET` now represents the producer thread wait and is more actionable. Fix options when CXPACKET is genuinely problematic: (1) Raise Cost Threshold for Parallelism from default 5 to 25–50 — reduces unnecessary parallelism on medium-cost queries; (2) Update statistics — data skew causes uneven thread distribution; (3) Investigate specific queries via `sys.dm_exec_requests` (not `sys.dm_os_waiting_tasks` — CXPACKET threads may not appear there); (4) Only reduce MAXDOP after confirming parallelism is hurting, not helping.
+- **Configuration note:** If **MAXDOP = 0** and **CTPfP = 5** (both server defaults) — most medium-cost queries go parallel unnecessarily on modern multi-core hardware; raising CTPfP to 25–50 is the first fix and often resolves most of the CXPACKET wait without any MAXDOP change. If CTPfP is already ≥ 25 and MAXDOP is explicitly set — the CXPACKET is from large queries that genuinely benefit from parallelism; investigate per-query data skew with `sys.dm_exec_requests` before making any changes. Never reduce MAXDOP as a first response.
+
+### V4 — Memory Grant Queue (RESOURCE_SEMAPHORE / RESOURCE_SEMAPHORE_QUERY_COMPILE)
+- **Trigger:** `RESOURCE_SEMAPHORE` present with any wait time > 0; `RESOURCE_SEMAPHORE_QUERY_COMPILE` present with any wait time > 0 AND ≥ 0.5% of total (lower threshold because compile-memory waits are usually small but impactful)
+- **Severity:** Warning (RESOURCE_SEMAPHORE < 5% of total, RESOURCE_SEMAPHORE_QUERY_COMPILE 0.5–2%); Critical (RESOURCE_SEMAPHORE ≥ 5%, RESOURCE_SEMAPHORE_QUERY_COMPILE ≥ 2%)
+- **Fix:** Two distinct memory grant pools — runtime and compile — each with different root causes:
+  - **RESOURCE_SEMAPHORE (runtime memory grants):** queries queue for **execution memory** (Sort, Hash Match operators) before execution can begin. Fix: (1) Update statistics with FULLSCAN — stale stats → over-estimated row counts → oversized grants → few concurrent grants; (2) Add indexes to reduce sort/hash input sizes; (3) Add `OPTION (MIN_GRANT_PERCENT = n)` to cap individual grants; (4) Use Resource Governor to limit grant size per workload group; (5) Add RAM. Check `/sqlplan-review` S2/S3/S4 for the specific queries driving large grants.
+  - **RESOURCE_SEMAPHORE_QUERY_COMPILE (compile memory grants):** queries queue for **compile memory** — a separate, smaller pool used during query optimization (plan compilation). Unlike runtime grants, compile memory exhaustion is driven by plan complexity and concurrency, not data volume. Fix: (1) Enable **optimize for ad hoc workloads** (`sp_configure 'optimize for ad hoc workloads', 1; RECONFIGURE`) — prevents storing full compiled plans for single-use ad-hoc queries, freeing compile memory; (2) Simplify complex queries — deeply nested views, very long IN lists, or queries referencing hundreds of tables consume disproportionate compile memory; (3) Use `OPTION (KEEPFIXED PLAN)` on queries that recompile unnecessarily — it suppresses recompilation from statistics changes; (4) If `RESOURCE_SEMAPHORE_QUERY_COMPILE` is the dominant wait (≥ 2%) while `RESOURCE_SEMAPHORE` is low, the bottleneck is compile-bound, not data-bound — `optimize for ad hoc workloads` is the highest-leverage fix.
+- **Configuration note:** If **Max Server Memory is 0** (the default, meaning unlimited) — SQL Server may consume all available RAM, leaving no room for new memory grants to be allocated concurrently; setting Max Server Memory to (total RAM × 90% − OS overhead) is the prerequisite fix. If Max Server Memory is already correctly bounded — the issue is individual grants being oversized due to stale statistics, not total RAM shortage; update statistics first. If `RESOURCE_SEMAPHORE_QUERY_COMPILE` is high and **optimize for ad hoc workloads** is **OFF** — enabling it is the single most effective fix for compile-memory pressure.
+
+### V5 — Transaction Log I/O (WRITELOG / LOGBUFFER)
+- **Trigger:** `WRITELOG` or `LOGBUFFER` ≥ 10% of total wait time combined
+- **Severity:** Warning (10–29%); Critical (≥ 30%)
+- **Fix:** `WRITELOG` — every COMMIT flushes the transaction log synchronously. `LOGBUFFER` — threads waiting for space in the log buffer before writing; indicates the log buffer is full, often from very high DML rates. Both indicate log I/O pressure. Every COMMIT requires SQL Server to harden the log to disk before returning. Note: on faster storage, WRITELOG waits may *increase* as higher throughput generates more commits — this is not necessarily a problem, just higher transaction volume. Fix options when WRITELOG is genuinely the bottleneck: (1) Move the transaction log to dedicated fast storage (NVMe with low write latency — the log is sequential write, so IOPS matter less than latency); (2) Separate the log from data files so I/O does not compete; (3) Batch small transactions — reducing commit frequency reduces log flush frequency; (4) Delayed Durability (SQL Server 2014+) — `ALTER DATABASE YourDb SET DELAYED_DURABILITY = FORCED` batches log flushes; trade-off is potential data loss of the last batch on crash; (5) SQL Server 2012+ increased max outstanding log writes from 32 to 112 — ensure you are not on SQL 2008.
+- **Configuration note:** If **Delayed Durability is DISABLED** and log I/O is the confirmed bottleneck — consider `ALTER DATABASE YourDb SET DELAYED_DURABILITY = ALLOWED`, which lets applications opt into batched log flushes for workloads that can tolerate up to ~1 ms of committed-but-not-hardened data on a crash. If **Delayed Durability is already FORCED** and WRITELOG is still high — the issue is raw log file I/O throughput (too many commits even after batching), not commit frequency; move the log to dedicated faster storage.
+
+### V6 — Client Result Consumption (ASYNC_NETWORK_IO)
+- **Trigger:** `ASYNC_NETWORK_IO` ≥ 20% of total wait time
+- **Severity:** Info — **this wait type is almost never a SQL Server problem**
+- **Fix:** SQL Server has results ready in its output buffer but the client is not consuming them. Paul Randal (SQLskills.com) explicitly states: *"ASYNC_NETWORK_IO is never indicative of a problem with SQL Server."* The bottleneck is always client-side. Investigation steps: (1) Check if the client is processing rows one at a time (RBAR — row-by-row processing) instead of bulk reading; (2) Test raw network latency between SQL Server and application server; (3) Check for VM host oversubscription on the application server; (4) If using MARS (Multiple Active Result Sets), large result sets can inflate this wait; (5) Reduce result set size as a mitigation — `SET NOCOUNT ON`, explicit column lists, pagination. Do not tune SQL Server to fix ASYNC_NETWORK_IO.
+
+### V7 — Scheduler Yield (SOS_SCHEDULER_YIELD)
+- **Trigger:** `SOS_SCHEDULER_YIELD` ≥ 15% of total wait time
+- **Severity:** Warning — but **this does NOT necessarily indicate CPU pressure and does NOT indicate LOCK_HASH spinlock contention**
+- **Fix:** SQL Server threads complete a 4 ms CPU quantum and voluntarily yield the scheduler. High SOS_SCHEDULER_YIELD is most commonly caused by queries doing large in-memory page scans (e.g., missing index → table scan, which repeatedly accesses buffer pool pages without suspending). **Critical clarification from Paul Randal:** (1) SOS_SCHEDULER_YIELD does NOT indicate LOCK_HASH spinlock issues — threads backing off from spinlock collisions use Windows `Sleep()` which is invisible in wait statistics; (2) On virtual machines, this wait is often artificially elevated because the VM clock counter includes hypervisor scheduling delay, making threads appear to burn longer quanta than they actually do. Fix options: (1) Identify the specific queries via `sys.dm_exec_requests` (threads with this wait are RUNNABLE, not SUSPENDED — they may not appear in `sys.dm_os_waiting_tasks`); (2) Add indexes to eliminate in-memory scans; (3) If running in a VM, check host oversubscription before assuming a SQL Server problem.
+
+### V8 — Thread Pool Exhaustion (THREADPOOL)
+- **Trigger:** `THREADPOOL` present with any wait time
+- **Severity:** Critical (any presence)
+- **Fix:** SQL Server has run out of worker threads. New requests queue waiting for a thread. This is a severe capacity problem. Immediate actions: (1) Kill long-running or orphaned sessions (`KILL spid`); (2) Increase `max worker threads` (`sp_configure`) — but investigate root cause first; (3) Root causes: many long-running blocking chains consuming threads, many parallel queries consuming multiple threads each (reduce MAXDOP), application creating too many connections (use connection pooling). Investigate with `sys.dm_os_workers` and `sys.dm_exec_sessions`.
+
+### V9 — TempDB Allocation Contention (PAGELATCH)
+- **Trigger:** `PAGELATCH_EX` or `PAGELATCH_SH` present, especially on database ID 2 (TempDB) pages 1, 2, or 3 (PFS, GAM, SGAM allocation pages)
+- **Severity:** Warning
+- **Fix:** Multiple sessions are contending for TempDB allocation page latches. This happens when many sessions create/drop temp objects simultaneously. Fix: (1) Add TempDB data files (one per logical CPU core, up to 8) — distributes allocation page contention across files; (2) Enable trace flag 1118 (SQL 2014 and earlier) or set `Mixed Extent Allocations = 0` (SQL 2016+) to use uniform extents; (3) Use table variables instead of temp tables for small, single-row data sets; (4) Avoid dropping and recreating temp tables in loops.
+- **Configuration note:** Compare **TempDB data file count** against `min(logical CPU count, 8)`. If files < target — adding the missing files is the direct fix (this is the most common TempDB contention remedy). If already at 8 files and PAGELATCH persists — verify all files are **equal size**; SQL Server uses proportional fill, so a larger file receives more allocations and re-centralises contention. Also confirm Trace Flag 1118 / Mixed Extent Allocations is set correctly for the SQL Server version.
+
+### V10 — Signal Wait Ratio (CPU Saturation Indicator)
+- **Trigger:** `signal_wait_time_ms / wait_time_ms` across all wait types ≥ 15%
+- **Severity:** Warning (15–24%); Critical (≥ 25%)
+- **Fix:** Signal wait time = time a thread waited for CPU after its lock/I/O was satisfied. High signal waits mean CPU is the bottleneck — threads are ready to run but no CPU is available. This often accompanies V7 (SOS_SCHEDULER_YIELD). Fix: reduce CPU-intensive queries (scans, large sorts), add CPU cores, or reduce parallelism to free per-query CPU threads.
+
+### V11 — OLE DB Provider Calls (OLEDB)
+- **Trigger:** `OLEDB` ≥ 5% of total wait time — but **duration matters: short waits may be benign**
+- **Severity:** Info (milliseconds per call, millions of occurrences — likely monitoring tools); Warning (tens or hundreds of ms per call — likely linked servers or SSIS)
+- **Fix:** OLEDB is a preemptive wait — the thread does not yield the scheduler while waiting. Context determines severity: (1) **Millisecond waits with very high task counts** — monitoring tools (SentryOne, SQL Server Management Studio, DMV polling) query internal providers constantly; these are benign and can appear in the top-10 without indicating a problem; (2) **Tens to hundreds of ms per wait** — linked server queries or SSIS are the cause; these need investigation. Fix for actionable OLEDB: (1) Identify the linked server queries with `/sqltrace-review`; (2) Replicate remote data locally and query locally; (3) Use `OPENQUERY` to push filters to the remote server; (4) Reduce monitoring poll frequency if monitoring tools are the cause.
+
+### V12 — High Availability Synchronization (HADR / DBMIRROR)
+- **Trigger:** Any `HADR_*` or `DBMIRROR_*` wait type ≥ 5% of total wait time
+- **Severity:** Warning
+- **Fix:** The primary replica is waiting for secondary replicas to acknowledge log hardening (synchronous commit) or log send (asynchronous). Fix options: (1) Switch non-critical databases to asynchronous commit mode; (2) Investigate network latency between primary and secondary; (3) Move secondary replicas to faster storage for log writes; (4) Use `sys.dm_hadr_database_replica_states` to identify the lagging secondary.
+- **Configuration note:** **Synchronous-commit mode** — every COMMIT on the primary waits for the secondary to acknowledge log hardening; secondary storage latency + network round-trip add directly to primary commit time, and HADR_SYNC_COMMIT waits are expected and proportional. **Asynchronous-commit mode** — HADR_SYNC_COMMIT should not appear at all; if it does, the replica's commit mode may have been changed or a formerly-async replica is being added to the synchronous quorum. Verify with `SELECT availability_mode_desc FROM sys.availability_replicas`.
+
+### V13 — External / OS Calls (PREEMPTIVE Waits)
+- **Trigger:** Any `PREEMPTIVE_*` wait type ≥ 10% of total wait time
+- **Severity:** Warning
+- **Fix:** SQL Server is making preemptive OS calls — CLR assemblies, extended stored procedures, COM objects, or Windows authentication. These bypass SQL Server's cooperative scheduling. Fix: (1) Identify which CLR objects or xp_* calls are running via Extended Events; (2) Replace xp_cmdshell with SQL Server Agent jobs; (3) Minimize CLR usage or move CLR work to application layer.
+
+### V14 — Single Wait Type Dominance
+- **Trigger:** Any single wait type accounts for ≥ 60% of total wait time
+- **Severity:** Info
+- **Fix:** The server has one dominant bottleneck — this is actually good news for troubleshooting. Focus all tuning effort on the root cause of that single wait type before addressing anything else. Report which wait type dominates and cross-reference the appropriate check above.
+
+### V15 — Non-Page Latch Contention (LATCH_EX / LATCH_SH)
+- **Trigger:** `LATCH_EX` or `LATCH_SH` ≥ 5% of total wait time. **Distinguish from PAGELATCH** (V9): PAGELATCH protects in-memory data pages; LATCH_EX/SH protects internal SQL Server non-page data structures.
+- **Severity:** Warning
+- **Fix:** Non-page latches protect internal structures — index trees, log manager, file group control blocks, parallel scan infrastructure. Without knowing *which* latch class is contended, diagnosis is impossible. Fix steps: (1) Query `sys.dm_os_latch_stats` to identify the specific latch class: `SELECT * FROM sys.dm_os_latch_stats WHERE latch_class NOT IN ('BUFFER','ACCESS_METHODS_HOBT_COUNT') ORDER BY wait_time_ms DESC`; (2) Common latch classes and fixes: `ACCESS_METHODS_DATASET_PARENT` / `ACCESS_METHODS_SCAN_RANGE_GENERATOR` — parallel scan contention, often co-occurs with CXPACKET; `LOG_MANAGER` — transaction log growth contention (pre-size the log); `TRACE_CONTROLLER` — SQL Trace is enabled and generating excessive overhead (switch to Extended Events); `FGCB_ADD_REMOVE` — file auto-growth is triggering (pre-size data files); `DATABASE_MIRRORING_CONNECTION` — mirroring message throughput (check network).
+
+### V16 — Log Space Exhaustion (LOGMGR_RESERVE_APPEND)
+- **Trigger:** `LOGMGR_RESERVE_APPEND` present with any wait time
+- **Severity:** Critical — Paul Randal notes this is very unusual to see as a top wait and always indicates a serious problem
+- **Fix:** A thread needs to write a log record but there is no space available in the transaction log. Most commonly occurs in SIMPLE recovery mode with zero or insufficient autogrowth. This causes all DML to block until log space is freed (via checkpoint and log reuse) or the log grows. Fix: (1) Immediately: determine why the log is full — `DBCC SQLPERF('LOGSPACE')` and `SELECT log_reuse_wait_desc FROM sys.databases`; (2) If SIMPLE recovery: the log cannot be backed up — it only frees space via checkpoint. A long-running active transaction may be preventing checkpoint from truncating the log. (3) Fix: increase log autogrowth size, or switch to FULL recovery with regular log backups so space is regularly reclaimed; (4) Never set autogrowth to 0 — that prevents the log from growing at all.
+- **Configuration note:** **FULL recovery** — log space is freed by log backup; take one immediately (`BACKUP LOG`). **SIMPLE recovery** — log space is freed only by automatic checkpoint; if a long-running transaction is open it prevents checkpoint from advancing the log's minimum LSN; find and kill it via `sys.dm_tran_active_transactions`. **BULK_LOGGED recovery** — bulk operations hold log space until the next log backup; take a log backup immediately or temporarily switch to SIMPLE if BULK_LOGGED is not required.
+
+### V17 — Top Wait Types Summary
+- **Trigger:** Always fires — produces the top-5 summary table regardless of other findings
+- **Severity:** Info
+- **Fix:** No fix required for this check — it surfaces the top 5 waits by total time and percentage as the primary orientation for the report. All other checks build on this foundation.
+
+### V18 — Poison / Throttle Waits
+- **Trigger:** Any of the following present AND `wait_time_ms > 1,000 × window_minutes` (e.g., > 5,000 ms for 5-min window, > 30,000 ms for 30-min window, > 60,000 ms for 60-min window). If window is unknown, use > 10,000 ms as conservative minimum. For cumulative-since-restart data, use the Brent Ozar formula: `wait_time_ms > 60,000` AND `wait_time_ms > (5,000 × hours_since_startup)`. Wait types: `IO_QUEUE_LIMIT`, `IO_RETRY`, `RESMGR_THROTTLED`, `LOG_RATE_GOVERNOR`, `POOL_LOG_RATE_GOVERNOR`, `INSTANCE_LOG_RATE_GOVERNOR`, `HADR_THROTTLE_LOG_RATE_GOVERNOR`, `SE_REPL_CATCHUP_THROTTLE`, `SE_REPL_COMMIT_ACK`, `SE_REPL_COMMIT_TURN`, `SE_REPL_ROLLBACK_ACK`, `SE_REPL_SLOW_SECONDARY_THROTTLE`
+- **Severity:** Critical — these are "poison" waits (Brent Ozar First Responder Kit terminology): any significant accumulation indicates a severe, often emergency condition
+- **Fix by wait type:**
+  - `IO_QUEUE_LIMIT` — the I/O subsystem queue is full; SQL Server is generating more I/O than the storage can accept. Emergency: check disk throughput, reduce I/O via indexes, add faster storage.
+  - `IO_RETRY` — a SQL Server I/O operation failed and is being retried. Indicates hardware or driver errors. Check Windows Event Log and SQL Server error log immediately.
+  - `RESMGR_THROTTLED` — Resource Governor is actively throttling a workload group's CPU. Review Resource Governor pool configuration; the pool's MAX_CPU_PERCENT may be set too low.
+  - `LOG_RATE_GOVERNOR` / `POOL_LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL Server 2019+) — transaction log generation rate is being actively throttled by SQL Server. Occurs in Azure SQL and Managed Instances, or when always-on log hardening can't keep up. Reduce write volume, optimize large DML, check secondary replica health.
+  - `HADR_THROTTLE_LOG_RATE_GOVERNOR` — log rate throttled specifically because an Always On secondary replica is lagging. Investigate secondary replica I/O and network latency.
+  - `SE_REPL_*` (SQL Server 2019+) — Always On secondary replica replication throttle. The primary is generating logs faster than the secondary can apply them. Check `sys.dm_hadr_database_replica_states` for `redo_queue_size` and `redo_rate` on the lagging secondary.
+
+---
+
+## Trend Analysis Checks (V19–V26)
+
+These checks activate only when the input contains **3 or more distinct time windows** (2 for V20/V21/V23). They operate on the per-period delta series derived from multi-snapshot input. V18 (poison waits) is re-evaluated in each period independently.
+
+### V19 — Trend Direction
+- **Trigger:** Any wait type's delta % increases or decreases monotonically across ≥ 3 consecutive periods
+- **Severity:** Warning (worsening trend); Info (improving trend)
+- **Fix:** A monotonically worsening wait type is not a random fluctuation — something is systematically growing. Identify the root cause via the corresponding V1–V18 check, then determine what changed at the start of the observation window: a new query or job starting, a batch growing in size, an index becoming fragmented. A monotonically improving trend after a corrective action (e.g., index addition, RCSI enablement) confirms the fix is working.
+
+### V20 — Spike Detection
+- **Trigger:** Any wait type's delta % in a single period is ≥ 200% of its own rolling average across all periods
+- **Severity:** Warning (200–399%); Critical (≥ 400% — a 4× spike is a clear event, not noise)
+- **Fix:** A spike is a discrete event that occurred within one capture window. Correlate the spike timestamp with SQL Server error logs, SQL Agent job history, application deployment records, or database maintenance jobs (index rebuild, DBCC CHECKDB). The root cause is almost always an event that started or completed at that time. Cross-reference V24 (Correlated Spikes) — if multiple wait types spiked simultaneously, they share a root cause.
+
+### V21 — Peak Period Identification
+- **Trigger:** Always fires when 2+ time windows are present
+- **Severity:** Info
+- **Fix:** No fix required — identifies which time window had the highest total wait intensity. **When intervals are equal:** compare raw `delta_wait_ms` per period directly. **When intervals are unequal (> 20% variance):** normalize to `wait_ms per minute = delta_wait_ms ÷ period_minutes` before comparing — a 30-minute period will naturally accumulate more ms than a 5-minute period at the same load, and raw comparison would always favour the longer window. Report: the timestamp range, the total accumulated wait, the per-minute rate, and how much worse it was vs the average period.
+
+### V22 — Velocity Ranking
+- **Trigger:** Always fires when 3+ time windows are present
+- **Severity:** Info
+- **Fix:** No fix required — ranks the top 3 wait types by rate of change. **Always include the actual period length in the output** — report as `"+N% per P-minute period"` (e.g., `"PAGEIOLATCH_SH +4.3% per 15-min period"`). When intervals are unequal, report the per-minute rate instead: `"+0.29 pp/min"`. Velocity identifies which bottleneck is accelerating fastest. A wait type at 10% growing 5 pp/period will overtake a static 30% type in 4 periods. Report the top 3 with their rate, trend direction, and the corresponding V1–V18 check for root cause.
+
+### V23 — Emerging Wait Types
+- **Trigger:** A wait type that was < 0.5% of total in period 1 is ≥ 2.0% in any later period
+- **Severity:** Warning
+- **Fix:** A wait type that was absent or negligible at the start of the observation but grew to significance indicates a problem that developed mid-period — not a pre-existing condition. Common causes: a new query started (N+1 pattern, missing index), a blocking head session appeared, a scheduled job began running, or a new connection pool was opened. Identify when the wait type first crossed 2% and correlate with external events.
+
+### V24 — Correlated Spikes
+- **Trigger:** 2 or more wait types each spike above 150% of their own average in the same time period
+- **Severity:** Warning
+- **Fix:** Correlated spikes share a root cause. Common correlated pairs: PAGEIOLATCH + RESOURCE_SEMAPHORE (a query doing large scans requests both disk reads and a large memory grant — missing index is the common root cause); LCK_M_* + SOS_SCHEDULER_YIELD (a long-running scan holds locks while burning CPU quanta); WRITELOG + HADR_SYNC_COMMIT (log I/O pressure — the synchronous secondary can't keep up). When two waits spike together, fix the primary wait type (the one with the higher absolute delta_wait_ms) — the correlated wait often resolves as a side effect.
+
+### V25 — Transient Event Detection
+- **Trigger:** A wait type spiked (≥ 200% of own average in one period) but returned to below its average in a subsequent period
+- **Severity:** Info
+- **Fix:** A transient spike that resolved itself is different from an ongoing problem. Report: which wait type, which period it spiked, and that it resolved. Likely causes: a one-time batch, a scheduled job that completed, a blocking head session that was killed, or a temporary network delay. No immediate action required if the spike is fully resolved, but capture a `/sqltrace-review` trace around the same time to identify the specific query responsible.
+
+### V26 — Pattern Classification
+- **Trigger:** Always fires when 3+ time windows are present
+- **Severity:** Info
+- **Fix:** No fix required — produces a single-sentence classification of the overall server behavior pattern across the observation period. Use standard patterns: `Consistently degrading` (V19 worsening for dominant wait type), `Single spike then recovery` (V20 + V25 for same wait type), `Steadily elevated` (all periods above baseline, no clear trend), `Multi-spike` (V20 fires for 2+ non-overlapping periods), `Improving` (V19 improving for dominant wait type), `Multi-bottleneck` (2+ wait types both worsening). Report which wait types drive the pattern and what root cause the pattern implies.
+
+---
+
+## Operational Checks (V27–V29)
+
+These checks complement V1–V26 for both single-snapshot and trend mode.
+
+### V27 — PAGELATCH on User Databases (Insert Hotspots / Page Splits)
+- **Trigger:** `PAGELATCH_EX` or `PAGELATCH_SH` present on a database that is NOT TempDB (database_id ≠ 2); combined ≥ 2% of total wait time. **Distinguish from V9** (TempDB allocation contention on pages 1/2/3) — V9 addresses PFS/GAM/SGAM contention across sessions creating temp objects; V27 addresses latch contention on user database data pages.
+- **Severity:** Warning
+- **Fix:** PAGELATCH on user databases most commonly indicates **last-page contention** on clustered indexes with sequentially increasing keys (IDENTITY, SEQUENCE, or `NEWSEQUENTIALID()`). All INSERT operations target the same last page, contending for the exclusive page latch. Secondary cause: **page splits** when inserting into full pages — the split operation holds the latch longer. Fix options ranked: (1) For last-page contention on IDENTITY keys: use `OPTIMIZE_FOR_SEQUENTIAL_KEY = ON` (SQL Server 2019+) — an index-level option that improves last-page insertion throughput without redesigning the key; (2) For IDENTITY-based clustered indexes: consider a different clustered key (non-sequential GUID, business key) to spread inserts across pages — trade-off is index fragmentation; (3) Use `SEQUENCE` with a cache size (`CACHE 1000`) instead of IDENTITY — reduces metadata contention but not page-level; (4) Reduce fill factor (e.g., `FILLFACTOR = 80`) on insert-heavy indexes — leaves free space per page to delay page splits; (5) Hash-partition the inserting table via `PARTITION BY RANGE` on a computed hash column to spread inserts across multiple partitions (and therefore multiple B-tree last pages). Verify by querying `sys.dm_os_waiting_tasks` where `resource_description` indicates the specific page.
+- **Related checks:** V9 (TempDB PAGELATCH — different root cause), V1 (PAGEIOLATCH — often co-occurs when scanning hot tables)
+
+### V28 — Backup I/O (BACKUPIO / BACKUPBUFFER)
+- **Trigger:** `BACKUPIO` or `BACKUPBUFFER` combined ≥ 5% of total wait time
+- **Severity:** Info (5–14%); Warning (≥ 15%)
+- **Fix:** These waits occur during database backup operations — `BACKUPIO` is the I/O wait for reading database pages into backup buffers; `BACKUPBUFFER` is the wait for backup buffer space to become available (the backup is generating buffers faster than the backup device can consume them). Unlike most wait types, these are expected during backup windows. Fix options when backups impact production: (1) Schedule backups during low-activity periods (off-peak hours) so these waits don't compete with user queries; (2) Use backup compression — reduces backup size, I/O volume, and buffer consumption (`WITH COMPRESSION` in `BACKUP DATABASE`); (3) Use backup striping — write to multiple backup files/devices in parallel (`TO DISK = 'file1.bak',..., 'fileN.bak'` with `MAXTRANSFERSIZE` tuned); (4) For `BACKUPBUFFER` specifically: increase `BUFFERCOUNT` in `BACKUP DATABASE` to allocate more buffers, reducing buffer-full contention; (5) Move backups to faster backup media (faster disk or dedicated backup network). If `BACKUPIO` consistently appears outside backup windows, check for rogue backup processes or verify backup jobs complete within their scheduled window.
+- **Related checks:** V1 (PAGEIOLATCH — general I/O pressure during backups), V5 (WRITELOG — log backups also generate write I/O)
+
+### V29 — Cumulative Skew Detection (Outlier Dominance)
+- **Trigger:** For any wait type where `waiting_tasks_count > 0`, compute `avg_wait_ms = wait_time_ms / waiting_tasks_count`. If `max_wait_time_ms > 100 × avg_wait_ms`, flag the wait type as "skewed by outliers."
+- **Severity:** Info
+- **Fix:** A single extreme wait event (e.g., a 30-minute `PAGEIOLATCH_SH` from a nightly DBCC, vs average 50 ms per task) can dominate cumulative wait totals, giving a false impression of chronic I/O problems. This check identifies when a small number of outlier events disproportionately inflate a wait type's total — the `max_wait_time_ms` is so large relative to the average that the total is unreliable without investigating the outliers. Action: (1) Note the specific wait type, its `max_wait_time_ms`, and `waiting_tasks_count` in the report; (2) If using cumulative data, re-capture a differential snapshot to get a window that excludes the outlier; (3) Identify the outlier event — correlate the high `max_wait_time_ms` with known maintenance windows (index rebuilds, `DBCC CHECKDB`, large bulk operations, nightly ETL); (4) If the outlier is a recurring maintenance operation, document it for the baseline and exclude it when evaluating query performance — the wait is real but not actionable for query tuning. In trend mode (V19–V26), this check is less relevant because per-period deltas automatically isolate the outlier to a single window via V20 and V25. In single-snapshot mode it prevents wasted effort tuning a wait type dominated by one-time events.
+
+---
+
+## Output Format
+
+```
+## Wait Statistics Analysis
+
+### Input Summary
+- Source: [sys.dm_os_wait_stats / sys.dm_exec_requests / description]
+- Capture window: [auto-detected N-minute differential | user-stated N minutes | cumulative since restart YYYY-MM-DD | unknown — provide window duration for accurate 'In context' and V18 threshold scaling]
+- Snapshot interval (trend mode): [~N minutes per period | unequal intervals detected — V21/V22 use per-minute normalization]
+- Wait types captured: N (benign idle waits excluded)
+- Total actionable wait time: N ms [= N ms/min — rate for cross-window comparison]
+- In context: [total_wait_ms ÷ window_ms = X concurrent sessions blocked on average | N/A — window unknown | N/A — cumulative data, window undefined]
+- Signal wait ratio: N% [< 15% = CPU ok; 15–24% = Warning; ≥ 25% = Critical CPU saturation]
+
+### Server Configuration Context
+
+| Setting | Value | Affects | Interpretation |
+|---------|-------|---------|---------------|
+| MAXDOP | [value] | V3 | [e.g., "0 (all 16 cores) — high CXPACKET expected; raise CTPfP before reducing MAXDOP"] |
+| Cost Threshold for Parallelism | [value] | V3 | [e.g., "5 (default) — too low for modern hardware; many medium queries go parallel unnecessarily"] |
+| RCSI enabled | [Yes/No] | V2 | [e.g., "No — enabling RCSI is the highest-leverage fix for LCK_M_S and reader/writer conflicts"] |
+| TempDB data files | [N of recommended M] | V9 | [e.g., "2 of 8 recommended — add 6 files to distribute PFS/GAM allocation contention"] |
+| Recovery model | [FULL/SIMPLE/BULK_LOGGED] | V16 | [e.g., "FULL — take a log backup immediately if V16 fires"] |
+| Delayed Durability | [DISABLED/ALLOWED/FORCED] | V5 | [e.g., "DISABLED — consider ALLOWED for non-critical workloads if WRITELOG is high"] |
+| Always On commit mode | [Synchronous/Asynchronous/N/A] | V12 | [e.g., "Synchronous — every COMMIT waits for secondary ack; secondary lag adds directly to commit time"] |
+| Max Server Memory (MB) | [value] | V4 | [e.g., "122,880 MB — memory bounded appropriately; RESOURCE_SEMAPHORE waits are likely from over-estimated grants, not total RAM shortage"] |
+| xp_cmdshell enabled | [Yes/No] | V13 | [e.g., "Yes — review and disable if not strictly required; xp_cmdshell is a common source of PREEMPTIVE_OS_* waits"] |
+| CLR enabled | [Yes/No] | V13 | [e.g., "Yes — CLR assemblies can cause PREEMPTIVE_* waits; audit with Extended Events"] |
+| Lightweight pooling | [Yes/No] | V8 | [e.g., "No (fiber mode off) — standard thread scheduling; if enabled, thread pool behavior changes substantially"] |
+| Blocked process threshold (s) | [value] | V2 | [e.g., "5 — deadlock monitor detects blocked processes after 5 seconds; enable if zero for better LCK_M diagnosis"] |
+| Query governor cost limit | [value] | V4 | [e.g., "0 (no limit) — query governor not restricting; if > 0, queries exceeding this cost are rejected before execution"] |
+
+[If configuration was not provided: "Server configuration not provided — some check interpretations assume defaults. Run the config capture query for more accurate analysis."]
+
+### Top Wait Types (V17)
+
+| Rank | Wait Type | Category | Waiting Tasks | Total Wait ms | % of Total | Max Wait ms | Signal ms |
+|------|-----------|----------|--------------|--------------|------------|------------|-----------|
+| 1 | PAGEIOLATCH_SH | I/O | 48,291 | 2,568,900 | 62.4% | 4,200 | 12,100 |
+| 2 | CXPACKET | Parallelism | 8,420 | 842,000 | 20.5% | 8,100 | 1,200 |
+...
+
+[Category values: I/O · Locks · Memory · CPU · Parallelism · Network · TempDB · Log · HA · External]
+
+### Dominant Bottleneck
+[One sentence: "This server is I/O bound — 62% of wait time is PAGEIOLATCH_SH (physical page reads)."]
+
+### Performance Findings
+
+#### Critical Issues
+**[C1] Issue Name** (V<N>)
+- Observed: [wait type, percentage of total, max wait ms]
+- User impact: [what users experienced — e.g., "Users experienced up to N-second query delays / timeouts / write failures"]
+- Impact: [why this matters for throughput and latency — technical detail]
+- Fix: [concrete ranked actions]
+
+#### Warnings
+[same format, User impact line included]
+
+#### Info
+[same format, User impact line optional for purely informational checks]
+
+### Passed Checks
+V3 ✓, V6 ✓, V8 ✓, V11 ✓, V12 ✓, V16 ✓ [checks verified not triggered]
+
+---
+
+### Trend Analysis (V19–V26)
+[Omit this section entirely when input contains fewer than 3 time windows]
+
+#### Observation Period Summary
+- Mode: Trend analysis (N time windows, ~M-minute intervals)
+- Total observation window: T minutes (HH:MM to HH:MM)
+- Periods analyzed: N
+
+#### Wait Type Trend Table
+
+| Wait Type | Category | [T1 HH:MM] | [T2 HH:MM] | [T3 HH:MM] | [T4 HH:MM] | Trend | Δ First→Last |
+|-----------|----------|-----------|-----------|-----------|-----------|-------|-------------|
+| PAGEIOLATCH_SH | I/O | 48.3% | 52.1% | 58.7% | 61.2% | ↑↑ Worsening | +27% |
+| LCK_M_IX | Locks | 19.3% | 14.0% | 13.5% | 12.1% | ↓ Improving | -37% |
+| CXPACKET | Parallelism | 10.7% | 11.2% | 10.9% | 10.8% | → Stable | +1% |
+
+[Trend symbols: ↑↑ = worsening (monotonic, V19), ↑ = worsening (general), → = stable (< 10% change), ↓ = improving, ⚡ = spiked (V20), ✓ = resolved (V25)]
+
+#### Pattern Classification (V26)
+[One sentence. Example: "The server shows a consistently degrading I/O pattern — PAGEIOLATCH_SH grew every period, suggesting a query generating increasing reads with each execution."]
+
+#### Trend Findings
+
+**[T1] Finding Name** (V<N>)
+- Observed: [wait type, trend direction or spike magnitude]
+- User impact: [what users experienced during this period]
+- Timing: [which periods / timestamps]
+- Fix: [action — cross-reference the corresponding V1–V18 check for root cause detail]
+
+#### Peak Period (V21)
+- Most stressed window: [timestamp range]
+- Total accumulated wait: [N ms] — [X% above average period]
+- Dominant wait in peak: [wait type and its % in that window]
+
+#### Fastest-Growing Waits (V22)
+| Rank | Wait Type | Category | Avg change/period | Direction |
+|------|-----------|----------|------------------|-----------|
+| 1 | PAGEIOLATCH_SH | I/O | +4.3%/period | ↑↑ Monotonic |
+| 2 | RESOURCE_SEMAPHORE | Memory | +0.4%/period | ↑ General |
+
+#### Correlated Spikes (V24)
+[When 2+ wait types spiked in the same period. Example: "PAGEIOLATCH_SH and RESOURCE_SEMAPHORE both spiked at 10:30 — likely a common root cause (large scan → large memory grant). Fix the missing index driving the scan (V1 C4 from the single-snapshot analysis above) and both spikes resolve."]
+
+#### Emerging / Resolved Waits (V23, V25)
+[V23: wait types that appeared mid-period. V25: wait types that spiked and returned to below-average. Omit if neither applies.]
+```
+
+---
+
+## Notes
+
+- Do not invent findings not triggered by the rules above.
+- **No universal thresholds exist** (Paul Randal, SQLskills.com): always compare against your own system's baseline. A workload that is 40% CXPACKET may be perfectly normal for a data warehouse and alarming for an OLTP system.
+- `sys.dm_os_wait_stats` accumulates since the last SQL Server restart or `DBCC SQLPERF('sys.dm_os_wait_stats', CLEAR)`. Rare but long events (nightly backups, weekly DBCC) can dominate cumulative totals. Prefer the differential query (30-minute window) for operational troubleshooting.
+- **CXPACKET is not always a problem** — do not recommend reducing MAXDOP reflexively. Investigate whether parallelism is evenly distributed before tuning it away.
+- **ASYNC_NETWORK_IO is almost never a SQL Server problem** — do not flag it at Warning unless it is the dominant wait and other waits are negligible. The investigation always leads to the client application.
+- **SOS_SCHEDULER_YIELD does not indicate LOCK_HASH spinlock contention** — spinlock backoffs use Windows `Sleep()` and are invisible in wait statistics. Spinlocks require separate diagnosis via `sys.dm_os_spinlock_stats`.
+- **Virtual machine environments inflate SOS_SCHEDULER_YIELD** — the VM clock includes hypervisor scheduling delays. Always ask whether the server is virtualized when this wait is prominent.
+- **LATCH_EX/SH requires latch class identification** — `sys.dm_os_wait_stats` shows the wait type but not which latch. Always follow up with `sys.dm_os_latch_stats` before drawing conclusions.
+- `PAGELATCH_*` on TempDB (database ID 2, pages 1/2/3) is TempDB allocation contention (V9). `PAGELATCH_*` on other databases may indicate insert hotspots or page splits — a different problem.
+- `CXCONSUMER` was introduced in SQL Server 2016 SP2 CU3 / 2017 CU3 to separate benign consumer waits from the more actionable CXPACKET producer waits. On older versions all parallelism waits appear as CXPACKET.
+- Use `sys.dm_exec_requests` (not `sys.dm_os_waiting_tasks`) to find CXPACKET and SOS_SCHEDULER_YIELD threads — they are in RUNNABLE state, not SUSPENDED, so they may not appear in waiting_tasks.
+- If only `sys.dm_exec_requests` is provided (current point-in-time snapshot), note this limitation and recommend capturing `sys.dm_os_wait_stats` over a period for trend analysis.
+- **Azure SQL Database:** Use `sys.dm_db_wait_stats` (database-scoped) instead of `sys.dm_os_wait_stats` (server-scoped). The DMV name and scope differ — Azure SQL does not expose server-wide waits. Poison waits like `LOG_RATE_GOVERNOR` are especially common in Azure SQL where log generation rate is enforced per service tier.
+- **Poison wait threshold (Brent Ozar methodology):** Flag a poison wait when `SUM(wait_time_ms) > (5000 × hours_since_startup)` AND `SUM(wait_time_ms) > 60,000` — this proportional formula avoids false alarms on freshly restarted servers while still catching persistent throttling. For differential windows shorter than 60 minutes, scale the absolute threshold: `> 1,000 × window_minutes ms` (e.g., > 5,000 ms for a 5-minute window, > 30,000 ms for a 30-minute window).
+- **Short capture windows (< 10 minutes):** Percentage thresholds (V1–V17) are fully valid at any window length. For absolute comparisons across captures of different lengths, normalise to a per-minute rate: `wait_ms_per_min = wait_time_ms ÷ window_minutes`. A 5-minute capture with 8,400,000 ms of PAGEIOLATCH = 1,680,000 ms/min — the same load rate as a 30-minute capture showing 50,400,000 ms. Report both the raw total and the per-minute rate in the Input Summary so captures of different lengths can be meaningfully compared. The "In context" concurrent-session metric requires the window to be known; without it, report as N/A.
+- **Unequal intervals in trend mode:** If snapshot intervals vary (e.g., 5-min → 30-min → 15-min), percentage-based checks (V19, V20, V23, V24, V25, V26) remain valid because they compare proportions. V21 (peak period) and V22 (velocity) must use per-minute normalization — a longer-interval period will naturally accumulate more delta_wait_ms than a shorter one at identical load, making raw comparison misleading.
+
+## Companion Skills
+
+- **sqlblock-review** — If `LCK_M_*` waits are dominant (V2), use this skill on `sys.dm_exec_requests` output to identify the head blocker and the full blocking chain.
+- **sqlplan-deadlock** — If `LCK_M_*` includes deadlock-related locks, use this skill to analyze the deadlock XML graph.
+- **sqlplan-review** — If `RESOURCE_SEMAPHORE` waits are dominant (V4), capture the execution plans of the memory-intensive queries and use this skill to find oversized memory grants (S2, S3, S4).
+- **sqlstats-review** — If `PAGEIOLATCH_*` is dominant (V1), run `SET STATISTICS IO, TIME ON` on the heaviest queries to identify which tables drive the most physical reads.
+- **sqltrace-review** — If `ASYNC_NETWORK_IO` (V6) or `OLEDB` (V11) is high, use a Profiler/XE trace to identify which specific queries generate the most of these waits.
+- **sqlconfig-review** — If `CXPACKET` (V3) is dominant and MAXDOP or Cost Threshold for Parallelism is misconfigured, use this skill to audit and correct the server-level settings.

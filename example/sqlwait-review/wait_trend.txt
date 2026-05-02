@@ -1,0 +1,78 @@
+-- sys.dm_os_wait_stats — 4-snapshot trend capture (Approach A: pre-computed deltas via LAG)
+-- Server: PROD-SQL-01  SQL Server 2019 CU23  16 cores / 128 GB RAM
+-- Captured: 2025-05-02 10:00 to 11:00 (4 x 15-minute intervals)
+-- Method: Staging table + LAG() delta query (see SKILL.md Multi-snapshot trend capture)
+-- Benign idle waits excluded by capture query
+
+-- Server configuration (from config capture query — same as wait_stats.txt):
+-- MAXDOP: 0 (all 16 cores)
+-- Cost Threshold for Parallelism: 5 (default)
+-- RCSI enabled: No (is_read_committed_snapshot_on = 0)
+-- TempDB data files: 2 (should be 8 for 16-core server)
+-- Recovery model: FULL
+-- Delayed Durability: DISABLED
+-- Always On AG: synchronous-commit secondary on same datacenter
+-- Max Server Memory: 122,880 MB
+
+-- Trend data: per-period deltas (delta_wait_ms = wait_time_ms at snapshot T minus T-1)
+-- Columns: snapshot_time | wait_type | delta_wait_ms | delta_signal_ms | delta_tasks
+
+snapshot_time            wait_type                        delta_wait_ms  delta_signal_ms  delta_tasks
+2025-05-02 10:15:00      PAGEIOLATCH_SH                   4,821,200      180,400          148,200
+2025-05-02 10:15:00      LCK_M_IX                         2,104,800      28,100           8,420
+2025-05-02 10:15:00      CXPACKET                         1,048,400      412,200          118,400
+2025-05-02 10:15:00      RESOURCE_SEMAPHORE               820,200        4,200            4,210
+2025-05-02 10:15:00      WRITELOG                         480,400        42,100           820,480
+2025-05-02 10:15:00      LATCH_EX                         184,200        18,420           42,100
+2025-05-02 10:15:00      LCK_M_S                          148,200        8,420            14,200
+2025-05-02 10:15:00      CXCONSUMER                       104,200        84,100           84,210
+2025-05-02 10:15:00      SOS_SCHEDULER_YIELD              84,200         72,100           280,400
+2025-05-02 10:15:00      PAGEIOLATCH_EX                   42,100         8,420            8,420
+2025-05-02 10:15:00      PAGELATCH_EX                     28,420         4,200            48,200
+2025-05-02 10:15:00      ASYNC_NETWORK_IO                 18,420         420              28,100
+2025-05-02 10:15:00      HADR_SYNC_COMMIT                 14,200         840              42,100
+
+2025-05-02 10:30:00      PAGEIOLATCH_SH                   6,284,100      228,400          192,400
+2025-05-02 10:30:00      LCK_M_IX                         1,842,100      24,200           7,840
+2025-05-02 10:30:00      CXPACKET                         1,284,200      504,800          144,800
+2025-05-02 10:30:00      RESOURCE_SEMAPHORE               924,800        4,840            4,820
+2025-05-02 10:30:00      WRITELOG                         520,400        48,200           884,200
+2025-05-02 10:30:00      LATCH_EX                         204,800        20,400           46,400
+2025-05-02 10:30:00      LCK_M_S                          128,400        7,840            12,840
+2025-05-02 10:30:00      CXCONSUMER                       124,800        100,400          100,800
+2025-05-02 10:30:00      SOS_SCHEDULER_YIELD              92,400         79,200           304,800
+2025-05-02 10:30:00      PAGEIOLATCH_EX                   48,420         9,840            9,840
+2025-05-02 10:30:00      PAGELATCH_EX                     32,100         4,820            54,200
+2025-05-02 10:30:00      ASYNC_NETWORK_IO                 20,840         480              31,200
+2025-05-02 10:30:00      HADR_SYNC_COMMIT                 18,420         1,020            48,400
+2025-05-02 10:30:00      IO_RETRY                         28,420         210              420
+
+2025-05-02 10:45:00      PAGEIOLATCH_SH                   7,842,400      284,800          238,400
+2025-05-02 10:45:00      LCK_M_IX                         1,624,800      21,200           7,200
+2025-05-02 10:45:00      CXPACKET                         1,424,800      560,400          160,200
+2025-05-02 10:45:00      RESOURCE_SEMAPHORE               1,084,200      5,400            5,040
+2025-05-02 10:45:00      WRITELOG                         548,800        52,400           920,400
+2025-05-02 10:45:00      LATCH_EX                         220,400        22,400           50,400
+2025-05-02 10:45:00      LCK_M_S                          112,800        7,200            11,400
+2025-05-02 10:45:00      CXCONSUMER                       140,400        112,400          112,800
+2025-05-02 10:45:00      SOS_SCHEDULER_YIELD              100,800        86,400           332,800
+2025-05-02 10:45:00      PAGEIOLATCH_EX                   54,200         11,200           11,200
+2025-05-02 10:45:00      PAGELATCH_EX                     36,400         5,400            60,400
+2025-05-02 10:45:00      ASYNC_NETWORK_IO                 22,400         520              33,600
+2025-05-02 10:45:00      HADR_SYNC_COMMIT                 20,840         1,200            52,400
+2025-05-02 10:45:00      IO_RETRY                         0              0                0
+
+2025-05-02 11:00:00      PAGEIOLATCH_SH                   9,420,800      348,400          284,800
+2025-05-02 11:00:00      LCK_M_IX                         1,404,800      18,400           6,420
+2025-05-02 11:00:00      CXPACKET                         1,584,800      624,400          178,400
+2025-05-02 11:00:00      RESOURCE_SEMAPHORE               1,248,400      5,840            5,320
+2025-05-02 11:00:00      WRITELOG                         584,200        56,800           964,800
+2025-05-02 11:00:00      LATCH_EX                         240,400        24,800           54,800
+2025-05-02 11:00:00      LCK_M_S                          98,400         6,420            10,200
+2025-05-02 11:00:00      CXCONSUMER                       160,200        128,400          128,400
+2025-05-02 11:00:00      SOS_SCHEDULER_YIELD              112,400        96,400           364,800
+2025-05-02 11:00:00      PAGEIOLATCH_EX                   60,400         12,400           12,400
+2025-05-02 11:00:00      PAGELATCH_EX                     40,800         6,000            66,800
+2025-05-02 11:00:00      ASYNC_NETWORK_IO                 24,200         560              36,400
+2025-05-02 11:00:00      HADR_SYNC_COMMIT                 22,400         1,380            56,800
+2025-05-02 11:00:00      LOGMGR_RESERVE_APPEND            18,420         42               84

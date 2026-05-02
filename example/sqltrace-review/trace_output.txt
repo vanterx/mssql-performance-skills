@@ -1,0 +1,25 @@
+-- sys.fn_trace_gettable() output — exported from workload.trc
+-- Duration column is in microseconds
+
+EventClass	TextData	ApplicationName	CPU	Reads	Writes	Duration	StartTime	SPID	DatabaseName
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 42	WebApp	156	48291	0	142800000	2025-05-01 10:32:14.820	54	ProdDB
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 99	WebApp	148	48280	0	138400000	2025-05-01 10:32:15.010	55	ProdDB
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 1821	WebApp	162	48312	0	144100000	2025-05-01 10:32:15.240	56	ProdDB
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 7	WebApp	144	48260	0	136200000	2025-05-01 10:32:15.410	57	ProdDB
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 332	WebApp	158	48295	0	143000000	2025-05-01 10:32:15.620	58	ProdDB
+12	EXEC dbo.GetMonthlyReport @month = '2025-04'	ReportService	84200	2568900	45280	284906000	2025-05-01 10:32:16.000	61	ProdDB
+12	SELECT o.OrderId, o.Total FROM dbo.Orders o WHERE o.CustomerId = 4419	WebApp	151	48270	0	140800000	2025-05-01 10:32:16.140	62	ProdDB
+37	dbo.GetMonthlyReport		0	0	0	0	2025-05-01 10:32:17.100	61	ProdDB
+37	dbo.GetMonthlyReport		0	0	0	0	2025-05-01 10:32:18.200	61	ProdDB
+37	dbo.GetMonthlyReport		0	0	0	0	2025-05-01 10:32:19.300	61	ProdDB
+16	(Attention)	WebApp	0	0	0	300000000	2025-05-01 10:32:44.820	54	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 42	WebApp	2	8	0	3000	2025-05-01 10:32:45.010	68	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 99	WebApp	2	8	0	2800	2025-05-01 10:32:45.020	69	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 1821	WebApp	2	8	0	3100	2025-05-01 10:32:45.030	70	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 7	WebApp	2	8	0	2900	2025-05-01 10:32:45.040	71	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 332	WebApp	2	8	0	3000	2025-05-01 10:32:45.050	72	ProdDB
+12	SELECT c.Name, c.Email FROM dbo.Customers c WHERE c.Id = 4419	WebApp	2	8	0	2800	2025-05-01 10:32:45.060	73	ProdDB
+54	(Lock:Timeout)	WebApp	0	0	0	5000000	2025-05-01 10:32:47.200	75	ProdDB
+69	(Sort Warnings)		0	0	0	0	2025-05-01 10:32:16.050	61	ProdDB
+92	ProdDB	SQL Server	0	0	0	8420000	2025-05-01 10:32:50.000	0	ProdDB
+12	EXEC dbo.GetMonthlyReport @month = '2025-03'	ReportService	4200	48210	0	4800000	2025-05-01 10:33:00.000	80	ProdDB

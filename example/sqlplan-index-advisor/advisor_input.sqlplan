@@ -1,0 +1,169 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <!-- Statement 1: Key Lookup + Nested Loops inner scan (D1 + D6) -->
+        <StmtSimple
+          StatementText="SELECT o.OrderId, o.CustomerId, o.Status, o.TotalAmount, o.ShippedDate
+                         FROM dbo.Orders o
+                         JOIN dbo.OrderLines ol ON ol.OrderId = o.OrderId
+                         WHERE o.Status = @status AND o.CreatedDate >= @startDate"
+          StatementSubTreeCost="42.831"
+          CardinalityEstimationModelVersion="160">
+
+          <QueryPlan DegreeOfParallelism="1" MemoryGrant="512" CompileTime="18">
+            <MissingIndexes>
+              <MissingIndexGroup Impact="91.2">
+                <MissingIndex Database="[ProdDB]" Schema="[dbo]" Table="[Orders]">
+                  <ColumnGroup Usage="EQUALITY">
+                    <Column Name="Status" ColumnId="3"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INEQUALITY">
+                    <Column Name="CreatedDate" ColumnId="7"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INCLUDE">
+                    <Column Name="OrderId" ColumnId="1"/>
+                    <Column Name="CustomerId" ColumnId="2"/>
+                    <Column Name="TotalAmount" ColumnId="8"/>
+                    <Column Name="ShippedDate" ColumnId="9"/>
+                  </ColumnGroup>
+                </MissingIndex>
+              </MissingIndexGroup>
+            </MissingIndexes>
+
+            <!-- Nested Loops root -->
+            <RelOp NodeId="0" PhysicalOp="Nested Loops" LogicalOp="Inner Join"
+                   EstimateRows="1240" EstimatedTotalSubtreeCost="42.831"
+                   ActualRows="8420" ActualExecutions="1">
+
+              <!-- Outer: Index Seek on Orders (IX_Orders_Status exists but missing CreatedDate) -->
+              <RelOp NodeId="1" PhysicalOp="Index Seek" LogicalOp="Index Seek"
+                     EstimateRows="1240" EstimatedTotalSubtreeCost="0.248"
+                     ActualRows="8420" ActualExecutions="1">
+                <IndexScan Ordered="true" ScanDirection="FORWARD"
+                           LogicalOp="Index Seek" PhysicalOp="Index Seek">
+                  <Object Database="[ProdDB]" Schema="[dbo]" Table="[Orders]"
+                          Index="[IX_Orders_Status]" IndexKind="NonClustered"/>
+                  <SeekPredicates>
+                    <SeekPredicateNew>
+                      <SeekKeys>
+                        <Prefix ScanType="EQ">
+                          <RangeColumns>
+                            <ColumnReference Table="[Orders]" Column="Status"/>
+                          </RangeColumns>
+                        </Prefix>
+                      </SeekKeys>
+                    </SeekPredicateNew>
+                  </SeekPredicates>
+                  <!-- Residual predicate on CreatedDate — not in index key, post-filter -->
+                  <Predicate>
+                    <ScalarOperator ScalarString="[Orders].[CreatedDate] >= @startDate">
+                      <Compare CompareOp="GE"/>
+                    </ScalarOperator>
+                  </Predicate>
+                </IndexScan>
+              </RelOp>
+
+              <!-- Inner: Key Lookup on Orders PK (fetches TotalAmount, ShippedDate) -->
+              <RelOp NodeId="2" PhysicalOp="Key Lookup" LogicalOp="Key Lookup"
+                     EstimateRows="1" EstimatedTotalSubtreeCost="0.003"
+                     ActualRows="1" ActualExecutions="8420">
+                <RunTimeInformation>
+                  <RunTimeCountersPerThread Thread="0"
+                    ActualRows="8420" ActualExecutions="8420" ActualElapsedms="4820"/>
+                </RunTimeInformation>
+                <IndexScan Ordered="false" PhysicalOp="Key Lookup">
+                  <Object Database="[ProdDB]" Schema="[dbo]" Table="[Orders]"
+                          Index="[PK_Orders]" IndexKind="Clustered"/>
+                </IndexScan>
+              </RelOp>
+
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+
+        <!-- Statement 2: Expensive Scan + Sort spill risk (D2 + D5) -->
+        <StmtSimple
+          StatementText="SELECT c.CustomerId, c.Name, c.Email, COUNT(o.OrderId) AS OrderCount
+                         FROM dbo.Customers c
+                         LEFT JOIN dbo.Orders o ON o.CustomerId = c.CustomerId
+                         WHERE c.Region = @region
+                         ORDER BY OrderCount DESC"
+          StatementSubTreeCost="128.420"
+          CardinalityEstimationModelVersion="160">
+
+          <QueryPlan DegreeOfParallelism="1" MemoryGrant="2048" CompileTime="12">
+            <MissingIndexes>
+              <MissingIndexGroup Impact="84.7">
+                <MissingIndex Database="[ProdDB]" Schema="[dbo]" Table="[Customers]">
+                  <ColumnGroup Usage="EQUALITY">
+                    <Column Name="Region" ColumnId="5"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INCLUDE">
+                    <Column Name="CustomerId" ColumnId="1"/>
+                    <Column Name="Name" ColumnId="2"/>
+                    <Column Name="Email" ColumnId="3"/>
+                  </ColumnGroup>
+                </MissingIndex>
+              </MissingIndexGroup>
+            </MissingIndexes>
+
+            <!-- Sort (D5) — ORDER BY OrderCount DESC, no pre-ordered index -->
+            <RelOp NodeId="10" PhysicalOp="Sort" LogicalOp="Sort"
+                   EstimateRows="48200" EstimatedTotalSubtreeCost="48.210"
+                   EstimatedTotalSubtreeCostPercent="37.5">
+              <RunTimeInformation>
+                <RunTimeCountersPerThread Thread="0" ActualRows="48200" ActualElapsedms="8420"/>
+              </RunTimeInformation>
+
+              <!-- Hash Match Aggregate -->
+              <RelOp NodeId="11" PhysicalOp="Hash Match" LogicalOp="Aggregate"
+                     EstimateRows="48200" EstimatedTotalSubtreeCost="80.210">
+
+                <!-- Nested Loops: Customers × Orders -->
+                <RelOp NodeId="12" PhysicalOp="Nested Loops" LogicalOp="Left Outer Join"
+                       EstimateRows="48200" EstimatedTotalSubtreeCost="74.210">
+
+                  <!-- Expensive Scan on Customers — no index on Region (D2) -->
+                  <RelOp NodeId="13" PhysicalOp="Clustered Index Scan"
+                         LogicalOp="Clustered Index Scan"
+                         EstimateRows="48200" EstimatedTotalSubtreeCost="18.840"
+                         EstimatedTotalSubtreeCostPercent="14.7">
+                    <RunTimeInformation>
+                      <RunTimeCountersPerThread Thread="0" ActualRows="48200" ActualElapsedms="2840"/>
+                    </RunTimeInformation>
+                    <Predicate>
+                      <ScalarOperator ScalarString="[Customers].[Region] = @region"/>
+                    </Predicate>
+                    <IndexScan PhysicalOp="Clustered Index Scan">
+                      <Object Database="[ProdDB]" Schema="[dbo]" Table="[Customers]"
+                              Index="[PK_Customers]" IndexKind="Clustered"/>
+                    </IndexScan>
+                  </RelOp>
+
+                  <!-- Inner: Orders scan per customer (D6 — no index on CustomerId) -->
+                  <RelOp NodeId="14" PhysicalOp="Clustered Index Scan"
+                         LogicalOp="Clustered Index Scan"
+                         EstimateRows="4820" EstimatedTotalSubtreeCost="1.148"
+                         ActualRows="4820" ActualExecutions="48200">
+                    <RunTimeInformation>
+                      <RunTimeCountersPerThread Thread="0"
+                        ActualRows="4820" ActualExecutions="48200" ActualElapsedms="28420"/>
+                    </RunTimeInformation>
+                    <IndexScan PhysicalOp="Clustered Index Scan">
+                      <Object Database="[ProdDB]" Schema="[dbo]" Table="[Orders]"
+                              Index="[PK_Orders]" IndexKind="Clustered"/>
+                    </IndexScan>
+                  </RelOp>
+
+                </RelOp>
+              </RelOp>
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

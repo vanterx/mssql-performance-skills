@@ -1,0 +1,38 @@
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan"
+             Version="1.539" Build="16.0.1100.1">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple StatementText="SELECT o.OrderId, o.Total, c.Name FROM dbo.Orders o JOIN dbo.Customers c ON c.Id = o.CustomerId WHERE o.Status = @status"
+          StatementSubTreeCost="0.8241"
+          CardinalityEstimationModelVersion="160">
+          <QueryPlan DegreeOfParallelism="1" MemoryGrant="512" CompileTime="8" CompileCPU="8">
+            <MemoryGrantInfo SerialRequiredMemory="512" GrantedMemory="512" MaxUsedMemory="480" GrantWaitTime="0"/>
+            <!-- Nested Loops: outer = Index Seek on Orders, inner = Key Lookup on Customers -->
+            <RelOp NodeId="0" PhysicalOp="Nested Loops" LogicalOp="Inner Join"
+                   EstimateRows="1240" EstimatedTotalSubtreeCost="0.8241">
+              <RelOp NodeId="1" PhysicalOp="Index Seek" LogicalOp="Index Seek"
+                     EstimateRows="1240" EstimatedTotalSubtreeCost="0.1832">
+                <SeekPredicates>
+                  <SeekPredicateNew>
+                    <SeekKeys>
+                      <Prefix ScanType="EQ">
+                        <RangeColumns><ColumnReference Table="[Orders]" Column="Status"/></RangeColumns>
+                      </Prefix>
+                    </SeekKeys>
+                  </SeekPredicateNew>
+                </SeekPredicates>
+              </RelOp>
+              <RelOp NodeId="2" PhysicalOp="Clustered Index Seek" LogicalOp="Clustered Index Seek"
+                     EstimateRows="1" EstimatedTotalSubtreeCost="0.0033">
+                <RunTimeInformation>
+                  <RunTimeCountersPerThread Thread="0" ActualRows="1" ActualExecutions="1240" ActualElapsedms="48"/>
+                </RunTimeInformation>
+              </RelOp>
+            </RelOp>
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>
