@@ -184,8 +184,8 @@ Evaluate aggregated patterns across all events in the trace.
 
 ### X19 — Auto-Grow Event Detected
 - **Trigger:** Any event with class 92 (`Data File Auto Grow`) or 93 (`Log File Auto Grow`), or XE `database_file_size_change` with `is_auto_grow = 1`
-- **Severity:** Warning
-- **Fix:** Auto-grow events pause all activity on the database while the file expands. For data files: pre-size the file to avoid mid-workload grows. For log files: either pre-size or investigate what is driving high log volume (large uncommitted transactions, bulk inserts without minimal logging, log backup frequency). Set instant file initialization for data files (Windows privilege `SE_MANAGE_VOLUME_NAME`).
+- **Severity:** Warning (≥ 1 event in trace window, normal growth); Critical (≥ 5 events in trace window, frequent growth — file is sized too small for the workload)
+- **Fix:** Auto-grow events pause all activity on the database while the file expands. Frequency matters more than individual duration: one 2-second auto-grow is less concerning than 50 auto-grows at 50 ms each — every grow pauses all database transactions. For data files: pre-size the file to avoid mid-workload grows; set instant file initialization (Windows privilege `SE_MANAGE_VOLUME_NAME`) to eliminate file zeroing on data file growth (not applicable to log files). For log files: either pre-size or investigate what is driving high log volume (large uncommitted transactions, bulk inserts without minimal logging, log backup frequency). If auto-grow duration exceeds 1,000 ms (slow auto-grow), the file system or storage subsystem cannot allocate space quickly enough — pre-size the file immediately. For any auto-grow that uses percent growth (the default on older SQL Server versions) rather than fixed-size growth, switch to fixed-size growth to avoid geometrically increasing growth amounts.
 
 ### X20 — ShowPlan XML Events Present in Trace
 - **Trigger:** Any event with class 146 (`Showplan XML`) or XE `query_post_execution_showplan`

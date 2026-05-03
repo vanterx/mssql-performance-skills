@@ -684,6 +684,7 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `V19–V26` | `sqlwait-review` | Trend analysis (3+ snapshots): direction, spikes, peak period, velocity, emerging waits, correlated spikes, transient events, pattern | 8 |
 | `V27–V29` | `sqlwait-review` | Operational checks: PAGELATCH on user DBs (insert hotspots), BACKUPIO/BACKUPBUFFER (backup I/O), cumulative skew detection (outlier dominance) | 3 |
 | `V30–V36` | `sqlwait-review` | Modern feature wait types: In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, Parallel Redo | 7 |
+| `V37–V40` | `sqlwait-review` | Memory and I/O detail: forced memory grants, grant timeouts, stolen memory, file-level I/O latency (requires optional capture queries) | 4 |
 | `S1–S27` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints | 27 |
 | `N1–N60` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage | 60 |
 | `C1–C10` | `sqlplan-compare` | Regression: what changed between two plans | 10 |
@@ -691,7 +692,7 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
 | `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
 
-**Total: 266 checks across all skills.**
+**Total: 270 checks across all skills.**
 
 ---
 

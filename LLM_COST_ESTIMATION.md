@@ -165,8 +165,8 @@ For plans above ~100,000 characters, Sonnet 4.6 input cost alone exceeds **$0.30
 
 | Skill | Skill overhead | Typical total input | Cost per call (Sonnet 4.6) |
 |-------|--------------|---------------------|---------------------------|
-| `sqlwait-review` (single snapshot) | ~6,500 tok | 8,000–12,000 | **$0.03–$0.05** |
-| `sqlwait-review` (trend, 4+ snapshots) | ~6,500 tok | 14,000–22,000 | **$0.05–$0.08** |
+| `sqlwait-review` (single snapshot) | ~7,000 tok | 8,000–12,000 | **$0.03–$0.05** |
+| `sqlwait-review` (trend, 4+ snapshots) | ~7,000 tok | 14,000–22,000 | **$0.05–$0.08** |
 | `sqlstats-review` | ~4,800 tok | 6,000–12,000 | **$0.02–$0.05** |
 | `sqltrace-review` (small trace, ~500 events) | ~5,200 tok | 10,000–20,000 | **$0.04–$0.09** |
 | `sqltrace-review` (large trace, ~10,000 events) | ~5,200 tok | 50,000–150,000 | **$0.18–$0.47** |

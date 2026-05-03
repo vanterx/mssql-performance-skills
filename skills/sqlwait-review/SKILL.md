@@ -1,6 +1,6 @@
 ---
 name: sqlwait-review
-description: Analyze SQL Server wait statistics to identify why the server or a session is slow. Applies 36 checks (V1–V36) covering I/O, locks, parallelism, memory, CPU, TempDB, log I/O, network, latch contention, log space exhaustion, poison/throttle waits, backup I/O, insert hotspots, cumulative skew detection, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, and Parallel Redo. Based on Paul Randal and Brent Ozar methodologies. Use when pasting sys.dm_os_wait_stats or sys.dm_exec_requests output.
+description: Analyze SQL Server wait statistics to identify why the server or a session is slow. Applies 40 checks (V1–V40) covering I/O, locks, parallelism, memory, CPU, TempDB, log I/O, network, latch contention, log space exhaustion, poison/throttle waits, backup I/O, insert hotspots, cumulative skew detection, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, forced memory grants, grant timeouts, stolen memory, and file I/O latency. Based on Paul Randal and Brent Ozar methodologies. Use when pasting sys.dm_os_wait_stats or sys.dm_exec_requests output.
 triggers:
   - /sqlwait-review
   - /wait-review
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Analyze SQL Server wait statistics and identify the dominant bottleneck using the **Waits and Queues** methodology (Paul Randal, SQLskills.com; Brent Ozar First Responder Kit). Applies 36 checks (V1–V36): V1–V18 classify each significant wait type into its root cause and produce a prioritized remediation plan; V19–V26 perform multi-snapshot trend analysis when 3+ time windows are provided — detecting worsening trends, spikes, peak periods, and emerging bottlenecks; V27–V29 cover specialized scenarios (PAGELATCH on user databases, backup I/O, cumulative skew from outlier events); V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo).
+Analyze SQL Server wait statistics and identify the dominant bottleneck using the **Waits and Queues** methodology (Paul Randal, SQLskills.com; Brent Ozar First Responder Kit). Applies 40 checks (V1–V40): V1–V18 classify each significant wait type into its root cause and produce a prioritized remediation plan; V19–V26 perform multi-snapshot trend analysis when 3+ time windows are provided — detecting worsening trends, spikes, peak periods, and emerging bottlenecks; V27–V29 cover specialized scenarios (PAGELATCH on user databases, backup I/O, cumulative skew from outlier events); V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V37–V40 add DMV-level memory and I/O detail — forced memory grants, grant timeouts, stolen memory, and file-level I/O latency (requires optional capture queries).
 
 The Waits and Queues methodology is based on how SQL Server's thread scheduler works: threads are always in one of three states — **RUNNING** (on CPU), **RUNNABLE** (queued for CPU), or **SUSPENDED** (waiting for a resource). Every time a thread suspends, SQL Server records the wait type and duration. Analyzing the top accumulated waits reveals the dominant bottleneck — not by guessing, but by measuring exactly what the server spent its time waiting for.
 
@@ -273,6 +273,61 @@ With Approach B, the skill computes per-period deltas by subtracting consecutive
 
 ---
 
+### Optional: Memory and I/O detail capture queries
+
+Paste these alongside wait stats for richer memory-pressure and file-I/O analysis (enables V37–V40):
+
+**Memory grant detail — forced grants and timeouts**
+```sql
+SELECT
+    resource_semaphore_id,
+    target_memory_kb / 1024.0 / 1024.0 AS target_memory_gb,
+    max_target_memory_kb / 1024.0 / 1024.0 AS max_target_memory_gb,
+    total_memory_kb / 1024.0 / 1024.0 AS total_memory_gb,
+    available_memory_kb / 1024.0 / 1024.0 AS available_memory_gb,
+    granted_memory_kb / 1024.0 / 1024.0 AS granted_memory_gb,
+    used_memory_kb / 1024.0 / 1024.0 AS used_memory_gb,
+    grantee_count,
+    waiter_count,
+    forced_grant_count,
+    timeout_error_count,
+    total_reduced_memory_grant_count
+FROM sys.dm_exec_query_resource_semaphores;
+```
+
+**Memory clerk breakdown — stolen memory check**
+```sql
+SELECT
+    type,
+    name,
+    pages_kb / 1024.0 / 1024.0 AS pages_gb,
+    virtual_memory_reserved_kb / 1024.0 / 1024.0 AS virtual_gb,
+    virtual_memory_committed_kb / 1024.0 / 1024.0 AS committed_gb
+FROM sys.dm_os_memory_clerks
+WHERE pages_kb > 1048576  -- > 1 GB
+ORDER BY pages_kb DESC;
+```
+
+**File I/O latency**
+```sql
+SELECT
+    DB_NAME(database_id) AS database_name,
+    file_id,
+    name AS file_name,
+    type_desc,
+    num_of_reads,
+    num_of_writes,
+    io_stall_read_ms,
+    io_stall_write_ms,
+    CAST(io_stall_read_ms / NULLIF(num_of_reads, 0) AS decimal(18, 2)) AS avg_read_latency_ms,
+    CAST(io_stall_write_ms / NULLIF(num_of_writes, 0) AS decimal(18, 2)) AS avg_write_latency_ms,
+    size_on_disk_bytes / 1024.0 / 1024.0 / 1024.0 AS size_gb
+FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS fs
+JOIN sys.master_files AS mf
+    ON fs.database_id = mf.database_id AND fs.file_id = mf.file_id
+ORDER BY io_stall_read_ms + io_stall_write_ms DESC;
+```
+
 ## Thresholds Reference
 
 **Important:** There are no universal thresholds for wait statistics. Compare against *your own system's baseline*, not industry averages. A CXPACKET percentage that is normal for a large analytics workload would be alarming on a pure OLTP system. The values below are investigative triggers — always verify with context.
@@ -302,6 +357,10 @@ With Approach B, the skill computes per-period deltas by subtracting consecutive
 | Trend — worsening (V19) | Delta % increases monotonically across ≥ 3 consecutive periods |
 | Trend — emerging (V23) | < 0.5% in period 1, ≥ 2.0% in any later period |
 | Trend — correlated (V24) | 2+ wait types each ≥ 150% of own average in the same period |
+| Forced memory grant (V37) | any forced_grant_count > 0 warning; > 10 critical |
+| Memory grant timeout (V38) | any timeout_error_count > 0 = Critical |
+| Stolen memory (V39) | ≥ 15% of max server memory warning; > 30% critical |
+| File I/O latency (V40) | avg read/write latency ≥ 100 ms warning; ≥ 500 ms critical |
 
 ---
 
@@ -523,6 +582,36 @@ These checks fire when wait types associated with modern SQL Server features are
 - **Severity:** Warning (2–14%); Critical (≥ 15%)
 - **Fix:** An Always On secondary replica is struggling to apply redo log — parallel redo worker threads are contending or the redo queue is growing. High values indicate the secondary cannot keep pace with the primary's log generation rate. Fix: (1) Check redo queue depth and rate: `SELECT database_name, redo_queue_size, redo_rate FROM sys.dm_hadr_database_replica_states WHERE is_local = 1`; (2) SQL Server 2022+: increase parallel redo workers via database-scoped configuration (`ALTER DATABASE SCOPED CONFIGURATION SET PARALLEL_REDO_WORKER_POOL_SIZE = N`) or trace flag 3468 on older versions; (3) Move secondary replica log and data files to faster storage — redo throughput is bounded by the secondary's write I/O; (4) If the primary write workload has recently increased, consider switching less-critical replicas to asynchronous commit mode to eliminate redo lag blocking the primary.
 - **Related checks:** V12 (HADR_SYNC_COMMIT — primary-side synchronous commit waits), V18 (HADR_THROTTLE_LOG_RATE_GOVERNOR — primary throttled because secondary is lagging)
+
+---
+
+## Memory and I/O Detail Checks (V37–V40)
+
+These checks require the optional Memory and I/O detail capture queries (see Input section). They complement V1 (PAGEIOLATCH) and V4 (RESOURCE_SEMAPHORE) with DMV-level detail that wait statistics alone cannot provide. Omit these checks if the optional queries were not provided — note "Cannot evaluate — Memory/I/O detail queries not provided."
+
+### V37 — Forced Memory Grants
+- **Trigger:** `forced_grant_count > 0` in `sys.dm_exec_query_resource_semaphores`
+- **Severity:** Warning (1–10 forced grants); Critical (> 10)
+- **Fix:** Queries are being forced to run with less memory than the optimizer requested. Unlike V4 (which detects queries waiting for memory), V37 detects queries that *got* memory — but not enough. Consequences: hash joins and sorts spill to tempdb, causing increased I/O and longer execution. This is invisible in wait stats because the query IS running — just poorly. Fix: (1) Update statistics on large tables — stale row estimates inflate memory grant requests; (2) Identify the memory-hungry queries with `sys.dm_exec_query_memory_grants` and run `/sqlplan-review` on their plans (focus on S2, S3, S4); (3) Cap individual grants with Resource Governor `REQUEST_MAX_MEMORY_GRANT_PERCENT` or `OPTION (MIN_GRANT_PERCENT = 1)`; (4) Increase `max server memory` if the instance is under-provisioned. Note: `total_reduced_memory_grant_count` tracks the lifetime count of reduced grants — a rapidly growing value signals persistent memory undersizing.
+- **Related checks:** V4 (RESOURCE_SEMAPHORE waits), V38 (grant timeouts), S2/S3/S4 (sqlplan-review memory grant analysis)
+
+### V38 — Memory Grant Timeouts
+- **Trigger:** `timeout_error_count > 0` in `sys.dm_exec_query_resource_semaphores`
+- **Severity:** Critical (any timeout)
+- **Fix:** One or more queries gave up waiting for a memory grant entirely — users received timeouts or errors. This is more severe than V4 (waiting) or V37 (reduced grants): the query never ran. The `resource_semaphore_id` identifies which resource pool is starving: ID 0 = regular (small) query pool, ID 1 = large query pool. Fix: (1) If concentrated in one pool, redistribute workload or increase memory; (2) Kill long-running queries holding memory grants (`sys.dm_exec_query_memory_grants`); (3) Apply the cumulative fixes from V4 and V37 — timeouts mean the problem has escalated past waiting and forced grants. For immediate relief, set `query wait (s)` via `sp_configure` to a lower value to fail fast rather than hold connections open.
+- **Related checks:** V4 (RESOURCE_SEMAPHORE waits), V37 (forced grants), V8 (THREADPOOL — memory exhaustion often correlates with thread exhaustion)
+
+### V39 — High Stolen Memory
+- **Trigger:** From `sys.dm_os_memory_clerks`: stolen memory (pages not part of the buffer pool) accounts for ≥ 15% of max server memory
+- **Severity:** Warning (15–30%); Critical (> 30%)
+- **Fix:** A significant portion of SQL Server memory is consumed by non-buffer-pool components: plan cache, Query Store, lock memory, security token cache, or CLR. This reduces the memory available for data cache and query execution grants. Interpretation depends on which clerk dominates: (1) `CACHESTORE_SQLCP` / `CACHESTORE_OBJCP` (plan cache) > 2 GB — consider `optimize for ad hoc workloads` or clearing single-use plans; (2) `USERSTORE_TOKENPERM` > 1 GB — security token cache bloat from excessive application roles or frequent permission changes; (3) `MEMORYCLERK_SQLQERESERVATIONS` (Query Store) > 2 GB — reduce retention or query capture mode; (4) `OBJECTSTORE_LOCK_MANAGER` > 1 GB — reduce lock escalation or batch large DML. Use the Memory clerk breakdown query output to identify the top consumer by `pages_kb`.
+- **Related checks:** V4 (RESOURCE_SEMAPHORE), V32 (Query Store overhead), V37 (forced grants)
+
+### V40 — High File I/O Latency
+- **Trigger:** Any file has `avg_read_latency_ms ≥ 100 ms` OR `avg_write_latency_ms ≥ 100 ms` from the File I/O latency query
+- **Severity:** Warning (100–499 ms); Critical (≥ 500 ms)
+- **Fix:** Individual database file I/O latency is abnormally high, indicating a storage subsystem bottleneck. This goes beyond V1 (PAGEIOLATCH) by identifying *which specific files and drives* are slow: (1) TempDB files with high write latency — add more TempDB data files, move to faster storage, or check for synchronous mirroring on TempDB drives; (2) Log file with high write latency — move the log file to dedicated low-latency storage (ideally NVMe), ensure no other workload shares the log drive; (3) Data files with high read latency — check disk queue depth, look for RAID controller saturation, or migrate hot tables to faster storage; (4) If ALL files show high latency — the shared storage subsystem (SAN, cloud disk) is the bottleneck; check IOPS/throttling limits; (5) Check `sys.dm_io_pending_io_requests` for queued I/O. If latency is high but PAGEIOLATCH (V1) is low, the waits are likely being masked by asynchronous I/O or the buffer pool — still investigate, as writes may be impacted more than reads.
+- **Related checks:** V1 (PAGEIOLATCH waits), V9 (TempDB PAGELATCH contention)
 
 ---
 

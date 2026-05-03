@@ -15,7 +15,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [tsql-review](#tsql-review) | Analyze raw T-SQL source code — 50 static checks (structural, security, correctness, performance) |
 | [sqlstats-review](#sqlstats-review) | Parse and analyze `SET STATISTICS IO, TIME ON` output — 22 checks (I1–I15 IO, W1–W7 time) |
 | [sqltrace-review](#sqltrace-review) | Analyze Profiler trace / Extended Events output — 20 checks (X1–X12 event-level, X13–X20 workload aggregate) |
-| [sqlwait-review](#sqlwait-review) | Analyze `sys.dm_os_wait_stats` — 36 checks (V1–V36) across I/O, lock, parallelism, memory, CPU, latch contention, log space, poison/throttle waits, backup I/O, insert hotspots, trend analysis, and modern feature waits (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text, Parallel Redo) |
+| [sqlwait-review](#sqlwait-review) | Analyze `sys.dm_os_wait_stats` — 40 checks (V1–V40) across I/O, lock, parallelism, memory, CPU, latch contention, log space, poison/throttle waits, backup I/O, insert hotspots, trend analysis, modern feature waits (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text, Parallel Redo), forced memory grants, grant timeouts, stolen memory, and file I/O latency |
 | [sqlplan-review](#sqlplan-review) | Analyze a single `.sqlplan` file — 87 checks, prioritized report |
 | [sqlplan-compare](#sqlplan-compare) | Diff two plans to find what caused a regression |
 | [sqlplan-index-advisor](#sqlplan-index-advisor) | Derive indexes from operator patterns + consolidate optimizer suggestions into a ranked `CREATE INDEX` script |
@@ -142,7 +142,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║         │                                                    ║
 ║         ▼                                                    ║
 ║  /sqlwait-review                                             ║
-║  36 checks — I/O, locks, parallelism, memory grants,         ║
+║  40 checks — I/O, locks, parallelism, memory grants,         ║
 ║  latch contention, log space, poison/throttle waits,          ║
 ║  backup I/O, insert hotspots, cumulative skew;                ║
 ║  trend analysis (V19–V26); modern features (V30–V36)         ║
@@ -195,7 +195,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 
 ## sqlwait-review
 
-Analyze `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output to identify the dominant server bottleneck. Applies **36 checks** (V1–V36) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. **Single-snapshot mode (V1–V18, V27–V29)** covers physical I/O, lock waits, parallelism (CXPACKET/HT*), memory grant queuing, log I/O, CPU pressure, thread exhaustion, TempDB contention, non-page latch contention, log space exhaustion, client/network waits, HA synchronization, OS-level calls, poison/throttle waits (IO_RETRY, LOG_RATE_GOVERNOR, SE_REPL_*), PAGELATCH on user databases (insert hotspots), backup I/O, and cumulative skew detection. **Trend mode (V19–V26)** activates automatically when 3+ time-stamped snapshots are provided — detecting worsening trends, spikes, peak periods, emerging bottlenecks, and correlated wait types. **Modern feature checks (V30–V36)** cover In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, and Parallel Redo (Always On secondary).
+Analyze `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output to identify the dominant server bottleneck. Applies **40 checks** (V1–V40) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. **Single-snapshot mode (V1–V18, V27–V29)** covers physical I/O, lock waits, parallelism (CXPACKET/HT*), memory grant queuing, log I/O, CPU pressure, thread exhaustion, TempDB contention, non-page latch contention, log space exhaustion, client/network waits, HA synchronization, OS-level calls, poison/throttle waits (IO_RETRY, LOG_RATE_GOVERNOR, SE_REPL_*), PAGELATCH on user databases (insert hotspots), backup I/O, and cumulative skew detection. **Trend mode (V19–V26)** activates automatically when 3+ time-stamped snapshots are provided — detecting worsening trends, spikes, peak periods, emerging bottlenecks, and correlated wait types. **Modern feature checks (V30–V36)** cover In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, and Parallel Redo (Always On secondary). **Memory and I/O detail checks (V37–V40)** cover forced memory grants, grant timeouts, stolen memory percentage, and file-level I/O latency — requires optional DMV capture queries.
 
 ### Triggers
 

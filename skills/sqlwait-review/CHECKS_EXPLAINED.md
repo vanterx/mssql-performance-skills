@@ -1146,6 +1146,127 @@ ORDER BY redo_queue_size DESC;
 
 ---
 
+### V37 — Forced Memory Grants
+
+**What it means:** Queries are being forced to run with less memory than the optimizer requested. The Resource Governor / Resource Semaphore is reducing memory grants because there isn't enough free query execution memory. These queries will run, but with insufficient memory for sort/hash operations — causing tempdb spills and longer execution times. This is invisible in V4 (RESOURCE_SEMAPHORE waits) because the query IS running, just running poorly.
+
+**How to spot it:**
+Check `sys.dm_exec_query_resource_semaphores`:
+```
+resource_semaphore_id  forced_grant_count  timeout_error_count
+---------------------- ------------------  ----------------------
+0 (small query pool)   0                   0
+1 (large query pool)   12                  0
+```
+The `forced_grant_count = 12` on the large query pool means 12 queries are currently running with reduced memory. Each of these is likely spilling to tempdb.
+
+**Example (problem + fix):**
+```
+-- Large pool: forced_grant_count = 12, total_memory_gb = 4.2, available = 0
+-- Mean every large query is getting forced grants — system has no free grant memory
+-- Root cause: stale statistics on dbo.SalesFact (5M estimated → 50 actual, optimizer requested 2GB grant)
+-- Fix: UPDATE STATISTICS dbo.SalesFact WITH FULLSCAN
+-- After: forced_grant_count → 0, query durations dropped 60%
+```
+**Fix options:**
+1. **Update statistics with FULLSCAN** on large tables — stale stats → overestimated row counts → oversized grants → fewer concurrent grants possible
+2. **Add indexes** to avoid the sort/hash operators driving large grants (eliminate the need rather than increasing the grant)
+3. **Cap individual grants**: `ALTER WORKLOAD GROUP [default] WITH (REQUEST_MAX_MEMORY_GRANT_PERCENT = 25)` via Resource Governor
+4. **Increase max server memory**: if `max server memory` leaves too little room for query grants, raise it (especially if `available_memory_kb` is consistently near 0)
+5. **Run `/sqlplan-review`** on the plans of memory-hungry queries (identify via `sys.dm_exec_query_memory_grants` WHERE `granted_memory_kb > 1048576`)
+
+**Related checks:** V4 (RESOURCE_SEMAPHORE waits), V38 (grant timeouts), S2/S3/S4 (sqlplan-review memory grant analysis)
+
+---
+
+### V38 — Memory Grant Timeouts
+
+**What it means:** One or more queries gave up waiting for a memory grant entirely — the query never executed. Users received timeouts or errors. This is the most severe form of memory pressure: V4 = queries waiting, V37 = queries running with less memory, V38 = queries failing.
+
+**How to spot it:**
+Check `sys.dm_exec_query_resource_semaphores`:
+```
+timeout_error_count > 0
+```
+The `resource_semaphore_id` identifies which pool is starving: 0 = regular queries, 1 = large queries.
+
+**Example (problem + fix):**
+```
+-- Pool 1: timeout_error_count = 45, waiter_count = 23, granted_memory_gb = 4.0 (maxed out)
+-- 23 queries are queued, 45 have already timed out
+-- This server has max_server_memory = 256 GB, but large pool is only 4 GB
+-- A nightly ETL process is requesting 8 GB grants for MERGE statements with inflated estimates
+```
+**Fix options:**
+1. **Kill long-running grant holders**: query `sys.dm_exec_query_memory_grants` for `grant_time > 5 minutes` — kill those sessions (`KILL spid`)
+2. **Lower `query wait (s)`**: `sp_configure 'query wait (s)', 60` — fail fast (60s) rather than hold connections indefinitely (default 1200s = 20 minutes)
+3. **Identify oversized grants**: query `sys.dm_exec_query_memory_grants` WHERE `requested_memory_kb > granted_memory_kb * 5` — these are requesting 5× what they got, inflating grant estimates
+4. **Apply V4/V37 fixes**: update statistics, cap grants, add indexes
+5. **Scale up**: if this is chronic under normal workload, the server needs more `max server memory` or the workload needs restructuring
+
+**Related checks:** V4 (RESOURCE_SEMAPHORE waits), V37 (forced grants), V8 (THREADPOOL — memory exhaustion often coincides with thread exhaustion)
+
+---
+
+### V39 — High Stolen Memory
+
+**What it means:** Non-buffer-pool components are consuming a significant portion of SQL Server's memory. "Stolen" memory (Microsoft's term) is memory allocated to components other than the data cache: plan cache, Query Store, lock manager, security cache, CLR, linked servers, etc. When stolen memory grows too large, it reduces the memory available for the buffer pool (data cache) and query execution grants.
+
+**How to spot it:**
+From the memory clerk query output, sum all `pages_gb`. Compare to `max server memory`. ALternatively, compute rapidly from `sys.dm_os_performance_counters`:
+```
+Buffer Pool: Buffer cache hit ratio < 90% with large stolen memory = buffer pool starved
+```
+
+**Example (problem + fix):**
+```
+-- Top clerks:
+-- CACHESTORE_SQLCP:    4.8 GB (plan cache — ad-hoc queries without parameterization)
+-- USERSTORE_TOKENPERM: 3.2 GB (security token cache — excessive application roles)
+-- MEMORYCLERK_SQLQERESERVATIONS: 2.1 GB (Query Store — 90 days retention with ALL capture mode)
+-- Total stolen: 12.1 GB out of 64 GB max memory = 18.9%
+```
+**Fix options:**
+1. **Plan cache bloat** (> 2 GB): enable `optimize for ad hoc workloads` (`sp_configure 'optimize for ad hoc workloads', 1`) — stores only a plan stub for single-use ad-hoc queries
+2. **Security token cache** (> 1 GB): reduce application role usage, or periodically flush with `DBCC FREESYSTEMCACHE('TokenAndPermUserStore')`
+3. **Query Store** (> 2 GB): reduce retention to 30 days, switch to `QUERY_CAPTURE_MODE = AUTO`, increase `MAX_STORAGE_SIZE_MB`
+4. **Lock manager** (> 1 GB): reduce lock escalation or batch large DML operations
+5. **Overall**: if stolen memory persistently exceeds 25%, the server likely needs more `max server memory` or cleanup of caching components
+
+**Related checks:** V4 (RESOURCE_SEMAPHORE), V32 (Query Store overhead), V37 (forced grants)
+
+---
+
+### V40 — High File I/O Latency
+
+**What it means:** Individual database file read or write latency exceeds 100 ms. This is the file-level complement to V1 (PAGEIOLATCH) — while V1 tells you *how much* I/O wait exists, V40 tells you *which specific files and drives* are slow. The two checks together provide the complete I/O picture: V1 = symptom (buffer pool waiting for pages), V40 = root cause (slow disks).
+
+**How to spot it:**
+From the File I/O latency query: `avg_read_latency_ms` or `avg_write_latency_ms` ≥ 100 ms.
+
+**Example (problem + fix):**
+```
+-- database_name  file_name     avg_read_latency_ms  avg_write_latency_ms
+-- TempDB         tempdev       12                   842      (WRITE critical)
+-- SalesDB        SalesDB_log   3                    520      (WRITE critical)
+-- SalesDB        SalesDB_data  285                  18       (READ warning)
+-- ReportDB       ReportDB_data 2                    2        (OK)
+--
+-- TempDB writes at 842ms: either TempDB on slow shared storage, or synchronous mirroring on TempDB drive
+-- SalesDB log writes at 520ms: log drive shared with other workloads, or slow SAN
+-- SalesDB data reads at 285ms: data drive I/O bottlenecked by large scans
+```
+**Fix options:**
+1. **TempDB write latency**: add more TempDB data files (8 for 8 cores), move to dedicated fast storage (local SSD/NVMe), ensure no synchronous mirroring on TempDB
+2. **Log file write latency**: move transaction log to dedicated low-latency drive separate from data files, verify no other I/O shares the log drive (no backups, no OS page file)
+3. **Data file read latency**: check `sys.dm_io_pending_io_requests` for queued I/O — if pending I/O > 10, the storage subsystem is saturated; add indexes to reduce reads; move hot tables to faster storage
+4. **All files slow**: shared storage bottleneck — check SAN/cloud disk IOPS and throughput limits; consider storage QoS/throttling in cloud environments (Azure data disks, AWS gp2/io1 burst balance)
+5. **Cross-reference**: if latency is high but PAGEIOLATCH (V1) is low, the buffer pool is masking read latency — writes may still be impacted, and the system may slow under memory pressure
+
+**Related checks:** V1 (PAGEIOLATCH waits), V9 (TempDB PAGELATCH contention), V5 (WRITELOG log writes)
+
+---
+
 ## Quick Reference: Checks by Category
 
 ### Emergency / Poison (investigate immediately)
@@ -1178,6 +1299,18 @@ ORDER BY redo_queue_size DESC;
 | Check | Wait Type | Primary Fix |
 |-------|-----------|------------|
 | V4 | RESOURCE_SEMAPHORE | Update statistics, add indexes, add RAM |
+
+### Memory Bound (DMV Detail — requires optional capture queries)
+| Check | Trigger | Primary Fix |
+|-------|---------|------------|
+| V37 | forced_grant_count > 0 | Update statistics, cap grants, add indexes |
+| V38 | timeout_error_count > 0 | Kill grant holders, lower query wait(s), V4/V37 fixes |
+| V39 | Stolen memory ≥ 15% | Identify top clerk, enable optimize for ad hoc workloads |
+
+### I/O Detail (DMV Detail — requires optional capture queries)
+| Check | Trigger | Primary Fix |
+|-------|---------|------------|
+| V40 | File avg latency ≥ 100 ms | Move files to faster storage, add TempDB files, isolate log |
 
 ### Capacity bound (fix server limits)
 | Check | Wait Type | Primary Fix |
