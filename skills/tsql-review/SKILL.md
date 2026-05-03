@@ -369,3 +369,4 @@ T1 ✓, T6 ✓, T16 ✓, T29 ✓ [explicitly list check IDs verified clean — s
 - **sqlplan-compare** — Diff two execution plans (baseline vs regression) if a query that passed `tsql-review` is still slow in production.
 - **sqlplan-deadlock** — Analyze deadlock XML if the query participates in a locking conflict at runtime.
 - **sqlplan-batch** — Batch-analyze a folder of `.sqlplan` files produced from queries that were first reviewed with `tsql-review`.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

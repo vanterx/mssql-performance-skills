@@ -1,7 +1,7 @@
 # AGENTS.md — mssql-performance-skills
 
 ## What this is
-A library of 9 Markdown skills for SQL Server performance tuning. No build system, no tests, no dependencies. The only executable is `bash scripts/verify-docs.sh`.
+A library of 10 Markdown skills for SQL Server performance tuning. No build system, no tests, no dependencies. The only executable is `bash scripts/verify-docs.sh`.
 
 ## Verify before commit
 ```
@@ -33,7 +33,7 @@ See `CLAUDE.md` "Adding a New Skill" section for the full checklist (files, tabl
 ```
 T  = tsql-review              I/W = sqlstats-review       X  = sqltrace-review
 V  = sqlwait-review           S/N = sqlplan-review        C  = sqlplan-compare
-D  = sqlplan-index-advisor    P   = sqlplan-deadlock
+D  = sqlplan-index-advisor    P   = sqlplan-deadlock       Q  = query-store-review
 ```
 sqlplan-batch has no own prefix (aggregates S/N).
 

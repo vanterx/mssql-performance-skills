@@ -21,6 +21,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [sqlplan-index-advisor](#sqlplan-index-advisor) | Derive indexes from operator patterns + consolidate optimizer suggestions into a ranked `CREATE INDEX` script |
 | [sqlplan-deadlock](#sqlplan-deadlock) | Analyze a deadlock XML graph — identify pattern and fix |
 | [sqlplan-batch](#sqlplan-batch) | Batch-analyze a folder of plans — dashboard + index script |
+| [query-store-review](#query-store-review) | Analyze Query Store DMV output — 25 checks for regressed queries, plan instability, resource hotspots, and configuration health |
 
 ---
 
@@ -37,6 +38,7 @@ cp -rfi skills/sqlplan-batch     ~/.claude/skills/sqlplan-batch
 cp -rfi skills/sqlplan-compare   ~/.claude/skills/sqlplan-compare
 cp -rfi skills/sqlplan-deadlock  ~/.claude/skills/sqlplan-deadlock
 cp -rfi skills/sqlplan-index-advisor ~/.claude/skills/sqlplan-index-advisor
+cp -rfi skills/query-store-review ~/.claude/skills/query-store-review
 ```
 
 ---
@@ -859,8 +861,94 @@ Capture workload → save .sqlplan files → /sqlplan-batch folder/
                                     batch-analysis.md
                                               ↓
                           Pick worst plans → /sqlplan-review plan.sqlplan
-                          Fix indexes      → /sqlplan-index-advisor folder/
+                           Fix indexes      → /sqlplan-index-advisor folder/
 ```
+
+---
+
+## query-store-review
+
+Analyze SQL Server Query Store data to identify regressed queries, plan instability, top resource consumers, query-level wait patterns, and configuration issues. Applies **25 checks** (Q1–Q25) and maps every finding to companion skills for deep-dive analysis. Requires SQL Server 2016+.
+
+### Triggers
+
+```
+/query-store-review
+/qs-review
+/query-store
+```
+
+### How to capture Query Store data
+
+Run Query A (top resource consumers) — the primary capture query from the skill. Optionally add Query C (configuration) to audit Query Store health:
+
+```sql
+-- Query A: Top Resource Consumers (adjust @top_n and date range as needed)
+DECLARE @top_n integer = 20;
+DECLARE @start_date datetimeoffset = DATEADD(DAY, -7, GETUTCDATE());
+DECLARE @end_date   datetimeoffset = GETUTCDATE();
+
+SELECT TOP (@top_n)
+    database_name   = DB_NAME(),
+    query_sql_text  = TRY_CAST(qt.query_sql_text AS nvarchar(200)),
+    object_name     = OBJECT_NAME(q.object_id),
+    query_hash      = q.query_hash,
+    plan_count      = COUNT(DISTINCT p.plan_id),
+    total_executions    = SUM(rs.count_executions),
+    avg_duration_ms     = SUM(rs.avg_duration) / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
+    avg_cpu_ms          = SUM(rs.avg_cpu_time) / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
+    avg_logical_reads   = SUM(rs.avg_logical_io_reads) / NULLIF(SUM(rs.count_executions), 0),
+    avg_memory_grant_mb = SUM(rs.avg_query_max_used_memory) / NULLIF(SUM(rs.count_executions), 0) * 8.0 / 1024.0,
+    max_duration_ms     = MAX(rs.max_duration) / 1000.0,
+    is_forced_plan      = MAX(CASE WHEN p.is_forced_plan = 1 THEN 1 ELSE 0 END),
+    force_failure_count = MAX(p.force_failure_count),
+    aborted_count       = SUM(CASE WHEN rs.execution_type = 1 THEN rs.count_executions ELSE 0 END),
+    exception_count     = SUM(CASE WHEN rs.execution_type = 2 THEN rs.count_executions ELSE 0 END)
+FROM sys.query_store_query AS q
+JOIN sys.query_store_query_text AS qt ON q.query_text_id = qt.query_text_id
+JOIN sys.query_store_plan AS p ON q.query_id = p.query_id
+JOIN sys.query_store_runtime_stats AS rs ON p.plan_id = rs.plan_id
+WHERE rs.last_execution_time >= @start_date AND rs.last_execution_time < @end_date
+GROUP BY qt.query_sql_text, q.query_id, q.query_hash, q.object_id
+HAVING SUM(rs.count_executions) > 0
+ORDER BY SUM(rs.avg_cpu_time * rs.count_executions) DESC;
+```
+
+Paste the result grid into Claude alongside the configuration query output if available.
+
+### Usage
+
+```
+/query-store-review
+
+[paste Query A output here]
+[paste Query C output here — optional, enables health checks Q23–Q25]
+```
+
+Or provide a file path:
+```
+/query-store-review path/to/qs-output.txt
+```
+
+### Output
+
+- **Query Store Health** — current mode, storage %, capture mode, wait stats status
+- **Top Resource Consumers** table — ranked by total CPU with key metrics per query
+- **Performance Findings** — Critical → Warning → Info with check IDs (Q1–Q25)
+- **Query Wait Summary** — per-query wait category breakdown (SQL 2017+ when enabled)
+- **Passed Checks** — all checks verified clean for confidence
+
+### What Gets Checked
+
+**Regressed Queries (Q1–Q6):** Duration regressed ≥ 2× (Q1), CPU regressed (Q2), logical reads regressed (Q3), new plan for stable query (Q4), variant plan with performance gap (Q5), forced plan failure on regressed query (Q6).
+
+**Plan Stability (Q7–Q12):** ≥ 3 plans per query hash (Q7), forced plan failure (Q8), aborted rate > 10% (Q9), exception executions (Q10), RECOMPILE on infrequent query (Q11), plan feedback active — SQL 2022+ (Q12).
+
+**Resource Hotspots (Q13–Q18):** Single query > 30% CPU (Q13), > 30% duration (Q14), > 30% reads (Q15), > 30% executions — N+1 signal (Q16), > 30% memory grant (Q17), top 3 > 80% of any metric (Q18).
+
+**Query-Level Waits (Q19–Q22, SQL 2017+):** > 50% duration waiting (Q19), lock waits dominant (Q20), memory grant waits (Q21), network IO waits dominant (Q22).
+
+**Operational Health (Q23–Q25):** Storage > 80% max (Q23), capture disabled or READ_ONLY (Q24), wait stats not enabled (Q25).
 
 ---
 

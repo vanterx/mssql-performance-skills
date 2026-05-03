@@ -323,3 +323,4 @@ I1 ✓, I3 ✓, I6 ✓, W1 ✓, W4 ✓ [list all checks verified clean]
 - **sqlplan-index-advisor** — Derive `CREATE INDEX` recommendations from the execution plan to reduce the logical reads identified here.
 - **sqlplan-deadlock** — If high I/O correlates with long elapsed times and low CPU (W1), investigate deadlock or blocking as a root cause.
 - **sqlplan-batch** — If you have `.sqlplan` files for the same workload, batch-analyze them alongside this STATISTICS review.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

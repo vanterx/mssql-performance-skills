@@ -266,3 +266,4 @@ X5 ✓, X6 ✓, X9 ✓, X11 ✓, X19 ✓ [explicitly list checks verified clean]
 - **sqlstats-review** — Run `SET STATISTICS IO, TIME ON` on the top-CPU or top-reads query identified here for per-table I/O breakdown.
 - **sqlplan-deadlock** — If deadlock events (class 59) appear in the trace, extract the deadlock XML and analyze with this companion skill.
 - **sqlplan-batch** — If the trace contains ShowPlan XML for many queries (X20), export those plans to `.sqlplan` files and batch-analyze with this skill.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

@@ -191,3 +191,4 @@ Write `batch-analysis.md` with the following structure:
 - **sqlplan-compare** — Diff the worst-performing plan against a known-good baseline to explain why a specific query regressed.
 - **sqlplan-deadlock** — If deadlock graphs were captured alongside the `.sqlplan` files, analyze them with this companion skill.
 - **sqltrace-review** — If a Profiler or Extended Events trace was captured from the same workload, cross-reference trace findings with batch plan findings.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

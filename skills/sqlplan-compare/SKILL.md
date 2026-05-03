@@ -168,3 +168,4 @@ Compare these for each plan:
 - **sqlplan-index-advisor** — If the regression introduced a new Key Lookup or expensive scan, use this skill to generate the covering index that would resolve it.
 - **sqltrace-review** — If a workload trace showed the query regressing in production, cross-reference trace duration variance (X14) with the plan diff.
 - **tsql-review** — If the regression was triggered by a schema or code change, review the T-SQL source for the anti-pattern that caused the plan change.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

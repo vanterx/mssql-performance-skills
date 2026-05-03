@@ -41,6 +41,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlplan-deadlock` | ~2,400 |
 | `sqlplan-compare` | ~1,750 |
 | `sqlplan-batch` | ~1,500 |
+| `query-store-review` | ~3,400 |
 
 ### Your input artifact
 
@@ -175,6 +176,7 @@ For plans above ~100,000 characters, Sonnet 4.6 input cost alone exceeds **$0.30
 | `sqlplan-review` (medium plan) | ~11,300 tok | 17,000–70,000 | **$0.07–$0.25** |
 | `sqlplan-review` (large plan) | ~11,300 tok | 70,000–160,000 | **$0.25–$0.55** |
 | `sqlplan-batch` (10 plans) | ~1,500 tok | 85,000–165,000 | **$0.27–$0.53** |
+| `query-store-review` (top 20 queries) | ~3,400 tok | 8,000–12,000 | **$0.04–$0.07** |
 
 Output tokens ($15/M on Sonnet 4.6) are significant — a detailed 3,000-token report adds ~$0.045 regardless of which skill ran. Asking for a summary instead of a full report cuts output cost 50–70%.
 
@@ -252,6 +254,7 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/sqlplan-deadlock/SKILL.md` | 9,210 | 2,423 |
 | `skills/sqlplan-compare/SKILL.md` | 6,645 | 1,748 |
 | `skills/sqlplan-batch/SKILL.md` | 5,595 | 1,472 |
+| `skills/query-store-review/SKILL.md` | ~12,800 | ~3,400 |
 
 `CHECKS_EXPLAINED.md` files are reference material for humans — they are **not** loaded into the LLM context during skill execution. Only `SKILL.md` is loaded.
 

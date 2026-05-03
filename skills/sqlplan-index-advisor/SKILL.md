@@ -378,3 +378,4 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 - **sqlplan-compare** — After deploying the recommended indexes, capture a new plan and diff against the baseline to confirm the improvement.
 - **sqlplan-batch** — Run index advisor across a folder of plans to produce a single consolidated `CREATE INDEX` script for the whole workload.
 - **tsql-review** — If the plan shows implicit conversion warnings (S12), review the T-SQL source (T5) to fix the type mismatch that prevents index seeks.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

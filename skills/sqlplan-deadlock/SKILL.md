@@ -218,3 +218,4 @@ SPID Y → holds [X on dbo.Orders IX_Status] → waits for [X on dbo.Orders PK]
 - **sqlplan-index-advisor** — Generate index DDL to eliminate the missing index patterns (P4, P5) that cause page-level lock escalation and bookmark lookup deadlocks.
 - **tsql-review** — Review the T-SQL source of the deadlocked procedures for lock-order inconsistencies and missing TRY/CATCH (T19, T20).
 - **sqltrace-review** — If the trace includes Lock:Timeout (X6) or repeated deadlock events, use sqltrace-review to quantify frequency and identify peak periods.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.

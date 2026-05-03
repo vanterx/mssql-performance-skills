@@ -17,6 +17,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans to explain a regression |
 | [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan for a deadlock graph |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
+| [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
 
 ---
 
@@ -286,6 +287,24 @@ Follow up with `/sqlplan-review` on the worst 3–5 plans and `/sqlplan-index-ad
 
 ---
 
+### "I want to find my worst queries without running any captures — I have Query Store enabled"
+
+**Use: `/query-store-review`**
+
+If your database has Query Store enabled (SQL Server 2016+, on by default in many configurations), you already have weeks or months of query performance history. Run one capture query and the skill applies 25 checks to identify regressed queries, plan instability, resource hotspots, N+1 patterns, and configuration issues — all from data already collected.
+
+```
+/query-store-review
+
+[paste output from the capture query in the skill or README]
+```
+
+The output tells you which queries to focus on and which companion skill to use next — `/sqlplan-review` for deep-dive plan analysis, `/sqlplan-index-advisor` for index DDL, `/tsql-review` for source code anti-patterns.
+
+---
+
+### "I have a mix of different artifact types"
+
 ## The Standard Tuning Workflow
 
 For a query you know is slow, work through these steps in order. Each step adds more diagnostic information.
@@ -330,6 +349,7 @@ Step 6 — If the query causes deadlocks
 | Two `.sqlplan` files (before and after) | `/sqlplan-compare` |
 | Deadlock XML / `.xdl` file | `/sqlplan-deadlock` |
 | Folder of `.sqlplan` files | `/sqlplan-batch` |
+| `sys.query_store_*` DMV output | `/query-store-review` |
 | No artifacts — just a slow query description | `/sqlplan-review` (describe operators) or `/tsql-review` (describe the code) |
 
 ---
@@ -478,9 +498,14 @@ Deadlock                  │  deadlock XML / .xdl
 
 Workload                  │  Folder of .sqlplan files
 ──────────────────────────┼─────────────────────────────────────────
+/query-store-review       │  Query Store: which queries in a workload
+                           │  need attention? 25 checks: regressions,
+                           │  plan instability, resource hotspots,
+                           │  waits per query, operational health
+                           │
 /sqlplan-batch            │  Aggregate: which queries in a workload
-                          │  need attention? Dashboard + top offenders
-                          │  + consolidated index script
+                           │  need attention? Dashboard + top offenders
+                           │  + consolidated index script
 ```
 
 ---
@@ -664,8 +689,9 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `C1–C10` | `sqlplan-compare` | Regression: what changed between two plans | 10 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
+| `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
 
-**Total: 241 checks across all skills.**
+**Total: 266 checks across all skills.**
 
 ---
 

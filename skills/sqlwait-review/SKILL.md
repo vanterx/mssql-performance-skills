@@ -669,3 +669,4 @@ V3 ✓, V6 ✓, V8 ✓, V11 ✓, V12 ✓, V16 ✓ [checks verified not triggered
 - **sqlstats-review** — If `PAGEIOLATCH_*` is dominant (V1), run `SET STATISTICS IO, TIME ON` on the heaviest queries to identify which tables drive the most physical reads.
 - **sqltrace-review** — If `ASYNC_NETWORK_IO` (V6) or `OLEDB` (V11) is high, use a Profiler/XE trace to identify which specific queries generate the most of these waits.
 - **sqlconfig-review** — If `CXPACKET` (V3) is dominant and MAXDOP or Cost Threshold for Parallelism is misconfigured, use this skill to audit and correct the server-level settings.
+- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
