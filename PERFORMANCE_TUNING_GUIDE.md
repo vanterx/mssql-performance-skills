@@ -11,7 +11,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 50 checks for anti-patterns, security, logic bugs |
 | [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
-| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 29 checks (V1–V29): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis |
+| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 36 checks (V1–V36): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo |
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 87 checks across operators, memory, parallelism |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans to explain a regression |
@@ -137,7 +137,7 @@ Or paste the raw `<deadlock>` XML directly.
 
 **Use: `/sqlwait-review`**
 
-Run the wait statistics capture query and paste the results. The skill applies 29 checks (V1–V29) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided.
+Run the wait statistics capture query and paste the results. The skill applies 36 checks (V1–V36) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo).
 
 **Step 1 — Capture wait statistics (choose one)**
 
@@ -441,8 +441,8 @@ Trace / XE                │  Profiler .trc / XE .xel / fn_trace_gettable()
 Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
 ──────────────────────────┼─────────────────────────────────────────
 /sqlwait-review           │  Server bottleneck: why is the server slow?
-                          │  26 checks V1–V26: I/O (PAGEIOLATCH), locks (LCK_M),
-                          │  parallelism (CXPACKET), memory grants (RESOURCE_SEMAPHORE),
+                          │  36 checks V1–V36: I/O (PAGEIOLATCH), locks (LCK_M),
+                          │  parallelism (CXPACKET/HT*), memory grants (RESOURCE_SEMAPHORE),
                           │  log I/O (WRITELOG/LOGBUFFER), CPU (SOS_SCHEDULER_YIELD),
                           │  TempDB (PAGELATCH), latch contention (LATCH_EX),
                           │  log space (LOGMGR_RESERVE_APPEND),
@@ -450,6 +450,9 @@ Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
                           │  V19–V26 Trend Analysis (3+ snapshots): direction, spikes,
                           │  peak period, velocity, emerging waits, correlated spikes,
                           │  transient events, pattern classification
+                          │  V30–V36 Modern features: In-Memory OLTP (XTP*), Columnstore,
+                          │  Query Store (QDS*), Transaction/DTC, Service Broker,
+                          │  Full Text Search, Parallel Redo (Always On secondary)
                           │  Configuration-aware: MAXDOP, CTPfP, RCSI, TempDB files,
                           │  recovery model, delayed durability, Always On commit mode
 
@@ -652,16 +655,17 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `W1–W7` | `sqlstats-review` | Time metrics: CPU vs elapsed ratio, compile overhead, long execution | 7 |
 | `X1–X12` | `sqltrace-review` | Event-level: long duration, high CPU/reads, attention, lock timeout, recompile, spill warnings | 12 |
 | `X13–X20` | `sqltrace-review` | Workload aggregate: N+1 frequency, sniffing variance, ad-hoc ratio, recompile rate, auto-grow | 8 |
-| `V1–V18` | `sqlwait-review` | Wait types: I/O, locks, parallelism, memory grants, log I/O, CPU, TempDB, latch, log space, poison/throttle waits | 18 |
+| `V1–V18` | `sqlwait-review` | Wait types: I/O, locks, parallelism (CXPACKET/HT*), memory grants, log I/O, CPU, TempDB, latch, log space, poison/throttle waits | 18 |
 | `V19–V26` | `sqlwait-review` | Trend analysis (3+ snapshots): direction, spikes, peak period, velocity, emerging waits, correlated spikes, transient events, pattern | 8 |
 | `V27–V29` | `sqlwait-review` | Operational checks: PAGELATCH on user DBs (insert hotspots), BACKUPIO/BACKUPBUFFER (backup I/O), cumulative skew detection (outlier dominance) | 3 |
+| `V30–V36` | `sqlwait-review` | Modern feature wait types: In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, Parallel Redo | 7 |
 | `S1–S27` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints | 27 |
 | `N1–N60` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage | 60 |
 | `C1–C10` | `sqlplan-compare` | Regression: what changed between two plans | 10 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
 
-**Total: 234 checks across all skills.**
+**Total: 241 checks across all skills.**
 
 ---
 

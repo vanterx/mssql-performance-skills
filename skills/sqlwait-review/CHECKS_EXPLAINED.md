@@ -40,7 +40,7 @@ Many wait types are normal background activity and should be excluded before ana
 
 ---
 
-## Wait Statistics Checks (V1–V29)
+## Wait Statistics Checks (V1–V36)
 
 ---
 
@@ -105,10 +105,10 @@ UPDATE dbo.Orders SET Status = 'Processing' WHERE CustomerId = 42;
 
 ---
 
-### V3 — Parallelism (CXPACKET / CXCONSUMER)
+### V3 — Parallelism (CXPACKET / CXCONSUMER / HT*)
 
 **What it means**
-`CXPACKET` records the control thread waiting for parallel worker threads to finish their portion of a parallel query. `CXCONSUMER` (SQL Server 2016 SP2 CU3+) records consumer threads waiting for data from producer threads — this is the more benign component of parallelism waits.
+`CXPACKET` records the control thread waiting for parallel worker threads to finish their portion of a parallel query. `CXCONSUMER` (SQL Server 2016 SP2 CU3+) records consumer threads waiting for data from producer threads — this is the more benign component of parallelism waits. `HTBUILD`, `HTDELETE`, `HTMEMO`, `HTREINIT`, and `HTREPARTITION` are **batch-mode hash build/repartition waits** — they appear on queries using batch mode execution (columnstore indexes, batch mode on rowstore SQL 2019+) and represent threads synchronizing at hash build or repartition phases. Treat HT* the same as CXPACKET: investigate skew before adjusting MAXDOP.
 
 **Critical misconception to avoid**
 The most common mistake DBA teams make with CXPACKET is reducing MAXDOP reflexively. Paul Randal (SQLskills.com) and the SQL Server team explicitly warn against this. CXPACKET is *expected* for parallel queries — it does not indicate a problem by itself. The question to ask is: **is the work evenly distributed across threads?** If yes, CXPACKET is fine. If one thread does 90% of the work while others wait, *that* is the problem.
@@ -417,7 +417,7 @@ OLEDB      4,210          420,500       9.1%
 ### V12 — High Availability Synchronization (HADR / DBMIRROR)
 
 **What it means**
-`HADR_SYNC_COMMIT` and related waits occur on an Always On Availability Group primary replica that uses synchronous-commit mode. The primary cannot confirm a COMMIT until all synchronous secondaries have hardened the log record to their disk. This adds the secondary's log write latency to every commit on the primary.
+`HADR_SYNC_COMMIT` and related waits occur on an Always On Availability Group primary replica that uses synchronous-commit mode. The primary cannot confirm a COMMIT until all synchronous secondaries have hardened the log record to their disk. This adds the secondary's log write latency to every commit on the primary. `HADR_SYNC_COMMIT` is the primary synchronous-commit latency signal — when this type dominates HADR waits, the bottleneck is the secondary's log I/O throughput or the network round-trip, not SQL Server itself. `PWAIT_HADR_*` waits are the preemptive variants of HADR waits (OS-level blocking calls in the HADR stack) and are treated identically.
 
 **Why it matters**
 In synchronous-commit mode, the primary's commit latency = max(primary log flush, secondary log flush + network RTT). If the secondary is on a slow disk or a distant network, every transaction on the primary is slowed by the replication lag.
@@ -458,8 +458,9 @@ PREEMPTIVE_XE_CALLBACKEXECUTE          84,200        1.0%
 2. **Remove xp_cmdshell** — replace with SQL Server Agent jobs. `xp_cmdshell` is the most common source of `PREEMPTIVE_OS_*` waits.
 3. **Move CLR to application layer** — CLR assemblies running inside SQL Server generate preemptive waits. Move complex logic to the application tier.
 4. **Disable unused Extended Events sessions** — XE sessions add `PREEMPTIVE_XE_*` overhead.
+5. **PREEMPTIVE_OS_WRITEFILEGATHERER + WRITELOG co-occurrence** — when both are prominent together, the root cause is usually frequent autogrowth events. Check: `SELECT * FROM sys.dm_os_performance_counters WHERE counter_name = 'Log Growths'` or query the default trace for autogrowth events. Fix: pre-size data and log files to avoid autogrowth during production, or set autogrowth to a large fixed increment rather than a percentage.
 
-**Related checks:** `/tsql-review` T36 (xp_cmdshell)
+**Related checks:** `/tsql-review` T36 (xp_cmdshell), V5 (WRITELOG — frequent autogrowth co-occurrence)
 
 ---
 
@@ -940,6 +941,211 @@ Correlate the high `max_wait_time_ms` with known maintenance windows:
 
 **Related checks:** V20 (spike detection), V25 (transient events), V14 (single wait dominance — may be triggered by the outlier)
 
+---
+
+## Modern Feature Checks (V30–V36)
+
+---
+
+### V30 — In-Memory OLTP / Hekaton Waits
+
+**What it means**
+`XTP*` and `WAIT_XTP*` waits occur when memory-optimized (Hekaton) tables are under pressure. The XTP engine is SQL Server's in-memory OLTP subsystem — it has its own checkpoint, transaction, and I/O threads. When these are contended, waits accumulate outside the normal buffer pool path and appear under XTP-prefixed wait types.
+
+**Why it matters**
+In-Memory OLTP is designed for extreme OLTP throughput. If XTP waits are significant, the in-memory optimization benefit is being eroded by checkpoint I/O, off-row column access, or thread scheduling overhead — meaning the tables may behave no better than disk-based tables under the current load.
+
+**How to spot it**
+```
+wait_type                     waiting_tasks  wait_time_ms  pct_total
+WAIT_XTP_CKPT_CLOSE           8,420          182,000       4.2%
+XTP_PREEMP_CKPT_MAIN          1,204          48,200        1.1%
+```
+
+**Fix options**
+1. **Check XTP checkpoint throughput** — `SELECT * FROM sys.dm_db_xtp_checkpoint_stats` to identify whether checkpoint I/O is the bottleneck. Move XTP checkpoint files to faster storage.
+2. **Investigate transaction stats** — `SELECT * FROM sys.dm_xtp_transaction_stats` for commit/rollback rates and GC (garbage collection) pressure.
+3. **Review off-row columns** — `VARCHAR(MAX)`, `NVARCHAR(MAX)`, or columns exceeding 8 KB in memory-optimized tables are stored off-row and bypass the in-memory path, causing additional I/O.
+4. **Natively compiled stored procedures** — switching to natively compiled procs reduces interpreter overhead and XTP scheduling wait time.
+
+**Related checks:** V4 (RESOURCE_SEMAPHORE — sometimes co-occurs if In-Memory OLTP grants are competing with rowstore workloads)
+
+---
+
+### V31 — Columnstore Waits
+
+**What it means**
+`COLUMNSTORE*` waits occur during columnstore delta store compression, tuple mover operations, or batch mode synchronization. The tuple mover is a background thread that compresses OPEN delta rowgroups (each holding up to ~1 million rows) into compressed columnstore segments. When the delta store grows faster than the tuple mover can compress it, these waits appear.
+
+**Why it matters**
+A growing delta store degrades columnstore query performance — rows in OPEN delta rowgroups are scanned in row mode rather than batch mode, losing the primary performance benefit of columnstore indexes. Significant `COLUMNSTORE*` waits indicate the delta store is a bottleneck.
+
+**How to spot it**
+```
+wait_type                  waiting_tasks  wait_time_ms  pct_total
+COLUMNSTORE_BUILD_THROTTLE  4,210          82,000        2.1%
+```
+Cross-reference with delta store health:
+```sql
+SELECT object_name(object_id) AS table_name,
+       state_description, COUNT(*) AS rowgroup_count, SUM(row_count) AS total_rows
+FROM sys.dm_db_column_store_row_group_physical_stats
+GROUP BY object_name(object_id), state_description
+ORDER BY 1, 2;
+```
+If many `OPEN` or `CLOSED` rowgroups exist, the tuple mover is lagging.
+
+**Fix options**
+1. **Trigger manual compression** — `ALTER INDEX CCI_TableName ON dbo.TableName REORGANIZE WITH (COMPRESS_DELAY = 0)` flushes all CLOSED rowgroups immediately.
+2. **Reduce delta store pressure** — batch larger inserts (≥ 102,400 rows per batch) to bypass the delta store and write directly to compressed segments.
+3. **Check memory grant pressure** (V4) — if batch mode memory grants are insufficient, the optimizer spills to row mode, inflating delta store work. Update statistics and add indexes to reduce sort/hash input sizes.
+4. **SQL Server 2019+** — Batch Mode on Rowstore reduces COLUMNSTORE waits by enabling batch execution on standard rowstore indexes.
+
+**Related checks:** V3 (CXPACKET / HT* — batch mode parallelism waits often co-occur), V4 (RESOURCE_SEMAPHORE)
+
+---
+
+### V32 — Query Store Overhead Waits
+
+**What it means**
+`QDS*` (Query Data Store) waits occur when Query Store capture, flush, cleanup, or async queue processing consumes significant SQL Server thread time. Query Store is a background feature — when its overhead appears in the top wait types, it is competing with production workloads for execution resources.
+
+**Why it matters**
+Query Store is designed to be lightweight, but on very high-churn workloads (many distinct ad-hoc queries, high plan turnover) or with aggressive collection settings, its overhead becomes measurable. `QDS_PERSIST_TASK_MAIN_LOOP_SLEEP` is normally idle, but `QDS_ASYNC_QUEUE` indicates the async write thread is falling behind.
+
+**How to spot it**
+```
+wait_type           waiting_tasks  wait_time_ms  pct_total
+QDS_ASYNC_QUEUE     48,291         82,000        2.1%
+```
+
+**Fix options**
+1. **Increase flush interval** — `ALTER DATABASE [YourDb] SET QUERY_STORE (DATA_FLUSH_INTERVAL_SECONDS = 1800)` reduces how often Query Store writes to disk.
+2. **Switch to AUTO capture** — `ALTER DATABASE [YourDb] SET QUERY_STORE (QUERY_CAPTURE_MODE = AUTO)` suppresses single-execution and trivial queries from being captured.
+3. **Use CUSTOM capture policy** (SQL 2019+) — `QUERY_CAPTURE_POLICY` allows filtering by execution count, CPU, and duration thresholds.
+4. **Check store capacity** — `SELECT * FROM sys.database_query_store_options` — if `current_storage_size_mb` is near `max_storage_size_mb`, auto-cleanup runs continuously. Increase `MAX_STORAGE_SIZE_MB` or purge old data: `EXEC sys.sp_query_store_flush_db`.
+
+**Related checks:** V4 (RESOURCE_SEMAPHORE — if QDS memory usage is competing), V7 (SOS_SCHEDULER_YIELD — high-churn workloads that tax QDS also tax the scheduler)
+
+---
+
+### V33 — Transaction / DTC Waits
+
+**What it means**
+`XACT*`, `DTC*`, `TRAN_MARKLATCH_*`, `MSQL_XACT_*`, and `TRANSACTION_MUTEX` waits indicate distributed transaction coordination overhead or transaction marker latch contention. `DTC_*` waits explicitly confirm that Microsoft Distributed Transaction Coordinator (MS DTC) is involved — cross-server transactions that require two-phase commit.
+
+**Why it matters**
+Distributed transactions are inherently slower than local transactions — they require a two-phase commit protocol across all participating servers plus a network round-trip through MS DTC for every commit. Under concurrency, DTC becomes a serialization point. Even with DTC properly configured, distributed transaction overhead can be 10–100× that of a local transaction.
+
+**How to spot it**
+```
+wait_type           waiting_tasks  wait_time_ms  pct_total
+DTC_STATE           4,210          820,000       8.2%
+TRANSACTION_MUTEX   1,840          184,200       1.8%
+```
+
+**Fix options**
+1. **Eliminate distributed transactions** — consolidate operations onto a single server or database. This is almost always possible with proper schema design.
+2. **Identify active distributed transactions** — `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_type = 2 ORDER BY transaction_begin_time`.
+3. **Check MS DTC configuration** — if DTC is required: ensure DTC is running and configured on all nodes (`Component Services → Distributed Transaction Coordinator`); network DTC access must be enabled for cross-machine transactions.
+4. **`TRANSACTION_MUTEX` / `MSQL_XACT_*`** — these are internal transaction manager latches. If prominent, investigate `sys.dm_tran_locks` for the specific transactions consuming lock manager resources.
+5. **`TRAN_MARKLATCH_*`** — these appear when using named transaction marks (`BEGIN TRANSACTION <name>`); ensure marks are necessary and not held excessively long.
+
+**Related checks:** V2 (LCK_M — long distributed transactions hold locks longer, amplifying lock waits)
+
+---
+
+### V34 — Service Broker Waits
+
+**What it means**
+`BROKER_*` waits (excluding the idle background waits filtered from the standard capture query such as `BROKER_EVENTHANDLER`, `BROKER_TASK_STOP`, `BROKER_TO_FLUSH`, `BROKER_TRANSMITTER`) indicate Service Broker queue depth, message delivery latency, or activation procedure contention. Service Broker is SQL Server's asynchronous messaging system — high broker waits indicate messages are piling up faster than they are being consumed.
+
+**Why it matters**
+A growing Service Broker queue causes memory pressure (queued messages consume buffer pool) and can cause application-visible delays when dialogs wait for acknowledgements.
+
+**How to spot it**
+```
+wait_type              waiting_tasks  wait_time_ms  pct_total
+BROKER_RECEIVE_WAITFOR  84,210         420,500       4.2%
+BROKER_WAIT_RESULT       4,210          82,000        0.8%
+```
+Note: `BROKER_RECEIVE_WAITFOR` is normally idle (excluded from the standard capture list) — if it appears in a non-filtered snapshot, the application is actively waiting for messages.
+
+**Fix options**
+1. **Check queue depth** — `SELECT name, is_receive_enabled, activation_procedure FROM sys.service_queues; SELECT COUNT(*) FROM sys.transmission_queue`.
+2. **Check activation status** — `SELECT * FROM sys.dm_broker_activated_tasks` to verify activation procedures are running and not deadlocked.
+3. **Poison message diagnosis** — a failing activation procedure that repeatedly rolls back blocks the queue. Identify with `SELECT * FROM sys.conversation_endpoints WHERE state_desc NOT IN ('CONVERSING', 'CLOSED')`. Fix the activation proc, then `END CONVERSATION` the blocked dialog, or enable poison message handling.
+4. **Scale activation** — increase `MAX_QUEUE_READERS` on the queue to allow more concurrent activation procedures: `ALTER QUEUE dbo.YourQueue WITH ACTIVATION (MAX_QUEUE_READERS = 10)`.
+
+**Related checks:** none — Service Broker is typically isolated from other wait types
+
+---
+
+### V35 — Full Text Search Waits
+
+**What it means**
+`FT_*`, `FULLTEXT GATHERER`, `MSSEARCH`, and `PWAIT_RESOURCE_SEMAPHORE_FT_PARALLEL_QUERY_SYNC` waits indicate full-text index population (crawl) I/O competing with the production workload, or full-text query memory semaphore contention. The full-text engine is a separate process (`fdhost.exe`) that communicates with SQL Server via shared memory — waits accumulate when SQL Server threads block waiting for the FT process.
+
+**Why it matters**
+Full-text crawls read every row of the indexed table to rebuild the full-text index. On large tables this is a significant I/O and CPU operation that competes with user queries. Full-text query execution also requires a memory semaphore for parallel queries — when saturated, FT queries queue similarly to `RESOURCE_SEMAPHORE`.
+
+**How to spot it**
+```
+wait_type                                    wait_time_ms  pct_total
+PWAIT_RESOURCE_SEMAPHORE_FT_PARALLEL_QUERY_SYNC  420,500   4.2%
+FT_IFTS_SCHEDULER_IDLE_WAIT                       82,000   0.8%
+```
+
+**Fix options**
+1. **Check crawl status** — `SELECT * FROM sys.dm_fts_index_population` to see whether a full population or incremental crawl is running.
+2. **Throttle crawl resource usage** — `EXEC sp_fulltext_service 'resource_usage', 1` (scale 1–5; 1 = minimum resource usage).
+3. **Schedule crawls off-peak** — stop and restart the FT crawl during low-activity windows.
+4. **Reduce crawl scope** — use incremental or change tracking populations instead of full populations where possible.
+5. **Offload full-text search** — for very high search volumes, consider Elasticsearch, Azure Cognitive Search, or SQL Server 2022's full-text integration with external search engines.
+
+**Related checks:** V1 (PAGEIOLATCH — crawl I/O competes with user query I/O on shared storage)
+
+---
+
+### V36 — Parallel Redo Waits (Always On Secondary)
+
+**What it means**
+`PARALLEL_REDO*` waits appear on Always On secondary replicas when parallel redo threads are contending or the redo queue is growing. The redo log thread on a secondary replica applies log records generated by the primary — parallel redo uses multiple threads to apply log in parallel to improve throughput. When the secondary cannot keep pace with the primary's log generation rate, redo queue depth grows and these waits appear.
+
+**Why it matters**
+A lagging secondary replica has several consequences: (1) readable secondary queries return stale data; (2) if the primary uses synchronous commit and relies on this secondary for quorum, its lag adds back-pressure to the primary (V18 `HADR_THROTTLE_LOG_RATE_GOVERNOR`); (3) the RPO (recovery point objective) grows — a larger redo queue means more data at risk on secondary failure.
+
+**How to spot it**
+```
+wait_type                      waiting_tasks  wait_time_ms  pct_total
+PARALLEL_REDO_CACHE_EXCHANGE    48,291         820,500       8.2%
+PARALLEL_REDO_DRAIN_WORKER       4,210          82,000        0.8%
+```
+Cross-reference redo queue size:
+```sql
+SELECT database_name,
+       redo_queue_size,        -- KB waiting to be applied on this secondary
+       redo_rate,              -- KB/s at which redo is being applied
+       last_hardened_lsn,
+       secondary_lag_seconds
+FROM sys.dm_hadr_database_replica_states
+WHERE is_local = 1
+ORDER BY redo_queue_size DESC;
+```
+
+**Fix options**
+1. **Check redo throughput vs. log generation rate** — if `redo_rate` < primary log generation rate, the gap will grow. The fix must increase redo throughput on the secondary.
+2. **Improve secondary I/O** — the redo thread is write-bound on the secondary's data and log files. Move them to faster storage (NVMe).
+3. **Increase parallel redo workers**:
+   - SQL Server 2022+: `ALTER DATABASE SCOPED CONFIGURATION SET PARALLEL_REDO_WORKER_POOL_SIZE = N` (default 0 = automatic)
+   - SQL Server 2016–2019: trace flag 3468 enables extended parallel redo (`DBCC TRACEON(3468, -1)`)
+4. **Consider async commit** for replicas that are not required for synchronous quorum — this removes the back-pressure on the primary.
+5. **Reduce primary write workload** — if the primary is generating more log than the secondary can apply, addressing the primary's write volume (batch inserts, reduced index maintenance) reduces the redo backlog.
+
+**Related checks:** V12 (HADR_SYNC_COMMIT — primary-side wait for secondary ack), V18 (HADR_THROTTLE_LOG_RATE_GOVERNOR — primary throttled because secondary redo queue is full)
+
+---
+
 ## Quick Reference: Checks by Category
 
 ### Emergency / Poison (investigate immediately)
@@ -1001,6 +1207,25 @@ Correlate the high `max_wait_time_ms` with known maintenance windows:
 |-------|-----------|------------|----------------|
 | V27 | PAGELATCH on user DBs | OPTIMIZE_FOR_SEQUENTIAL_KEY, change clustered key, lower FILLFACTOR | Confusing with V9 (TempDB PAGELATCH — different root cause) |
 | V28 | BACKUPIO / BACKUPBUFFER | Off-hours scheduling, compression, striping | Treating backup I/O as a chronic SQL Server problem |
+
+### Modern Features
+| Check | Wait Type | Threshold | Primary Fix |
+|-------|-----------|-----------|------------|
+| V30 | In-Memory OLTP | XTP*, WAIT_XTP* ≥ 2% | Check checkpoint I/O, off-row columns, natively compiled procs |
+| V31 | Columnstore | COLUMNSTORE* ≥ 2% | Trigger manual compression, batch larger inserts, fix memory grants |
+| V32 | Query Store overhead | QDS* ≥ 1% | Increase flush interval, switch to AUTO capture mode |
+
+### Distributed / HA
+| Check | Wait Type | Threshold | Primary Fix |
+|-------|-----------|-----------|------------|
+| V33 | Transaction / DTC | XACT*, DTC*, TRAN_MARKLATCH_* ≥ 2% | Eliminate distributed transactions; consolidate onto single server |
+| V36 | Parallel Redo | PARALLEL_REDO* ≥ 2% | Improve secondary I/O, increase parallel redo workers |
+
+### Platform Services
+| Check | Wait Type | Threshold | Primary Fix |
+|-------|-----------|-----------|------------|
+| V34 | Service Broker | BROKER_* ≥ 3% | Check queue depth, activation procedures, poison messages |
+| V35 | Full Text Search | FT_*, MSSEARCH ≥ 3% | Throttle crawl, schedule off-peak, offload to dedicated search engine |
 
 ### Trend Analysis (requires 3+ time windows; V20/V21/V23 require 2+)
 | Check | Trigger | Purpose |
