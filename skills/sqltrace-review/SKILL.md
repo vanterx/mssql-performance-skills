@@ -242,7 +242,7 @@ Structure your report as follows:
 [same format]
 
 ### Passed Checks
-X5 ✓, X6 ✓, X9 ✓, X11 ✓, X19 ✓ [explicitly list checks verified clean]
+X5 ✓ (brief reason), X6 ✓ (brief reason) [list every check verified clean with a reason in parens — e.g., X2 ✓ (individual non-report CPU < 5,000 ms)]
 ```
 
 ---

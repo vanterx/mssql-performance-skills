@@ -348,7 +348,7 @@ Structure your report as follows:
 [Non-check recommendations: schema ownership conventions, consider a specific query hint, refactor opportunity not covered by a check]
 
 ### Passed Checks
-T1 ✓, T6 ✓, T16 ✓, T29 ✓ [explicitly list check IDs verified clean — signals confidence in analysis]
+T2 ✓ (no UPDATE/DELETE without WHERE), T8 ✓ (no scalar UDF in SELECT/WHERE) [list every check ID verified clean with a brief reason in parens — confirms the check was evaluated, not skipped]
 ```
 
 ---

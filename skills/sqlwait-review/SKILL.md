@@ -678,7 +678,18 @@ These checks require the optional Memory and I/O detail capture queries (see Inp
 [same format, User impact line optional for purely informational checks]
 
 ### Passed Checks
-V3 ✓, V6 ✓, V8 ✓, V11 ✓, V12 ✓, V16 ✓ [checks verified not triggered]
+V3 ✓ (brief reason), V6 ✓ (brief reason) [checks verified not triggered — always include a one-clause reason in parens confirming what was observed]
+
+### Recommended Action Order
+
+Always end the single-snapshot section with this table. Order: (a) emergency/poison waits first,
+(b) highest % of total wait time, (c) lowest effort. Reference finding IDs in Resolves column.
+
+| Priority | Action | Resolves | Effort |
+|----------|--------|----------|--------|
+| 1 — Immediately | [action] | C1 | [time estimate] |
+| 2 — Today | [action] | C3, W2 | [time estimate] |
+| 3 — This sprint | [action] | C4, W1 | Days |
 
 ---
 

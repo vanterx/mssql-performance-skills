@@ -327,6 +327,88 @@ done <<< "$wf_counts"
 [ "$check18_ok" -eq 1 ] && pass "README Recommended Workflow counts match actual skill counts"
 
 # ---------------------------------------------------------------------------
+# Check 19: Every SKILL.md has an ## Output Format section
+# ---------------------------------------------------------------------------
+echo ""
+echo "[19 ] Output Format section present in all SKILL.md files"
+check19_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    if ! grep -q "^## Output Format" "$skill_file" 2>/dev/null; then
+        fail "$name/SKILL.md is missing '## Output Format' section"
+        check19_ok=0
+    fi
+done
+[ "$check19_ok" -eq 1 ] && pass "All SKILL.md files have an '## Output Format' section"
+
+# ---------------------------------------------------------------------------
+# Check 20: Output Format sections contain required structural markers
+#   - Analysis skills must have a Passed Checks mandate
+#   - Priority-table skills must have a fix-sequence/action-order mandate
+#   - sqlplan-compare must mandate Root Cause Summary
+#   - sqlplan-deadlock must mandate Deadlock Summary table + Pattern Match
+#   - sqlplan-batch must mandate Memory Grant Summary + Cardinality Accuracy Report
+#   - sqlplan-review must mandate check ID suffix in finding labels
+# ---------------------------------------------------------------------------
+echo ""
+echo "[20 ] Output Format structural markers (regression guard)"
+check20_ok=1
+
+# Skills that must mandate Passed Checks
+for name in tsql-review sqlstats-review sqltrace-review sqlwait-review sqlplan-review query-store-review; do
+    skill_file="skills/$name/SKILL.md"
+    [ ! -f "$skill_file" ] && continue
+    if ! grep -q "Passed Checks" "$skill_file" 2>/dev/null; then
+        fail "$name/SKILL.md: Output Format lost 'Passed Checks' mandate — restore from reference analysis"
+        check20_ok=0
+    fi
+done
+
+# Skills that must mandate a priority/fix table
+for name in sqlplan-review sqlwait-review query-store-review sqlplan-deadlock; do
+    skill_file="skills/$name/SKILL.md"
+    [ ! -f "$skill_file" ] && continue
+    if ! grep -qE "Prioritized Fix Sequence|Recommended Action Order|Remediation Priority" "$skill_file" 2>/dev/null; then
+        fail "$name/SKILL.md: Output Format lost priority/fix table mandate — restore from reference analysis"
+        check20_ok=0
+    fi
+done
+
+# sqlplan-compare: must mandate Root Cause Summary
+if ! grep -q "Root Cause Summary" "skills/sqlplan-compare/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-compare/SKILL.md: Output Format lost 'Root Cause Summary' mandate"
+    check20_ok=0
+fi
+
+# sqlplan-deadlock: must mandate Deadlock Summary table and Pattern Match section
+if ! grep -q "Deadlock Summary" "skills/sqlplan-deadlock/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-deadlock/SKILL.md: Output Format lost 'Deadlock Summary' table mandate"
+    check20_ok=0
+fi
+if ! grep -q "Pattern Match" "skills/sqlplan-deadlock/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-deadlock/SKILL.md: Output Format lost 'Pattern Match' section mandate"
+    check20_ok=0
+fi
+
+# sqlplan-batch: must mandate Memory Grant Summary and Cardinality Accuracy Report
+if ! grep -q "Memory Grant Summary" "skills/sqlplan-batch/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-batch/SKILL.md: Output Format lost 'Memory Grant Summary' section mandate"
+    check20_ok=0
+fi
+if ! grep -q "Cardinality Accuracy Report" "skills/sqlplan-batch/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-batch/SKILL.md: Output Format lost 'Cardinality Accuracy Report' section mandate"
+    check20_ok=0
+fi
+
+# sqlplan-review: must mandate check ID suffix in finding labels
+if ! grep -q "check ID" "skills/sqlplan-review/SKILL.md" 2>/dev/null; then
+    fail "sqlplan-review/SKILL.md: Output Format lost check ID suffix instruction in finding labels"
+    check20_ok=0
+fi
+
+[ "$check20_ok" -eq 1 ] && pass "All Output Format sections have required structural markers"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

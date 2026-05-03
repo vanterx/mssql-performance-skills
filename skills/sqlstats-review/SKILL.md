@@ -292,7 +292,7 @@ Structure your report as follows:
 [same format]
 
 ### Passed Checks
-I1 ✓, I3 ✓, I6 ✓, W1 ✓, W4 ✓ [list all checks verified clean]
+I1 ✓ (brief reason), I3 ✓ (brief reason) [list every check verified clean with a reason in parens — e.g., I3 ✓ (no intentional full-table scan without comment)]
 ```
 
 **Formatting rules:**

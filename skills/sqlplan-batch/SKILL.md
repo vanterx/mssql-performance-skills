@@ -150,7 +150,31 @@ Write `batch-analysis.md` with the following structure:
 
 ## Spill Report
 
-[table or "No spills detected across all plans."]
+| File | Operator | Spill Level | Threads Spilled | Est. Rows | Actual Rows | Note |
+|------|---------|------------|----------------|-----------|-------------|------|
+| plan.sqlplan | Sort (Node N) | 2 | 8 | 1 | 9,999,999 | [root cause in one phrase] |
+
+[Or: "No spills detected across all plans."]
+
+---
+
+## Memory Grant Summary
+
+| File | Granted MB | Max Used MB | Efficiency | Wait ms |
+|------|-----------|-------------|------------|---------|
+| plan.sqlplan | 1,024 | 2,048 | 200% overused (grant too small) | 5,000 |
+
+[Efficiency = MaxUsed / Granted × 100. Flags both over-grants (< 10% used) and under-grants (> 100% used). Omit if no plan has a memory grant.]
+
+---
+
+## Cardinality Accuracy Report
+
+| File | NodeId | Operator | Estimated | Actual | Error Factor |
+|------|--------|---------|-----------|--------|-------------|
+| plan.sqlplan | 5 | Sort | 1 | 9,999,999 | **9,999,999×** |
+
+[Include only operators where actual vs estimated diverges > 100×. Sort by Error Factor descending. This table reveals which plans need statistics work before anything else.]
 
 ---
 
@@ -172,6 +196,21 @@ Write `batch-analysis.md` with the following structure:
 | File | Cost | DOP | Memory (MB) | Criticals | Warnings | Spill | Check IDs |
 |------|------|-----|-------------|-----------|---------|-------|-----------|
 | ... | | | | | | | |
+
+## Per-Plan Findings Summary
+
+For each plan with at least one Critical or Warning finding, add a sub-section:
+
+### `plan-name.sqlplan`
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| S3 | Critical | Memory grant 1,024 MB — over-budget |
+| N21 | Warning | Row estimate 1 vs actual 9,999,999 |
+
+[One sentence at the bottom pointing to the full analysis: "Full analysis: `/sqlplan-review plan-name.sqlplan`"]
+
+[Plans with no findings beyond Info: one line — "Clean plan — no Critical or Warning findings."]
 ```
 
 ---

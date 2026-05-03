@@ -153,7 +153,7 @@ Run these once per statement before inspecting individual operators.
 
 ### S18 — Insufficient Memory Grant (Used > Granted)
 - **Trigger:** `MemoryGrantInfo/@MaxUsedMemory` > `MemoryGrantInfo/@GrantedMemory` (query used more memory than it was granted)
-- **Severity:** Warning
+- **Severity:** Warning — always Warning regardless of the magnitude of under-allocation. The confirmed spills caused by this under-grant are caught as Critical via N41/N38; do not escalate S18 itself.
 - **Fix:** The memory grant was undersized because the optimizer underestimated row counts at compile time. This causes the query to spill to tempdb. Fix root-cause cardinality errors (parameter sniffing, stale statistics). Unlike S2/S3 which flag over-allocation, this flags the opposite — the grant was too small.
 
 ### S19 — FORCE ORDER Hint
@@ -517,32 +517,126 @@ Apply these to every operator node in the plan tree.
 
 ## Output Format
 
-Structure your report as follows:
+Structure your report as follows. Follow every formatting rule below exactly — the reference
+output in `example/horrible-analysis.md` demonstrates the expected quality level.
+
+---
+
+### Section: Summary
 
 ```
 ## Execution Plan Analysis
 
 ### Summary
-- X Critical issues, Y Warnings, Z Info items
-- Primary bottleneck: [operator/check]
+- **X Critical** issues, **Y Warnings**, **Z Info** items
+- Primary bottleneck: [one sentence identifying the root cause and which operators it affects]
+```
 
-### Critical Issues
-**[C1] [Issue Name]** — [one-sentence summary]
-- Observed: [what you see in the plan — quote operator names, row counts, costs]
-- Impact: [why this matters]
-- Fix: [concrete action]
+---
 
-### Warnings
-[same format]
+### Section: Findings (Critical / Warnings / Info)
 
-### Info
-[same format]
+Each finding header **must** include the check ID that fired:
 
-### Missing Indexes (if present)
-[List each suggested index with CREATE INDEX statement]
+```
+### [C1 — S4] Issue Name — key metric
+- **Observed:** [exact values from the XML — operator name, NodeId, row counts, cost]
+- **Impact:** [why this matters at runtime — concurrency, I/O, elapsed time]
+- **Fix:** [concrete action with code where applicable]
+```
 
+Rules:
+- The bracket suffix (`— S4`, `— N21`, etc.) is the check ID from the sections above. Always include it.
+- Findings reference each other by ID where one is the root cause of another (e.g. "see W7", "caused by W4").
+- **N21 pervasive cardinality collapse** (fires on > 3 operators): replace the bullet list with a table:
+
+  ```
+  | NodeId | Operator | Estimated | Actual | Ratio |
+  |--------|----------|-----------|--------|-------|
+  | 1      | ...      | 1         | ...    | ...×  |
+  ```
+
+#### Info section — parameter sniffing
+
+If `<ParameterList>` shows `ParameterCompiledValue` ≠ `ParameterRuntimeValue` on any parameter,
+report it as a named Info item — never bury it in a prose note:
+
+```
+### [I1] Parameter Sniffing — @ParamName compiled 'X', runtime 'Y'
+- **Observed:** ParameterCompiledValue="X" vs ParameterRuntimeValue="Y"
+- **Impact:** [how this explains the N21 estimate errors above]
+- **Fix options:**
+  ```sql
+  -- Option 1: Recompile per execution
+  OPTION (RECOMPILE)
+  -- Option 2: Optimize for representative value
+  OPTION (OPTIMIZE FOR (@Param = 'value'))
+  -- Option 3: Local variable (breaks sniffing, uses average density)
+  DECLARE @Local type = @Param; -- use @Local in query
+  -- Option 4: Filtered statistics for the common range
+  CREATE STATISTICS stat_col ON table (col) WHERE col >= 'value';
+  ```
+```
+
+S25, S26, N17, N32, and N52 findings also go in the Info section.
+
+---
+
+### Section: Missing Indexes
+
+```
+### Missing Indexes
+
+#### XML-Suggested Indexes
+
+For each MissingIndexGroup in the plan XML:
+- Write the full CREATE INDEX statement using the database/schema from the XML.
+- If the query has a non-sargable predicate on the indexed column (leading wildcard LIKE,
+  implicit conversion, wrapped function), add a blockquote warning:
+  > **Warning:** This index will NOT help with [predicate] because [reason]. Fix the predicate
+  > (see Wx) before creating this index.
+
+#### Recommended Additional Indexes
+
+After the XML suggestions, add analyst-inferred indexes that are NOT in the XML but are implied
+by the findings — for example:
+- A covering index to eliminate a Key Lookup (N5 finding) — include the INCLUDE columns needed
+- An index on a join column to allow a Seek instead of Scan when N15 fires at scale
+- Indexes on the build/probe inputs of a Hash Match when N7 fires
+Use comments to explain which finding each index addresses.
+```
+
+---
+
+### Section: Prioritized Fix Sequence
+
+Always end the findings with a fix sequence table. Order: (a) fixes that unblock other fixes
+first, (b) highest severity, (c) lowest effort. Reference the finding IDs in Resolves.
+
+```
+### Prioritized Fix Sequence
+
+| Step | Action | Resolves |
+|------|--------|----------|
+| 1    | ...    | C1, W4   |
+| 2    | ...    | I1, W7   |
+```
+
+---
+
+### Section: Passed Checks
+
+Format as a two-column table. Include every check explicitly evaluated and not triggered.
+A thorough PASS table signals that the full ruleset was applied — completeness is a feature.
+
+```
 ### Passed Checks
-[List checks that were explicitly verified clean — gives confidence in the analysis]
+
+| Check | Result |
+|-------|--------|
+| S1 — Serial Plan | PASS — DOP=8, plan is parallel |
+| S2 — Excessive Memory Grant | PASS — grant is under-sized, not over-sized (S18 fired instead) |
+| ...   | ...    |
 ```
 
 ---

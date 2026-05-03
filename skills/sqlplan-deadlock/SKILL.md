@@ -159,48 +159,72 @@ For each resource:
 ```
 ## Deadlock Analysis
 
-### Overview
-- Processes involved: N
-- Victim: SPID X (process ID: ...)
-- Winner: SPID Y
-- Pattern detected: [P1–P8 or Unknown]
+### Deadlock Summary
 
-### Process Summary
-
-**Victim (SPID X)**
-- Query: [query text]
-- Waiting for: [resource type] on [object.index] — mode [U/X/S]
-- Locks held: [resource type] on [object.index] — mode [X/U/S]
-- Isolation level: [level]
-
-**Winner (SPID Y)**
-- Query: [query text]
-- Locks held: [resource type] on [object.index] — mode [X/U/S]
+| | Victim | Winner |
+|--|--------|--------|
+| **SPID** | X | Y |
+| **Host** | [hostname] | [hostname] |
+| **Procedure / Batch** | [proc name or first 80 chars of ad-hoc SQL] | [proc name or first 80 chars] |
+| **Started** | [timestamp] | [timestamp] |
+| **Log used** | [KB] | [KB] |
+| **Pattern detected** | [P1–P8 or Unknown] | — |
 
 ### Lock Cycle
 
 ```
-SPID X → holds [X on dbo.Orders PK] → waits for [X on dbo.Orders IX_Status]
-SPID Y → holds [X on dbo.Orders IX_Status] → waits for [X on dbo.Orders PK]
+SPID X → holds [mode on object.index] → waits for [mode on object.index]
+SPID Y → holds [mode on object.index] → waits for [mode on object.index]
 ```
+
+[One sentence confirming the circular wait and which SPID SQL Server chose as victim.]
+
+### Pattern Match
+
+**[Pattern name — e.g., P1 Classic Forward/Reverse Access Order]**
+
+| Session | Step 1 | Step 2 |
+|---------|--------|--------|
+| SPID X — ProcA | [lock mode] on [Table1] ([index]) | Needs [lock mode] on [Table2] |
+| SPID Y — ProcB | [lock mode] on [Table2] | Needs [lock mode] on [Table1] |
+
+[One sentence explaining why this access order is deterministic and under what concurrency condition it fires.]
+
+### Queries Involved
+
+**Victim (SPID X) — [proc/batch name]**
+```sql
+[query text]
+```
+[One sentence: what lock it acquires and on which resource.]
+
+**Winner (SPID Y) — [proc/batch name]**
+```sql
+[query text]
+```
+[One sentence: what lock it acquires first and what it then waits for.]
 
 ### Root Cause
 
-[Pattern name and explanation]
+[Pattern name, why the cycle is deterministic, which tables/indexes are involved, and what concurrent execution condition triggers it.]
 
-### Remediation (Prioritized)
+### Remediation Plan
 
-**[Fix 1]** — [Action]
+**Fix 1 (Recommended)** — [Action]
 - Effort: Low / Medium / High
-- Risk: Low / Medium / High
-- SQL: [DDL or setting change if applicable]
+- Effectiveness: Eliminates / Reduces frequency / Hides symptom
+- SQL: [DDL or setting change with code block if applicable]
 
-**[Fix 2]** — ...
+**Fix 2** — [Action]
+...
 
-### Monitoring Recommendation
-- Capture deadlocks via: `SELECT * FROM sys.dm_xe_sessions WHERE name = 'system_health'`
-- Or enable trace flag 1222 / 1205 for verbose deadlock output
-- Alert on error 1205 in application logs
+### Remediation Priority
+
+| Fix | Effort | Effectiveness |
+|-----|--------|--------------|
+| Fix 1 — [name] | Low/Medium/High | Eliminates the deadlock |
+| Fix 2 — [name] | Low | Reduces frequency; does not eliminate |
+| Fix N — [name] | Low | Implement regardless as defensive coding |
 ```
 
 ---

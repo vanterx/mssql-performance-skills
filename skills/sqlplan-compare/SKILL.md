@@ -140,18 +140,33 @@ Compare these for each plan:
 
 ### Regression Findings
 
-**[R1] [Finding Name]** — Severity
-- Was: [baseline operator/value]
-- Now: [new plan operator/value]
-- Impact: [why this causes the slowdown]
-- Fix: [concrete action]
+**[R1 — C2] Finding Name**
+- **Was:** [baseline operator/value]
+- **Now:** [new plan operator/value]
+- **Why:** [root cause — what changed and why it caused this shift]
+- **Fix:** [concrete action with code if applicable]
 
-### Unchanged (Confirmed Stable)
-[List key operators/metrics that are the same in both plans]
+The bracket suffix (`— C2`, `— C5`) is the check ID from the C1–C10 checks above that fired.
+Findings reference each other where one is the root cause of another (e.g., "consequence of R1").
+Do not use Critical/Warning severity tiers — regression findings are ranked by fix priority, not severity.
 
-### Recommended Fix Order
-1. ...
-2. ...
+### Root Cause Summary
+
+[One paragraph synthesising all findings into a single root cause statement.
+Example: "A single change caused the entire regression: the @status parameter type changed from
+VARCHAR to NVARCHAR, introducing an implicit conversion on the Status column. This made the
+index non-sargable → cardinality collapsed → Hash Match replaced Nested Loops → 2 GB memory
+grant → 3.2-second wait before execution begins."]
+
+```sql
+-- Recommended fix (step-by-step code block)
+-- Step 1: ...
+-- Step 2: ...
+```
+
+### Confirmed Stable (Unchanged)
+[List key operators, DOP, CE version, compile time that are the same in both plans.
+This gives confidence the comparison is valid.]
 ```
 
 ---

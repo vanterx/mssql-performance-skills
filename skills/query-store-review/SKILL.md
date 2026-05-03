@@ -377,7 +377,17 @@ Structure your report as follows:
 | SELECT ... | BUFFER_IO (PAGEIOLATCH) | 52% | Scan heavy |
 
 ### Passed Checks
-Q4 ✓, Q5 ✓, Q11 ✓, Q12 ✓, Q14 ✓, Q20 ✓, Q24 ✓, Q25 ✓
+Q4 ✓ (brief reason), Q5 ✓ (brief reason) [always include a one-clause reason in parens]
+
+### Prioritized Fix Sequence
+
+Always end the report with this table. Order: (a) fixes that unblock others first,
+(b) highest-severity findings, (c) lowest effort. Reference finding IDs in Resolves column.
+
+| Step | Action | Resolves |
+|------|--------|----------|
+| 1    | [concrete action] | C1, W4 |
+| 2    | [concrete action] | I1, W2 |
 ```
 
 **Formatting rules:**

@@ -322,7 +322,8 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 ```
 - Source: Key Lookup elimination (D1) + optimizer suggestion (Impact 87.3)
 - Covers: 3 plans, eliminates Key Lookup on dbo.Orders
-- Warnings: None
+- Prerequisite: [any query/schema change required before this index is effective — omit if none]
+- Warnings: None [or: brief warning if index won't help without a predicate fix, or if it overlaps with an existing index]
 
 #### [I2] dbo.LineItems — Score: 71.0 [derived: D6]
 ```sql
