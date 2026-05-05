@@ -42,6 +42,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlplan-compare` | ~1,750 |
 | `sqlplan-batch` | ~1,500 |
 | `query-store-review` | ~3,400 |
+| `procstats-review` | ~2,800 |
 
 ### Your input artifact
 
@@ -255,6 +256,7 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/sqlplan-compare/SKILL.md` | 6,645 | 1,748 |
 | `skills/sqlplan-batch/SKILL.md` | 5,595 | 1,472 |
 | `skills/query-store-review/SKILL.md` | ~12,800 | ~3,400 |
+| `skills/procstats-review/SKILL.md` | ~10,500 | ~2,800 |
 
 `CHECKS_EXPLAINED.md` files are reference material for humans — they are **not** loaded into the LLM context during skill execution. Only `SKILL.md` is loaded.
 

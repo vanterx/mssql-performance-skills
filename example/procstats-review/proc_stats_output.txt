@@ -1,0 +1,14 @@
+-- Q1 output: Top CPU Consumers  (collection_time: 2025-05-04 09:15:00)
+-- Run: /procstats-review
+
+collection_time          object_type  database_name  schema_name  object_name                execs_in_interval  cpu_ms_per_sec  avg_cpu_ms  avg_elapsed_ms  max_cpu_ms   avg_logical_reads  reads_per_sec  avg_spills  physical_reads_delta  sample_seconds  cache_age_minutes
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_GetSalesReport         18                 842.5           14042       48310           288400       412000             1242.0         12.4        84000                 300             22
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_SyncInventory          4210               31.2            2220        2280            182000       8400               1168.0         0.0         0                     300             480
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_SearchCustomers        92840              18.4            59          61              148000       12                 3713.0         0.0         0                     300             55
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_ProcessPayment         1240               8.2             1984        39820           3200         2100               865.0          0.0         12000                 300             120
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_GetOrderHistory        8420               6.1             217         224             820          18400              5140.0         0.0         0                     300             95
+2025-05-04 09:15:00.000  TRIGGER      SalesDB        dbo          tr_Orders_AfterInsert      4100               2.1             154         162             410          310                42.3           0.0         0                     300             480
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_GeneratePDF            3                  0.8             80000       81200           95000        24000              0.2            0.0         8200                  300             8
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_CleanupSessions        1                  0.1             30000       284000          30000        920000             0.1            0.0         420000                300             5
+2025-05-04 09:15:00.000  PROCEDURE    SalesDB        dbo          usp_GetProductPrice        182000             0.0             0           1               0            2                  12133.0        0.0         0                     300             480
+2025-05-04 09:15:00.000  PROCEDURE    ReportDB       dbo          usp_MonthlyRevenue         4                  0.0             0           45000           0            320000             0.4            0.0         280000                300             12

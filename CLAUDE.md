@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides ten slash-command skills that Claude uses when asked to review T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, or Query Store data. No application code — content is Markdown only.
+Provides eleven slash-command skills that Claude uses when asked to review T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, or procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`. No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -28,6 +28,7 @@ Provides ten slash-command skills that Claude uses when asked to review T-SQL so
 | [skills/sqlplan-deadlock/SKILL.md](skills/sqlplan-deadlock/SKILL.md) | Deadlock analysis: `sqlplan-deadlock`. 8 patterns (P1–P8), lock cycle extraction, remediation |
 | [skills/sqlplan-batch/SKILL.md](skills/sqlplan-batch/SKILL.md) | Batch workload: `sqlplan-batch`. Aggregate dashboard across many `.sqlplan` files |
 | [skills/query-store-review/SKILL.md](skills/query-store-review/SKILL.md) | Query Store analysis: `query-store-review`. 25 checks (Q1–Q25) — regressed queries, plan instability, resource hotspots, query waits, operational health |
+| [skills/procstats-review/SKILL.md](skills/procstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `procstats-review`. 20 checks (R1–R20) — top consumers, per-execution efficiency, pattern detection, trend analysis |
 
 ### Human Reference (CHECKS_EXPLAINED.md — not loaded at runtime)
 
@@ -43,6 +44,7 @@ Provides ten slash-command skills that Claude uses when asked to review T-SQL so
 | [skills/sqlplan-deadlock/CHECKS_EXPLAINED.md](skills/sqlplan-deadlock/CHECKS_EXPLAINED.md) | P1–P8 deadlock patterns, lock concepts, how to capture XML |
 | [skills/sqlplan-batch/CHECKS_EXPLAINED.md](skills/sqlplan-batch/CHECKS_EXPLAINED.md) | How to read each dashboard section, prioritisation guide, next-step workflow |
 | [skills/query-store-review/CHECKS_EXPLAINED.md](skills/query-store-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 25 Q-checks with Query Store DMV examples and fix recipes |
+| [skills/procstats-review/CHECKS_EXPLAINED.md](skills/procstats-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 20 R-checks with collection table examples and fix recipes |
 
 ### Root Documentation
 
@@ -68,11 +70,12 @@ Provides ten slash-command skills that Claude uses when asked to review T-SQL so
 | [example/sqlplan-index-advisor/](example/sqlplan-index-advisor/) | Index advisor output for `horrible.sqlplan` |
 | [example/sqlplan-batch/](example/sqlplan-batch/) | Aggregate dashboard for a 3-plan batch |
 | [example/query-store-review/](example/query-store-review/) | Query Store DMV output with plan instability, forced plan failure, N+1 + analysis |
+| [example/procstats-review/](example/procstats-review/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
 
 ## Installing Skills
 
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 10 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 11 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -121,6 +124,7 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `X` | `sqltrace-review` |
 | `V` | `sqlwait-review` |
 | `Q` | `query-store-review` |
+| `R` | `procstats-review` |
 
 New skills must choose an unused single uppercase letter.
 

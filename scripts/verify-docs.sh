@@ -42,7 +42,7 @@ case "$claude_word" in
     one)   claude_num=1 ;; two)   claude_num=2 ;; three) claude_num=3 ;;
     four)  claude_num=4 ;; five)  claude_num=5 ;; six)   claude_num=6 ;;
     seven) claude_num=7 ;; eight) claude_num=8 ;; nine)  claude_num=9 ;;
-    ten)   claude_num=10 ;; *)    claude_num=0 ;;
+    ten)   claude_num=10 ;; eleven) claude_num=11 ;; twelve) claude_num=12 ;; *)    claude_num=0 ;;
 esac
 if [ "$claude_num" -eq 0 ]; then
     warn "Could not parse skill count word from CLAUDE.md (found: '$claude_word')"

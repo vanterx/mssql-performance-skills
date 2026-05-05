@@ -22,6 +22,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [sqlplan-deadlock](#sqlplan-deadlock) | Analyze a deadlock XML graph — identify pattern and fix |
 | [sqlplan-batch](#sqlplan-batch) | Batch-analyze a folder of plans — dashboard + index script |
 | [query-store-review](#query-store-review) | Analyze Query Store DMV output — 25 checks for regressed queries, plan instability, resource hotspots, and configuration health |
+| [procstats-review](#procstats-review) | Analyze collected `sys.dm_exec_procedure_stats` snapshots — 20 checks (R1–R20) for top consumers, per-execution efficiency, N+1 patterns, and trends |
 
 ---
 
@@ -39,6 +40,7 @@ cp -rfi skills/sqlplan-compare   ~/.claude/skills/sqlplan-compare
 cp -rfi skills/sqlplan-deadlock  ~/.claude/skills/sqlplan-deadlock
 cp -rfi skills/sqlplan-index-advisor ~/.claude/skills/sqlplan-index-advisor
 cp -rfi skills/query-store-review ~/.claude/skills/query-store-review
+cp -rfi skills/procstats-review   ~/.claude/skills/procstats-review
 ```
 
 ---
@@ -949,6 +951,49 @@ Or provide a file path:
 **Query-Level Waits (Q19–Q22, SQL 2017+):** > 50% duration waiting (Q19), lock waits dominant (Q20), memory grant waits (Q21), network IO waits dominant (Q22).
 
 **Operational Health (Q23–Q25):** Storage > 80% max (Q23), capture disabled or READ_ONLY (Q24), wait stats not enabled (Q25).
+
+---
+
+## procstats-review
+
+Analyzes runtime statistics collected from `sys.dm_exec_procedure_stats`,
+`sys.dm_exec_trigger_stats`, and `sys.dm_exec_function_stats` via the collection framework
+in `sql/collection/`. Applies 20 checks (R1–R20) across four categories.
+
+**Triggers:** `/procstats-review`, `/proc-stats`
+
+**Input:** Paste output from any of the 5 reporting queries in `sql/collection/04_report_queries.sql`.
+
+**Checks:** 20 total — R1–R5 (top consumers), R6–R10 (per-execution efficiency),
+R11–R15 (pattern detection), R16–R20 (trend analysis, requires ≥ 3 snapshots).
+
+**Usage:**
+
+```
+# Single-snapshot analysis (Q1–Q4)
+/procstats-review
+[paste Q1 output]
+
+# Trend analysis (Q5 — requires ≥ 3 collections)
+/procstats-review
+[paste Q5 output]
+```
+
+**Setup (deploy collection framework first):**
+
+```sql
+-- Run in order against your DBA/monitoring database:
+-- sql/collection/01_create_tables.sql
+-- sql/collection/02_usp_collect_procstats.sql
+-- sql/collection/03_usp_calculate_deltas.sql
+-- sql/collection/04_report_queries.sql   (reporting queries — paste output into /procstats-review)
+-- sql/collection/05_create_agent_job.sql (optional Agent job)
+
+-- Collect manually:
+EXECUTE collect.usp_CollectProcStats;
+```
+
+**Sample output:** See [`example/procstats-review/proc_stats_output-analysis.md`](example/procstats-review/proc_stats_output-analysis.md).
 
 ---
 

@@ -18,6 +18,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan for a deadlock graph |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
+| [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
 
 ---
 
@@ -350,6 +351,7 @@ Step 6 — If the query causes deadlocks
 | Deadlock XML / `.xdl` file | `/sqlplan-deadlock` |
 | Folder of `.sqlplan` files | `/sqlplan-batch` |
 | `sys.query_store_*` DMV output | `/query-store-review` |
+| `collect.proc_stats` report query output (Q1–Q5 from `04_report_queries.sql`) | `/procstats-review` |
 | No artifacts — just a slow query description | `/sqlplan-review` (describe operators) or `/tsql-review` (describe the code) |
 
 ---
@@ -691,8 +693,9 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
 | `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
+| `R1–R20` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis | 20 |
 
-**Total: 270 checks across all skills.**
+**Total: 290 checks across all skills.**
 
 ---
 
