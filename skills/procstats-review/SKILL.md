@@ -34,6 +34,9 @@ Accept any of:
 - **Q5 output** (Trend / Time Series) — paste Query 5 result grid (requires ≥ 3 snapshots)
 - **Combined paste** — paste two or more query outputs together; apply all applicable checks
 - **Natural language description** — describe the metrics you see ("usp_GetOrders uses 80% of CPU")
+- **Statement-level stats** — paste output from `collect.query_stats` using the report query in
+  `sql/collection/12_report_all_collections.sql` Section 2; all R-checks apply equally to
+  statement-level data — just note the object_name may be NULL for ad-hoc SQL
 
 For trend checks (R16–R20), Q5 output with ≥ 3 rows per object is required. State
 "Cannot evaluate R16–R20 — trend data not provided" if Q5 is absent.

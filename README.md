@@ -954,6 +954,67 @@ Or provide a file path:
 
 ---
 
+## Collection Framework
+
+The `sql/` directory contains T-SQL and PowerShell scripts that collect SQL Server DMV data
+into a persistent monitoring database and produce report output for the skills above.
+
+### Folder map
+
+| Folder | Purpose | Feeds skill |
+|--------|---------|-------------|
+| `sql/collection/` | Persistent collectors — schema, tables, SPs, Agent job, PowerShell deployment | `/procstats-review`, `/sqlwait-review` |
+| `sql/wait-stats/` | Ad-hoc `sys.dm_os_wait_stats` capture (single snapshot + differential) | `/sqlwait-review` |
+| `sql/sqltrace/` | Extended Events session setup + ring buffer / file / `.trc` readers | `/sqltrace-review` |
+| `sql/deadlock/` | system_health reader + dedicated XE session for deadlock capture | `/sqlplan-deadlock` |
+| `sql/query-store/` | Queries A–D for Query Store analysis | `/query-store-review` |
+| `sql/sqlplan/` | Plan cache, running query, and Query Store plan extraction | `/sqlplan-review`, `/sqlplan-compare` |
+| `sql/sqlstats/` | `SET STATISTICS IO, TIME ON` capture template | `/sqlstats-review` |
+
+### Quick deploy (full collection framework)
+
+```powershell
+# Deploy all collectors to a new monitoring database
+.\sql\collection\Deploy-DmvCollection.ps1 `
+    -ServerInstance 'SQL01\PROD' `
+    -Database       'DBAMonitor' `
+    -Collectors     All `
+    -IncludeAgentJob `
+    -TrustServerCertificate
+
+# Deploy only wait stats collector
+.\sql\collection\Deploy-DmvCollection.ps1 `
+    -ServerInstance 'SQL01' `
+    -Collectors     WaitStats
+
+# Preview without executing
+.\sql\collection\Deploy-DmvCollection.ps1 `
+    -ServerInstance 'SQL01' `
+    -Collectors     All `
+    -WhatIf
+```
+
+**Collectors:** `All` | `ProcStats` | `WaitStats` | `QueryStats` | `FileIo` | `Memory` | `PerfCounters`
+
+### After deployment
+
+```sql
+-- Run a manual collection
+EXECUTE collect.usp_CollectAll @debug = 1;
+
+-- View results (paste into /procstats-review)
+-- See sql/collection/04_report_queries.sql  — proc/trigger/function stats (Q1-Q5)
+-- See sql/collection/12_report_all_collections.sql — all collectors + health log
+
+-- Verify all collectors are succeeding
+SELECT collector_name, MAX(collection_time) AS last_run, MAX(status) AS last_status
+FROM collect.collection_log
+GROUP BY collector_name
+ORDER BY collector_name;
+```
+
+---
+
 ## procstats-review
 
 Analyzes runtime statistics collected from `sys.dm_exec_procedure_stats`,

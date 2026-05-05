@@ -1,13 +1,13 @@
 # AGENTS.md — mssql-performance-skills
 
 ## What this is
-A library of 10 Markdown skills for SQL Server performance tuning. No build system, no tests, no dependencies. The only executable is `bash scripts/verify-docs.sh`.
+A library of 11 Markdown skills for SQL Server performance tuning. No build system, no tests, no dependencies. The only executable is `bash scripts/verify-docs.sh`.
 
 ## Verify before commit
 ```
 bash scripts/verify-docs.sh
 ```
-Runs 18 documentation consistency checks. Fails block commit; warnings are advisory.
+Runs 20 documentation consistency checks. Fails block commit; warnings are advisory.
 A `.claude/settings.json` PostToolUse hook auto-runs this after every Write/Edit — check output after file edits.
 
 ## Critical gotchas
@@ -16,7 +16,7 @@ A `.claude/settings.json` PostToolUse hook auto-runs this after every Write/Edit
 
 **CHECKS_EXPLAINED.md is NOT loaded at runtime.** Only SKILL.md is read by the skill loader. All thresholds and triggers must live in SKILL.md. CHECKS_EXPLAINED.md is human reference only.
 
-**sqlplan-review has no `example/sqlplan-review/` folder.** It uses root-level `example/horrible.sqlplan` instead. All other 8 skills require `example/<skill-name>/`.
+**sqlplan-review has no `example/sqlplan-review/` folder.** It uses root-level `example/horrible.sqlplan` instead. All other 10 skills require `example/<skill-name>/`.
 
 **sqlplan-batch and sqlplan-index-advisor are exempt from check count matching** (verify-docs.sh check 11). Their CHECKS_EXPLAINED.md files don't mirror per-check entries by design.
 
@@ -32,10 +32,13 @@ See `CLAUDE.md` "Adding a New Skill" section for the full checklist (files, tabl
 ## Check prefix map
 ```
 T  = tsql-review              I/W = sqlstats-review       X  = sqltrace-review
-V  = sqlwait-review           S/N = sqlplan-review        C  = sqlplan-compare
+V  = sqlwait-review (40)      S/N = sqlplan-review        C  = sqlplan-compare
 D  = sqlplan-index-advisor    P   = sqlplan-deadlock       Q  = query-store-review
+R  = procstats-review
 ```
 sqlplan-batch has no own prefix (aggregates S/N).
 
+Available prefixes: A, B, E, F, G, H, J, K, L, M, O, U, Y, Z
+
 ## Full contributor guide
-`CLAUDE.md` — file map, conventions, all 9 skills listed, install instructions, development constraints, and step-by-step workflows for adding checks and skills.
+`CLAUDE.md` — file map, conventions, all 11 skills listed, install instructions, development constraints, and step-by-step workflows for adding checks and skills.

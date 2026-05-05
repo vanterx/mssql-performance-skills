@@ -6,9 +6,9 @@
   Run this script once against the target DBA / monitoring database.
   Compatible with SQL Server 2016+ (PAGE compression, COMPRESS function).
 
+  Prerequisites: run 00_bootstrap.sql first (creates schema, config, collection_log).
+
   Tables created:
-    collect.config                — key/value settings
-    collect.collection_log        — one row per collector execution
     collect.proc_stats            — main snapshot table (procedure / trigger / function)
     collect.proc_stats_latest_hash — deduplication tracker (one row per natural key)
 
@@ -29,65 +29,6 @@
 USE [$(Database)];  /* <-- Change to your target database */
 GO
 SET NOCOUNT ON;
-GO
-
-/* ── Schema ─────────────────────────────────────────────────────────────── */
-
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'collect')
-    EXECUTE (N'CREATE SCHEMA collect AUTHORIZATION dbo;');
-GO
-
-/* ── collect.config ─────────────────────────────────────────────────────── */
-
-IF OBJECT_ID(N'collect.config', N'U') IS NULL
-BEGIN
-    CREATE TABLE collect.config
-    (
-        setting_name   sysname        NOT NULL
-            CONSTRAINT PK_config PRIMARY KEY CLUSTERED,
-        setting_value  nvarchar(256)  NOT NULL,
-        description    nvarchar(512)  NULL
-    );
-
-    INSERT collect.config (setting_name, setting_value, description)
-    VALUES
-        (N'collection_interval_minutes', N'5',
-         N'How often usp_CollectProcStats is scheduled by the Agent job'),
-        (N'retention_days', N'30',
-         N'Rows older than N days are purged on each successful collection'),
-        (N'min_executions', N'1',
-         N'Skip objects with execution_count below this threshold (reduces noise)'),
-        (N'collect_query_plans', N'1',
-         N'1 = capture plan XML (COMPRESS-ed); 0 = skip (lower storage, faster collection)'),
-        (N'exclude_system_databases', N'1',
-         N'1 = exclude master/model/msdb/tempdb (database_id IN (1,2,3,4))');
-
-    PRINT 'collect.config created and seeded.';
-END
-ELSE
-    PRINT 'collect.config already exists — skipping.';
-GO
-
-/* ── collect.collection_log ─────────────────────────────────────────────── */
-
-IF OBJECT_ID(N'collect.collection_log', N'U') IS NULL
-BEGIN
-    CREATE TABLE collect.collection_log
-    (
-        log_id           bigint         NOT NULL IDENTITY
-            CONSTRAINT PK_collection_log PRIMARY KEY CLUSTERED,
-        collection_time  datetime2(7)   NOT NULL DEFAULT SYSDATETIME(),
-        collector_name   sysname        NOT NULL,
-        status           nvarchar(20)   NOT NULL,   /* SUCCESS | ERROR */
-        rows_inserted    int            NULL,
-        duration_ms      int            NULL,
-        error_message    nvarchar(2048) NULL
-    );
-
-    PRINT 'collect.collection_log created.';
-END
-ELSE
-    PRINT 'collect.collection_log already exists — skipping.';
 GO
 
 /* ── collect.proc_stats ─────────────────────────────────────────────────── */

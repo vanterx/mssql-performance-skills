@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//c/Users/tsx11/.claude/skills/sqlplan-index-advisor/**)",
-      "Bash(Get-ChildItem \"C:\\\\Users\\\\tsx11\\\\.claude\\\\skills\\\\\" -Directory)"
-    ]
-  }
-}
