@@ -1077,7 +1077,7 @@ EXECUTE collect.usp_CollectProcStats;
 
 ## Example
 
-See [`example/horrible-analysis.md`](example/horrible-analysis.md) for a full analysis of [`example/horrible.sqlplan`](example/horrible.sqlplan) — a deliberately bad plan demonstrating parameter sniffing, memory grant failure, TempDb spills, leading-wildcard LIKE, implicit conversion, and 5M-row key lookups.
+See [`example/sqlplan-review/horrible-analysis.md`](example/sqlplan-review/horrible-analysis.md) for a full analysis of [`example/sqlplan-review/horrible.sqlplan`](example/sqlplan-review/horrible.sqlplan) — a deliberately bad plan demonstrating parameter sniffing, memory grant failure, TempDb spills, leading-wildcard LIKE, implicit conversion, and 5M-row key lookups.
 
 ---
 

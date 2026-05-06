@@ -16,8 +16,6 @@ A `.claude/settings.json` PostToolUse hook auto-runs this after every Write/Edit
 
 **CHECKS_EXPLAINED.md is NOT loaded at runtime.** Only SKILL.md is read by the skill loader. All thresholds and triggers must live in SKILL.md. CHECKS_EXPLAINED.md is human reference only.
 
-**sqlplan-review has no `example/sqlplan-review/` folder.** It uses root-level `example/horrible.sqlplan` instead. All other 10 skills require `example/<skill-name>/`.
-
 **sqlplan-batch and sqlplan-index-advisor are exempt from check count matching** (verify-docs.sh check 11). Their CHECKS_EXPLAINED.md files don't mirror per-check entries by design.
 
 ## Adding a check → update 6 locations

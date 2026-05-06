@@ -59,8 +59,8 @@ Provides eleven slash-command skills that Claude uses when asked to review T-SQL
 
 | Path | What it demonstrates |
 |------|---------------------|
-| [example/horrible.sqlplan](example/horrible.sqlplan) | Reference bad plan: parameter sniffing, spills, implicit conversion, key lookups |
-| [example/horrible-analysis.md](example/horrible-analysis.md) | Reference output of `/sqlplan-review` on the above plan |
+| [example/sqlplan-review/horrible.sqlplan](example/sqlplan-review/horrible.sqlplan) | Reference bad plan: parameter sniffing, spills, implicit conversion, key lookups |
+| [example/sqlplan-review/horrible-analysis.md](example/sqlplan-review/horrible-analysis.md) | Reference output of `/sqlplan-review` on the above plan |
 | [example/tsql-review/](example/tsql-review/) | `slow_proc.sql` with 12 anti-patterns + expected analysis |
 | [example/sqlstats-review/](example/sqlstats-review/) | SSMS STATISTICS IO/TIME output + expected analysis |
 | [example/sqlplan-compare/](example/sqlplan-compare/) | Baseline + regression `.sqlplan` pair + diff analysis |
@@ -127,9 +127,6 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `R` | `procstats-review` |
 
 New skills must choose an unused single uppercase letter.
-
-### Example folder exception
-`sqlplan-review` has no `example/sqlplan-review/` subfolder. Its examples are the root-level `example/horrible.sqlplan` and `example/horrible-analysis.md`. The verify script exempts it explicitly. All other skills must have `example/<skill-name>/`.
 
 ### CHECKS_EXPLAINED.md is not loaded at runtime
 Only `SKILL.md` is loaded by the Claude Code skill loader. `CHECKS_EXPLAINED.md` is human reference only — do not put trigger conditions or thresholds there that Claude needs to act on.

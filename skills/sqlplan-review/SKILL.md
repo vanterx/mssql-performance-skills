@@ -590,7 +590,7 @@ Apply these to every operator node in the plan tree.
 ## Output Format
 
 Structure your report as follows. Follow every formatting rule below exactly — the reference
-output in `example/horrible-analysis.md` demonstrates the expected quality level.
+output in `example/sqlplan-review/horrible-analysis.md` demonstrates the expected quality level.
 
 ---
 

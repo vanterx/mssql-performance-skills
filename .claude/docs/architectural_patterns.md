@@ -225,4 +225,4 @@ Each skill has a dedicated subfolder under `example/` containing:
 - Input files use the natural extension for the skill: `.sql` (tsql-review), `.txt` (sqlstats-review, sqltrace-review), `.sqlplan` (plan skills), `.xml` (deadlock)
 - Analysis files append `-analysis.md` to the input file's stem
 
-**Convention:** Input files must trigger a representative spread of severities (at least one Critical, multiple Warnings, at least one Info). Analysis files must follow the skill's `## Output Format` exactly — they serve as ground-truth examples for validating skill output quality. The existing `horrible.sqlplan` and `horrible-analysis.md` at repo root are the original examples; new examples live in skill-specific subfolders.
+**Convention:** Input files must trigger a representative spread of severities (at least one Critical, multiple Warnings, at least one Info). Analysis files must follow the skill's `## Output Format` exactly — they serve as ground-truth examples for validating skill output quality. All examples live in skill-specific subfolders under `example/<skill-name>/`.
