@@ -7,7 +7,7 @@
 ## Summary
 
 - **3 Critical** issues, **10 Warnings**, **1 Info** item
-- Primary bottleneck: pervasive cardinality collapse — every operator estimates 1 row but processes millions. Root cause is parameter sniffing (`@StartDate` compiled as `'1900-01-01'`, executed as `'2025-01-01'`) compounded by an implicit type conversion forcing a full index scan on `Orders.CreatedDate` and a leading-wildcard LIKE on `Users.Email`.
+- Primary bottleneck: pervasive cardinality collapse — every operator estimates 1 row but processes millions. Root cause is parameter sniffing (`@StartDate` compiled as `'1900-01-01'`, executed as `'2025-01-01'`) compounded by an implicit type conversion forcing a full index scan on `dbo.Orders.CreatedDate` and a leading-wildcard LIKE on `dbo.Users.Email`.
 
 ---
 
@@ -53,19 +53,19 @@
   ```
   This eliminates all 5 million lookups entirely.
 
-### [W4 — N8] Implicit Conversion on Orders.CreatedDate — Full Scan Forced (NodeId=8)
+### [W4 — N8] Implicit Conversion on dbo.Orders.CreatedDate — Full Scan Forced (NodeId=8)
 - **Observed:** Predicate: `CONVERT_IMPLICIT(datetime, [Orders].[CreatedDate]) >= @StartDate`. The column is wrapped in an implicit conversion.
 - **Impact:** When the column is wrapped in any function or conversion, no index seek is possible — SQL Server must convert every stored value and then compare. This forces a full index scan of 9,999,999 rows instead of a date-range seek that would return a small fraction of that. This is a primary driver of the cardinality explosion in the Orders/Payments branch.
-- **Fix:** Ensure `@StartDate` is declared with the same type as `Orders.CreatedDate`. Never wrap the column — cast the parameter instead:
+- **Fix:** Ensure `@StartDate` is declared with the same type as `dbo.Orders.CreatedDate`. Never wrap the column — cast the parameter instead:
   ```sql
   -- If CreatedDate is DATE and @StartDate is DATETIME:
   WHERE o.CreatedDate >= CAST(@StartDate AS DATE)
   -- Or simply declare @StartDate as DATE to match the column type
   ```
 
-### [W5 — N9] Leading Wildcard LIKE on Users.Email (NodeId=3)
+### [W5 — N9] Leading Wildcard LIKE on dbo.Users.Email (NodeId=3)
 - **Observed:** `[Users].[Email] LIKE '%gmail.com'` on a Clustered Index Scan. 2,000,000 rows read.
-- **Impact:** The leading `%` prevents any index seek. SQL Server reads all 2 million Users rows and evaluates the LIKE as a residual predicate. The suggested index on `Users.Email` (see Missing Indexes) will **not** help with this pattern — B-tree indexes cannot seek on leading wildcards.
+- **Impact:** The leading `%` prevents any index seek. SQL Server reads all 2 million Users rows and evaluates the LIKE as a residual predicate. The suggested index on `dbo.Users.Email` (see Missing Indexes) will **not** help with this pattern — B-tree indexes cannot seek on leading wildcards.
 - **Fix options in order of preference:**
   1. Full-Text Search: `WHERE CONTAINS(u.Email, '"gmail.com"')` with a full-text index on Email.
   2. Persisted computed column: `EmailDomain AS RIGHT(Email, LEN(Email) - CHARINDEX('@', Email))` with an index, queried as `WHERE u.EmailDomain = 'gmail.com'`.
@@ -100,7 +100,7 @@
 ### [W9 — N27] Extreme Parallel Thread Skew (NodeId=0, Gather Streams)
 - **Observed:** Thread 0: 1 row; Thread 1: 9,999,999 rows. With DOP=8, essentially 100% of work lands on one thread.
 - **Impact:** The query pays full parallel overhead (thread coordination, exchange operators, memory for all threads) but receives zero parallel benefit. The single hot thread becomes the bottleneck; all other threads are idle most of the time.
-- **Fix:** The skew is a downstream symptom of the implicit conversion on `Orders.CreatedDate` (W4) concentrating all rows into one partition bucket. Fix W4 first. If skew persists post-fix, investigate data distribution on the Repartition Streams (NodeId=7) partitioning column.
+- **Fix:** The skew is a downstream symptom of the implicit conversion on `dbo.Orders.CreatedDate` (W4) concentrating all rows into one partition bucket. Fix W4 first. If skew persists post-fix, investigate data distribution on the Repartition Streams (NodeId=7) partitioning column.
 
 ### [W10 — N38] Operator-Level Warnings — Sort (NodeId=5) and Hash Aggregate (NodeId=6)
 - **Observed:** `<SpillToTempDb SpillLevel="2">` on the Sort and `<HashSpillDetails SpillLevel="3">` on the Hash Aggregate — both as direct `<Warnings>` children of their respective `<RelOp>` nodes.
@@ -136,7 +136,7 @@
 
 ## Missing Indexes
 
-### MI1 — Users.Email (Optimizer Impact: 99.999%)
+### MI1 — dbo.Users.Email (Optimizer Impact: 99.999%)
 ```sql
 CREATE NONCLUSTERED INDEX [IX_Users_Email]
   ON [ProdDB].[dbo].[Users] ([Email]);
@@ -162,7 +162,7 @@ CREATE NONCLUSTERED INDEX [IX_Payments_OrderId]
 
 | Step | Action | Resolves |
 |------|--------|----------|
-| 1 | Match `@StartDate` data type to `Orders.CreatedDate` | W4 — removes implicit conversion, enables Index Seek |
+| 1 | Match `@StartDate` data type to `dbo.Orders.CreatedDate` | W4 — removes implicit conversion, enables Index Seek |
 | 2 | Add `OPTION (RECOMPILE)` | I1, W7 — eliminates parameter sniffing, cascades into all estimate fixes |
 | 3 | Create covering index on Orders | W3, W6 — eliminates 5M Key Lookups and the Nested Loops N+1 pattern |
 | 4 | Rewrite `LIKE '%gmail.com'` predicate | W5 — eliminates 2M-row Users full scan |

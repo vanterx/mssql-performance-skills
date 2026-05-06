@@ -547,6 +547,12 @@ Each finding header **must** include the check ID that fired:
 
 Rules:
 - The bracket suffix (`— S4`, `— N21`, etc.) is the check ID from the sections above. Always include it.
+- **Table and index names in Observed lines and finding text must use schema-qualified format
+  when the plan XML includes a `Schema` attribute on the `<Object>` or `<RelOp>` element.**
+  Format: `[Schema].[Table]` preserving SQL Server bracket notation, or `Schema.Table` in prose.
+  Example: `dbo.Orders` not `Orders`; `[dbo].[Orders].[IX_Orders_Status]` in DDL.
+  When the plan XML omits the Schema attribute (estimated plans, simplified XML), bare table
+  names are acceptable.
 - Findings reference each other by ID where one is the root cause of another (e.g. "see W7", "caused by W4").
 - **N21 pervasive cardinality collapse** (fires on > 3 operators): replace the bullet list with a table:
 

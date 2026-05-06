@@ -253,12 +253,16 @@ Always include this table, populated from whatever input was provided:
 Each finding **must** include the check ID that fired:
 
 ```
-### [C1 — R6] High Average CPU — usp_GetOrderHistory (avg 12,400 ms)
+### [C1 — R6] High Average CPU — dbo.usp_GetOrderHistory (avg 12,400 ms)
 - **Observed:** avg_cpu_ms = 12,400, execs_in_interval = 48, cpu_ms_per_sec = 99.2
 - **Impact:** [why this matters at runtime]
 - **Fix:** [concrete action]
 ```
 
+- **Object names in finding headers and Observed lines must use `schema_name.object_name`
+  format when `schema_name` is present in the input.** Use bare `object_name` only when
+  `schema_name` is NULL (ad-hoc SQL with no associated object).
+  Correct: `dbo.usp_GetSalesReport` — Wrong: `usp_GetSalesReport`
 - Findings reference each other by ID where one explains another (e.g. "root cause of C1").
 - Parameter sniffing findings (R9) go in Info unless `max_to_avg_cpu_ratio` ≥ 10 (Warning).
 
@@ -273,7 +277,7 @@ Always end the findings with this table:
 
 | Priority | Action | Resolves | Effort |
 |----------|--------|----------|--------|
-| 1 — Immediately | Run /sqlplan-review on usp_GetOrderHistory | C1, W2 | 15 min |
+| 1 — Immediately | Run /sqlplan-review on dbo.usp_GetOrderHistory | C1, W2 | 15 min |
 | 2 — Today        | Add covering index on Orders(CustomerId) | W2 | 30 min |
 ```
 
