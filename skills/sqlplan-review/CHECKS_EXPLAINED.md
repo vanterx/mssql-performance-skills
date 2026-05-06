@@ -3124,6 +3124,372 @@ If the JSON query is infrequent or the result set is small after other filters, 
 
 ---
 
+### S28 — Large Cached Plan (Plan Cache Bloat)
+
+**What it means**  
+The compiled plan stored in the plan cache is unusually large. Every cached plan occupies space in the plan cache (a section of buffer pool memory). Very large plans also take longer to match during plan cache lookup on each execution, adding per-call overhead.
+
+**How to spot it**  
+`CachedPlanSize` attribute on the `<QueryPlan>` element, in KB.
+
+```xml
+<QueryPlan DegreeOfParallelism="4" CachedPlanSize="6144" ...>
+```
+6,144 KB = 6 MB cached plan — Warning threshold.
+
+**Why plans get large**  
+- Queries joining many tables (each join adds operators and output columns)
+- Large parameter lists (S23 — > 50 parameters)
+- Dynamic SQL with many branches compiled into a single plan
+- Deeply nested subqueries or CTEs
+
+**Fix**
+```sql
+-- Find the largest plans in cache:
+SELECT TOP 10
+    usecounts,
+    size_in_bytes / 1024 AS size_kb,
+    LEFT(text, 200) AS sql_preview
+FROM sys.dm_exec_cached_plans
+CROSS APPLY sys.dm_exec_sql_text(plan_handle)
+ORDER BY size_in_bytes DESC;
+
+-- Parameterize the query, split into smaller units, or use sp_executesql
+```
+
+**Related checks:** S23 (excessive parameters — common contributor to large plans)
+
+---
+
+### S29 — Memory Request Denied by Server
+
+**What it means**  
+The optimizer calculated how much memory the query needed (`RequestedMemory`) but the server could not grant that amount — `GrantedMemory` < `RequestedMemory`. The server was under memory pressure at the moment of execution and reduced the grant. Sort and hash operators will spill to TempDb even though statistics are accurate.
+
+**How to spot it**  
+In `MemoryGrantInfo`: `RequestedMemory` > `GrantedMemory` × 1.1 (more than a 10% shortfall).
+
+```xml
+<MemoryGrantInfo RequestedMemory="2097152" GrantedMemory="524288" .../>
+```
+Requested 2 GB, granted only 512 MB — severe reduction.
+
+**Difference from other memory checks**  
+- S4 (Grant Wait): the query *waited* to get a grant — this says the grant was *reduced*, not delayed
+- S2/S18: focus on over-grant or under-grant relative to actual use — S29 is about server-side denial
+
+**Fix**  
+```sql
+-- Check overall memory pressure:
+SELECT physical_memory_in_use_mb, memory_utilization_percentage
+FROM sys.dm_os_process_memory;
+
+-- Check for concurrent heavy queries consuming grants:
+SELECT session_id, requested_memory_kb, granted_memory_kb
+FROM sys.dm_exec_query_memory_grants
+ORDER BY requested_memory_kb DESC;
+```
+Increase `max server memory`, add Resource Governor to cap individual grants, or reduce concurrent query memory demands.
+
+**Related checks:** S4 (grant wait), S3 (large grant), S18 (insufficient grant)
+
+---
+
+### S30 — High Serial Required Memory
+
+**What it means**  
+`SerialRequiredMemory` is how much memory the sort and hash operators need even if the query runs with DOP 1 (serially). When this value is very high, the query is expensive regardless of parallelism — the individual operators are reading and sorting too much data.
+
+**How to spot it**  
+`SerialRequiredMemory` ≥ 524,288 KB (512 MB) in `MemoryGrantInfo`.
+
+```xml
+<MemoryGrantInfo SerialRequiredMemory="1048576" GrantedMemory="2097152" .../>
+```
+Serial mode needs 1 GB. With DOP 8, the granted amount is higher — but even removing parallelism won't solve the underlying problem.
+
+**Fix**  
+Add indexes to avoid large sorts. Filter data earlier in the plan to reduce the row count entering sort/hash operators. Replace ORDER BY on large result sets with a pre-sorted index.
+
+**Related checks:** S2 (excessive over-grant), S3 (large grant), N22 (expensive sort)
+
+---
+
+### S31 — Non-QDS Forced Plan (Traditional Plan Guide)
+
+**What it means**  
+A `sp_create_plan_guide` is forcing the optimizer to use a specific plan — distinct from S24 which catches Query Store forced plans. Traditional plan guides are fragile: they must exactly match the query text (including whitespace in some cases), and become stale silently as data distribution, statistics, and schema change.
+
+**How to spot it**  
+`PlanGuideName` attribute present on `StmtSimple` AND does NOT start with `QDS_`.
+
+```xml
+<StmtSimple PlanGuideName="GuideGetOrders_2023" ...>
+```
+
+**How to audit plan guides**
+```sql
+SELECT name, scope_type_desc, query_text, hints
+FROM sys.plan_guides
+WHERE is_disabled = 0
+ORDER BY name;
+
+-- Test if the guide is still valid:
+EXEC sys.sp_validate_plan_guide @name = N'GuideGetOrders_2023';
+```
+
+**Fix**  
+Validate the guide is still beneficial by capturing the plan without the guide (temporarily disable it) and running `/sqlplan-compare` against the forced plan. If the guide is no longer needed (the underlying statistics or index issue was fixed), drop it. If still needed, consider migrating to Query Store plan forcing which is more robust.
+
+**Related checks:** S24 (QDS forced plan), N36 (forced plan general), N37 (unmatched index hint)
+
+---
+
+### S32 — Compile Wall-Clock vs CPU Gap (Compilation Contention)
+
+**What it means**  
+`CompileTime` (wall-clock seconds to compile) greatly exceeds `CompileCPU` (CPU time spent compiling). The gap represents time SQL Server's optimizer thread spent *waiting* rather than working — typically for plan cache latch contention or memory broker pressure during optimization.
+
+**How to spot it**  
+`CompileTime` > `CompileCPU` × 2 AND `CompileTime` > 1,000 ms (both in milliseconds on QueryPlan).
+
+```xml
+<QueryPlan CompileTime="4200" CompileCPU="800" ...>
+```
+4.2 seconds wall-clock, only 800 ms CPU — 3.4 seconds spent waiting during compilation.
+
+**Fix**  
+```sql
+-- Check for compilation-related waits:
+SELECT wait_type, wait_time_ms, waiting_tasks_count
+FROM sys.dm_os_wait_stats
+WHERE wait_type IN ('RESOURCE_SEMAPHORE_QUERY_COMPILE', 'SOS_SCHEDULER_YIELD')
+ORDER BY wait_time_ms DESC;
+```
+Use plan guides or `sp_executesql` parameterization to reduce plan cache churn. Increase plan cache via `max server memory` adjustment. Consider `optimize for ad hoc workloads`.
+
+**Related checks:** S7 (high compile CPU), S15 (high compile memory)
+
+---
+
+### S33 — Non-Standard Compilation SET Options
+
+**What it means**  
+The plan was compiled with `SET ANSI_NULLS OFF`, `SET QUOTED_IDENTIFIER OFF`, or `SET ANSI_WARNINGS OFF`. Standard SQL Server behavior requires all three to be ON. Non-standard options change query semantics and, critically, cause a separate plan cache entry from standard-compiled plans — even for identical query text. This means every SSMS-submitted version of the query misses the application's cached plan and compiles a new one.
+
+**How to spot it**  
+`StatementSetOptions` element on `StmtSimple` with non-standard attribute values.
+
+```xml
+<StmtSimple ...>
+  <StatementSetOptions QUOTED_IDENTIFIER="false" ANSI_NULLS="true" .../>
+```
+
+**Semantic impact of non-standard options**  
+- `ANSI_NULLS OFF`: `NULL = NULL` evaluates to TRUE (non-standard NULL comparison)
+- `QUOTED_IDENTIFIER OFF`: double quotes denote string literals, not identifiers — breaks code using `"ColumnName"` syntax
+- `ANSI_WARNINGS OFF`: suppresses divide-by-zero and NULL aggregate warnings
+
+**Fix**  
+Identify the application connection string or driver setting that sets non-standard options. ODBC and OLE DB drivers default to `ANSI_NULLS=ON`, `QUOTED_IDENTIFIER=ON`. Legacy VB6 / classic ADO applications and some ORMs default to OFF. Add explicit `SET` statements at the start of the stored procedure, or fix the connection string.
+
+**Related checks:** S17 (unparameterized query — related plan cache bloat), S23 (excessive parameters)
+
+---
+
+### N61 — High Estimated Average Row Size
+
+**What it means**  
+`EstimatedAvgRowSize` is the optimizer's estimate of how wide (in bytes) each row is as it passes through this operator. When rows are very wide, every sort and hash operator must allocate one or more 8-KB buffer pages *per row* — dramatically multiplying memory grant requirements. A 10,000-byte row in a sort of 1 million rows requires ~10 GB of sort memory.
+
+**How to spot it**  
+`EstimatedAvgRowSize` attribute on `<RelOp>` elements.
+
+```xml
+<RelOp PhysicalOp="Sort" EstimatedAvgRowSize="12480" ...>
+```
+12,480 bytes = 1.5 pages per row. Every sort row requires at least 2 buffer pages.
+
+**Why rows get wide**  
+- `SELECT *` on a wide table carries every column through the plan
+- Large string/VARBINARY/XML/JSON columns in the projection
+- Many JOIN columns accumulated through nested loops
+
+**Fix**  
+```sql
+-- Replace SELECT * with explicit columns:
+-- WRONG:
+SELECT * FROM dbo.Orders o JOIN dbo.Customers c ON o.CustomerId = c.CustomerId
+
+-- RIGHT:
+SELECT o.OrderId, o.CreatedDate, o.TotalAmount, c.Email, c.Name
+FROM dbo.Orders o JOIN dbo.Customers c ON o.CustomerId = c.CustomerId
+```
+Identify which columns are wide (VARCHAR(MAX), NVARCHAR(MAX), XML, VARBINARY(MAX)) and filter them out of the projection until the final result set.
+
+**Related checks:** N61 drives S3/S29 (large/denied memory grants), N22 (expensive sort — wide rows inflate sort cost)
+
+---
+
+### N62 — Actual Elapsed Time Hotspot
+
+**What it means**  
+`ActualElapsedms` in `RunTimeCountersPerThread` records how long (in milliseconds) a specific thread actually spent in a specific operator — including time waiting for I/O, locks, memory, and CPU scheduling. Summing across threads gives the operator's total wall-clock contribution. When one operator dominates actual elapsed time, it is the true bottleneck regardless of its estimated cost percentage (N24).
+
+**How to spot it**  
+`RunTimeCountersPerThread/@ActualElapsedms` on any `<RelOp>` in an actual execution plan.
+
+```xml
+<RunTimeCountersPerThread Thread="1" ActualRows="9999999" ActualElapsedms="28450" />
+<RunTimeCountersPerThread Thread="2" ActualRows="8120344" ActualElapsedms="31200" />
+```
+Sum = 59,650 ms actual elapsed. If statement total was 62,000 ms, this operator consumed 96% of wall-clock time.
+
+**Why estimated cost can mislead**  
+N24 uses the optimizer's cost model percentage — which does not account for I/O stalls, lock waits, or memory spills. A hash match with low estimated cost can have very high actual elapsed time if it spills to TempDb or waits for memory. Actual elapsed time cuts through this noise.
+
+**Fix**  
+Once the elapsed-time hotspot operator is identified, run the appropriate companion check for its type: Sort → N6/N22/N41; Hash Match → N7/N41; Scan → N4/N39/N65; Seek → N43/N5; Exchange → N26/N27.
+
+**Related checks:** N24 (high cost operator by estimated %), N41 (confirmed spill), N27 (thread skew)
+
+---
+
+### N63 — Thread Starvation (Zero-Row Thread)
+
+**What it means**  
+In a parallel plan, work is distributed across threads via an exchange operator. When one or more threads process zero rows while others process millions, those threads wasted their entire setup, scheduling, and teardown overhead with no productive output. This is a more extreme form of N27 (thread skew) — skew can be 10× or 100×; starvation is infinite skew.
+
+**How to spot it**  
+A `Parallelism` operator with `RunTimeCountersPerThread` entries where at least one thread has `ActualRows = 0` and total `ActualRows` > 0.
+
+```xml
+<RunTimeCountersPerThread Thread="1" ActualRows="9999999" .../>
+<RunTimeCountersPerThread Thread="2" ActualRows="0"       .../>
+<RunTimeCountersPerThread Thread="3" ActualRows="0"       .../>
+```
+Thread 1 did everything; threads 2 and 3 were wasted.
+
+**Causes**  
+1. Hash distribution on a high-cardinality column where all values hash to one bucket
+2. Partition-aware parallelism where all data is in one partition
+3. DOP set too high for the data volume (small table with many threads)
+
+**Fix**  
+For partition-aware skew: check partition distribution with `sys.dm_db_partition_stats`. For hash distribution skew: the partitioning column in the Repartition Streams operator has extreme value skew. Consider reducing MAXDOP or reorganizing the query to use a better partitioning column.
+
+**Related checks:** N27 (parallel thread skew — ratio-based), N26 (exchange spill), S8 (ineffective parallelism)
+
+---
+
+### N64 — Wide Projection (SELECT * Anti-Pattern)
+
+**What it means**  
+The `<OutputList>` of a scan or seek operator lists every column being carried upward through the plan. When more than 20 columns are projected, every downstream Sort, Hash Match, and Nested Loops operator must allocate buffers for this wide row — inflating memory grants (N61) and row transfer costs between operators.
+
+**How to spot it**  
+`<OutputList>` element with many `<ColumnReference>` children on a Scan or Seek.
+
+```xml
+<OutputList>
+  <ColumnReference Table="[Orders]" Column="OrderId"/>
+  <ColumnReference Table="[Orders]" Column="CustomerId"/>
+  ...  <!-- 35 more columns -->
+  <ColumnReference Table="[Orders]" Column="LastModifiedAt"/>
+</OutputList>
+```
+
+**Impact example**  
+Orders table: 40 columns, average width 150 bytes = 6,000 bytes/row. With 10 million rows in a sort, sort memory = 60 GB requested. With explicit projection of 5 columns at 40 bytes each: sort memory = 4 GB. Selecting only needed columns reduces sort memory by 15×.
+
+**Fix**  
+```sql
+-- WRONG (carries all 40 columns):
+SELECT * FROM dbo.Orders WHERE Status = 'Pending'
+
+-- RIGHT (carries only 4 columns):
+SELECT OrderId, CustomerId, CreatedDate, TotalAmount
+FROM dbo.Orders WHERE Status = 'Pending'
+```
+
+**Related checks:** N61 (high avg row size — directly caused by wide projection), S3 (large memory grant — symptom of wide projection feeding sort/hash)
+
+---
+
+### N65 — Partition Elimination Not Occurring
+
+**What it means**  
+SQL Server's table/index partitioning allows queries to skip entire partition ranges when the WHERE clause matches the partition column. When `ActualPartitionsAccessed` equals the total `PartitionCount`, no partitions were eliminated — the query scanned every partition despite having a predicate on the partition key.
+
+**How to spot it**  
+`Partitioned="1"` on a RelOp AND `ActualPartitionsAccessed` = full count in RunTimeInformation (requires actual plan).
+
+```xml
+<RelOp Partitioned="1" ...>
+  <RunTimeCountersPerThread Thread="1" ActualPartitionsAccessed="24" .../>
+```
+If the table has 24 partitions and all 24 were accessed, elimination failed.
+
+**Why elimination fails**  
+1. Implicit type conversion on the partition column — wrapping the column in CONVERT prevents seek (N8/N42)
+2. Function applied to the partition column (`WHERE YEAR(OrderDate) = 2024`)
+3. Parameter sniffed with a non-representative value that forces a full scan plan
+4. Dynamic partition key (variable not yet evaluated at parse time)
+
+**Fix**  
+```sql
+-- WRONG (implicit conversion prevents elimination):
+WHERE PartitionDate >= @StartDate  -- if @StartDate is DATETIME but column is DATE
+
+-- RIGHT:
+WHERE PartitionDate >= CAST(@StartDate AS DATE)
+
+-- Check actual partition access:
+SELECT partition_number, row_count
+FROM sys.dm_db_partition_stats
+WHERE object_id = OBJECT_ID('dbo.Orders')
+ORDER BY partition_number;
+```
+
+**Related checks:** N8 (implicit conversion in predicate — common cause), N42 (implicit conversion degrades cardinality), N3 (function on scan predicate)
+
+---
+
+### N66 — Actual Rebinds Exceed Estimated Rebinds
+
+**What it means**  
+In a Nested Loops join, `ActualRebinds` counts how many times the inner side was re-executed from scratch. `EstimateRebinds` is the optimizer's prediction based on the outer side cardinality estimate. When actual far exceeds estimated, the outer side had far more rows than planned — every extra outer row drives an additional inner execution.
+
+**How to spot it**  
+Nested Loops RelOp where `ActualRebinds` >> `EstimateRebinds` in RunTimeCountersPerThread (requires actual plan).
+
+```xml
+<RelOp PhysicalOp="Nested Loops" EstimateRebinds="1.2" ...>
+  <RunTimeCountersPerThread Thread="1" ActualRebinds="84200" .../>
+```
+Estimated 1.2 rebinds, actual 84,200 — a 70,000× underestimate. The outer side returned 84,200 rows when the optimizer thought it would return 1.
+
+**Difference from N16 (Busy Loop)**  
+N16 fires based on *estimated* values — useful for estimated plans. N66 fires based on *actual* evidence — confirms the problem occurred at runtime and quantifies the true extent.
+
+**Fix**  
+```sql
+-- Fix the cardinality error on the outer side first (update statistics):
+UPDATE STATISTICS dbo.Orders WITH FULLSCAN;
+
+-- If parameter sniffing is the root cause:
+OPTION (OPTIMIZE FOR (@CustomerId = 12345))
+
+-- Force a hash join if cardinality cannot be fixed:
+FROM dbo.Orders o
+INNER HASH JOIN dbo.OrderLines ol ON ol.OrderId = o.OrderId
+-- Hash join cost is O(N+M) regardless of outer cardinality
+```
+
+**Related checks:** N16 (busy loop pattern — estimate-based version), N21 (bad row estimate — the root cause), N15 (high nested loop count — count-based)
+
+---
+
 ## Quick Reference Tables
 
 ### Severity Levels
@@ -3148,7 +3514,7 @@ If the JSON query is infrequent or the result set is small after other filters, 
 | No statistics on column | N11, N35, N59 |
 | Query too complex (too many joins) | S5, S6, S7, S15, N44 |
 | Heap table (no clustered index) | N5 (RID lookup), N39 |
-| Non-sargable predicate | N3, N4, N9, N43, N60 |
+| Non-sargable predicate | N3, N4, N9, N43, N60, N65 |
 | Cartesian join (missing ON clause) | N10 |
 | TVF/MSTVF black box | N13, N14, N57 |
 | CTE used multiple times | N30 |
@@ -3159,13 +3525,19 @@ If the JSON query is infrequent or the result set is small after other filters, 
 | Large value list / IN clause | N55, S23 |
 | JSON data in WHERE clause | N60, N3, N4 |
 | In-Memory OLTP mixed workload | N48 |
-| Forced plan becoming stale | S24, N36 |
+| Forced plan becoming stale | S24, S31, N36 |
+| Plan cache bloat | S28, S23, S33 |
+| Server memory pressure | S29, S30, N61 |
+| SELECT * / wide projection | N64, N61, S3 |
+| Compilation contention | S32, S7, S15 |
+| Partition elimination failure | N65, N8, N42, N3 |
+| Parallel inefficiency | N63, N27, S8, N62 |
 
 ### Checks that Require an Actual Plan
 
 These checks fire only when actual execution statistics are present (Ctrl+M in SSMS before running):
 
-S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56
+S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56, N62, N63, N65, N66
 
 All other checks can fire on estimated plans.
 
@@ -3190,3 +3562,8 @@ These fire to provide context but rarely require immediate action:
 | N51 — Batch Mode on Rowstore | Positive signal; confirm compat level 150+ is set |
 | N52 — Constant Scan | Normal for VALUES/system functions; investigate only if unexpected |
 | N53 — Assert Operator | Normal for DML; investigate only if high execution count |
+| S30 — High Serial Required Memory | Informational unless also triggering S3/S29 |
+| S32 — Compile Wall-Clock vs CPU Gap | Note the contention but only act if CompileTime > 5,000 ms |
+| S33 — Non-Standard SET Options | Fix the connection string but non-urgent if query is fast |
+| N61 — High Estimated Avg Row Size | Act when paired with S3 (large grant) or N22 (expensive sort) |
+| N64 — Wide Projection | Always worth fixing; SELECT * is rarely intentional in production |

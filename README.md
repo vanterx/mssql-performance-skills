@@ -16,7 +16,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [sqlstats-review](#sqlstats-review) | Parse and analyze `SET STATISTICS IO, TIME ON` output — 22 checks (I1–I15 IO, W1–W7 time) |
 | [sqltrace-review](#sqltrace-review) | Analyze Profiler trace / Extended Events output — 20 checks (X1–X12 event-level, X13–X20 workload aggregate) |
 | [sqlwait-review](#sqlwait-review) | Analyze `sys.dm_os_wait_stats` — 40 checks (V1–V40) across I/O, lock, parallelism, memory, CPU, latch contention, log space, poison/throttle waits, backup I/O, insert hotspots, trend analysis, modern feature waits (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text, Parallel Redo), forced memory grants, grant timeouts, stolen memory, and file I/O latency |
-| [sqlplan-review](#sqlplan-review) | Analyze a single `.sqlplan` file — 87 checks, prioritized report |
+| [sqlplan-review](#sqlplan-review) | Analyze a single `.sqlplan` file — 99 checks, prioritized report |
 | [sqlplan-compare](#sqlplan-compare) | Diff two plans to find what caused a regression |
 | [sqlplan-index-advisor](#sqlplan-index-advisor) | Derive indexes from operator patterns + consolidate optimizer suggestions into a ranked `CREATE INDEX` script |
 | [sqlplan-deadlock](#sqlplan-deadlock) | Analyze a deadlock XML graph — identify pattern and fix |
@@ -156,7 +156,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║  Execution plan (.sqlplan)  — capture with Ctrl+M in SSMS    ║
 ║         │                                                    ║
 ║         ├──▶  /sqlplan-review                                ║
-║         │     87 checks — join strategy, row estimates,      ║
+║         │     99 checks — join strategy, row estimates,      ║
 ║         │     memory grants, parallelism, operator spills    ║
 ║         │                                                    ║
 ║         └──▶  /sqlplan-index-advisor                         ║
@@ -596,7 +596,7 @@ T16 ✓, T29 ✗ (flagged), T33 ✓, T36 ✓, T39 ✓
 
 ## sqlplan-review
 
-Analyze a single execution plan for performance anti-patterns. Applies **87 checks** (S1–S27 statement-level, N1–N60 node-level) and produces a prioritized Critical → Warning → Info report with actionable fixes.
+Analyze a single execution plan for performance anti-patterns. Applies **99 checks** (S1–S33 statement-level, N1–N66 node-level) and produces a prioritized Critical → Warning → Info report with actionable fixes.
 
 ### Triggers
 
@@ -653,7 +653,7 @@ S5, S6, N10, N20 — verified clean
 
 ### What Gets Checked
 
-**Statement-level (S1–S27):**
+**Statement-level (S1–S33):**
 - Memory grant sizing and wait time
 - Parallelism (serial plan, ineffective DOP, thread skew)
 - Compile timeout and high compile CPU
@@ -661,7 +661,7 @@ S5, S6, N10, N20 — verified clean
 - Table variables, plan hints, RECOMPILE cost
 - Query Store forced plans, recursive CTEs, parameter count
 
-**Node-level (N1–N60):**
+**Node-level (N1–N66):**
 - Scans vs seeks, Key Lookups, implicit conversions
 - Sort/Hash spill risk and confirmed spills
 - Bad row estimates (100× Info, 1000× Warning)
@@ -824,7 +824,7 @@ Or paste the `<deadlock>` XML block directly.
 
 ## sqlplan-batch
 
-Batch-analyze a folder of `.sqlplan` files. Applies all 87 checks to each plan and produces a single aggregated `batch-analysis.md` dashboard.
+Batch-analyze a folder of `.sqlplan` files. Applies all 99 checks to each plan and produces a single aggregated `batch-analysis.md` dashboard.
 
 ### Triggers
 
@@ -1085,6 +1085,6 @@ See [`example/horrible-analysis.md`](example/horrible-analysis.md) for a full an
 
 | Range | Count | Category |
 |-------|-------|----------|
-| S1–S27 | 27 | Statement-level |
-| N1–N60 | 60 | Node-level (per operator) |
-| **Total** | **80** | — (includes N34 in missing-index section) |
+| S1–S33 | 33 | Statement-level |
+| N1–N66 | 66 | Node-level (per operator) |
+| **Total** | **99** | — |

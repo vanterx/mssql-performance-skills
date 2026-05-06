@@ -34,7 +34,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 
 | Skill | SKILL.md tokens |
 |-------|----------------|
-| `sqlplan-review` | ~11,300 |
+| `sqlplan-review` | ~13,500 |
 | `tsql-review` | ~8,500 |
 | `sqlstats-review` | ~4,800 |
 | `sqlplan-index-advisor` | ~3,700 |
@@ -174,8 +174,8 @@ For plans above ~100,000 characters, Sonnet 4.6 input cost alone exceeds **$0.30
 | `sqlplan-compare` | ~1,750 tok | 8,000–35,000 | **$0.03–$0.12** |
 | `sqlplan-deadlock` | ~2,400 tok | 7,000–10,000 | **$0.03–$0.05** |
 | `tsql-review` | ~8,500 tok | 13,000–20,000 | **$0.05–$0.09** |
-| `sqlplan-review` (medium plan) | ~11,300 tok | 17,000–70,000 | **$0.07–$0.25** |
-| `sqlplan-review` (large plan) | ~11,300 tok | 70,000–160,000 | **$0.25–$0.55** |
+| `sqlplan-review` (medium plan) | ~13,500 tok | 17,000–70,000 | **$0.07–$0.25** |
+| `sqlplan-review` (large plan) | ~13,500 tok | 70,000–160,000 | **$0.25–$0.55** |
 | `sqlplan-batch` (10 plans) | ~1,500 tok | 85,000–165,000 | **$0.27–$0.53** |
 | `query-store-review` (top 20 queries) | ~3,400 tok | 8,000–12,000 | **$0.04–$0.07** |
 
@@ -187,7 +187,7 @@ Output tokens ($15/M on Sonnet 4.6) are significant — a detailed 3,000-token r
 
 ### 1. Use the cheapest skill that answers the question
 
-`/sqlstats-review` (input ~10K tokens, ~$0.05) often identifies the problem table and whether the issue is I/O or waits. Only then pull out `/sqlplan-review` (~30K tokens, ~$0.12) for operator-level detail.
+`/sqlstats-review` (input ~10K tokens, ~$0.05) often identifies the problem table and whether the issue is I/O or waits. Only then pull out `/sqlplan-review` (~35K tokens, ~$0.12) for operator-level detail.
 
 **Order of cost (cheapest first):**
 ```
@@ -210,7 +210,7 @@ The plan has a Key Lookup on Orders executing 48,000 times at 78% cost,
 and a Hash Match join with estimated 500 rows but actual 4.2M rows.
 ```
 
-Once you confirm the plan is worth analyzing, paste the full XML for the complete 87-check review.
+Once you confirm the plan is worth analyzing, paste the full XML for the complete 99-check review.
 
 ### 4. Filter before running sqlplan-batch
 

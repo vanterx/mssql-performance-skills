@@ -1,6 +1,6 @@
 ---
 name: sqlplan-review
-description: Analyze SQL Server execution plans for performance anti-patterns. Applies all 87 checks (S1–S27 statement-level, N1–N60 node-level). Use when a user pastes a .sqlplan XML, describes operators, or asks why a query is slow.
+description: Analyze SQL Server execution plans for performance anti-patterns. Applies all 99 checks (S1–S33 statement-level, N1–N66 node-level). Use when a user pastes a .sqlplan XML, describes operators, or asks why a query is slow.
 triggers:
   - /sqlplan-review
   - /plan-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same ruleset used by SentryOne Plan Explorer and similar tools. Covers 87 checks across statement-level (S1–S27) and node-level (N1–N60) categories.
+Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same ruleset used by SentryOne Plan Explorer and similar tools. Covers 99 checks across statement-level (S1–S33) and node-level (N1–N66) categories.
 
 ## Input
 
@@ -57,10 +57,22 @@ Work top-down: statement-level checks first, then walk node-level checks for eac
 | Missing indexes excessive | > 5 MissingIndexGroup children in plan |
 | Excessive parameters | > 50 ColumnReference children in ParameterList |
 | Window frame large | RANGE UNBOUNDED PRECEDING with actualRows > 100,000 |
+| Cached plan size (info) | CachedPlanSize ≥ 1,024 KB |
+| Cached plan size (warning) | CachedPlanSize ≥ 5,120 KB |
+| Memory request denied (warning) | RequestedMemory > GrantedMemory × 1.1 |
+| Serial required memory (info) | SerialRequiredMemory ≥ 524,288 KB (512 MB) |
+| Compile wait (info) | CompileTime > CompileCPU × 2 AND CompileTime > 1,000 ms |
+| Wide row (warning) | EstimatedAvgRowSize > 8,192 bytes |
+| Wide row (critical) | EstimatedAvgRowSize > 32,768 bytes |
+| Wide output list (info) | OutputList ColumnReference count > 20 |
+| Elapsed time hotspot | ActualElapsedms sum for operator > 1,000 ms AND > 50% of statement elapsed |
+| Thread starvation | any RunTimeCountersPerThread ActualRows = 0 while total > 0 |
+| Partition elimination failure | ActualPartitionsAccessed = PartitionCount with predicate present |
+| Actual rebind excess | ActualRebinds > EstimateRebinds × 10 AND ActualRebinds > 1,000 |
 
 ---
 
-## Statement-Level Checks
+## Statement-Level Checks (S1–S33)
 
 Run these once per statement before inspecting individual operators.
 
@@ -201,9 +213,39 @@ Run these once per statement before inspecting individual operators.
 - **Severity:** Warning
 - **Fix:** More than 5 distinct missing index suggestions indicate the query touches many under-indexed tables. Prioritize by the `Impact` attribute descending (not document order). Use the `sqlplan-index-advisor` skill to consolidate and de-duplicate suggestions before creating indexes.
 
+### S28 — Large Cached Plan (Plan Cache Bloat)
+- **Trigger:** `CachedPlanSize` attribute on `<QueryPlan>` ≥ 1,024 KB
+- **Severity:** Info if < 5,120 KB; Warning if ≥ 5,120 KB
+- **Fix:** Large cached plans consume plan cache memory and increase the cost of plan cache lookup on every execution. Common causes: queries with many joins, many parameters (see S23), or dynamic SQL with large literals baked in. Parameterize the query or split into smaller units. Also run: `SELECT TOP 10 usecounts, size_in_bytes, text FROM sys.dm_exec_cached_plans CROSS APPLY sys.dm_exec_sql_text(plan_handle) ORDER BY size_in_bytes DESC;`
+
+### S29 — Memory Request Denied by Server
+- **Trigger:** `RequestedMemory` > `GrantedMemory` × 1.1 in `MemoryGrantInfo` (the optimizer requested more memory than the server could grant)
+- **Severity:** Warning
+- **Fix:** The server was under memory pressure at execution time and reduced the grant below what was requested. This is distinct from S4 (grant wait, which measures delay) — this shows the request was cut. Sort and hash operators will spill to TempDb even when statistics are accurate. Increase `max server memory`, add Resource Governor, or reduce concurrent memory demand from other queries.
+
+### S30 — High Serial Required Memory
+- **Trigger:** `SerialRequiredMemory` ≥ 524,288 KB (512 MB) in `MemoryGrantInfo`
+- **Severity:** Info
+- **Fix:** Even in serial mode (DOP 1), this query needs 512 MB+ just for its sort and hash operators. This is an absolute size problem independent of parallelism. Filter data earlier in the plan, add indexes to avoid sorts, or reduce the number of sort/hash operations in the query.
+
+### S31 — Non-QDS Forced Plan (Plan Guide)
+- **Trigger:** `PlanGuideName` attribute present on `StmtSimple` AND does NOT start with `QDS_`
+- **Severity:** Warning
+- **Fix:** A traditional `sp_create_plan_guide` is forcing this plan — distinct from S24 which catches Query Store forced plans. Traditional plan guides are fragile: they break silently when the query text changes, when statistics update dramatically, or when the hinted plan's index is dropped. Validate the guide is still beneficial: `SELECT * FROM sys.plan_guides WHERE name = '<PlanGuideName>';` then capture the current plan without the guide and compare with `/sqlplan-compare`.
+
+### S32 — Compile Wall-Clock vs CPU Gap (Compilation Contention)
+- **Trigger:** `CompileTime` > `CompileCPU` × 2 AND `CompileTime` > 1,000 ms (wall-clock compile time significantly exceeds CPU time)
+- **Severity:** Info
+- **Fix:** SQL Server spent compile time waiting rather than working — typically a latch contention on plan cache bucket locks, or memory pressure forcing the optimizer to wait. `CompileTime` is wall-clock; `CompileCPU` is CPU-only. A large gap means idle CPU during compilation. Check `sys.dm_os_wait_stats` for `RESOURCE_SEMAPHORE_QUERY_COMPILE` waits. Use `OPTION (RECOMPILE)` sparingly or plan guides to reduce compile frequency.
+
+### S33 — Non-Standard Compilation SET Options
+- **Trigger:** `StatementSetOptions` element on `StmtSimple` has `QuotedIdentifier="false"` OR `AnsiNulls="false"` OR `AnsiWarnings="false"`
+- **Severity:** Info
+- **Fix:** The plan was compiled with non-standard SET options — usually because the application sets `SET ANSI_NULLS OFF` or `SET QUOTED_IDENTIFIER OFF`. This creates a separate plan cache entry from SSMS-compiled plans (SSMS always uses standard options), causing plan cache bloat. It also affects query semantics: `SET ANSI_NULLS OFF` changes how NULL comparisons work, and `SET QUOTED_IDENTIFIER OFF` allows double-quoted strings. Align application connection options with SQL Server defaults.
+
 ---
 
-## Node-Level Checks
+## Node-Level Checks (N1–N66)
 
 Apply these to every operator node in the plan tree.
 
@@ -507,6 +549,36 @@ Apply these to every operator node in the plan tree.
 - **Trigger:** Predicate text contains `JSON_VALUE(` or `JSON_QUERY(` in a filter position (WHERE clause or join predicate)
 - **Severity:** Warning
 - **Fix:** JSON path functions evaluated in WHERE clauses are computed per row and cannot use index seeks. Options: (1) Add a computed column `AS JSON_VALUE(col, '$.path') PERSISTED` and create an index on it — seeks will use the computed column index. (2) On SQL 2022+, use the native JSON index: `CREATE INDEX ... ON table (col) INCLUDE (json_col) WHERE JSON_VALUE(json_col, '$.path') IS NOT NULL`. (3) Filter JSON parsing to the application layer when the result set is small enough.
+
+### N61 — High Estimated Average Row Size
+- **Trigger:** Any operator node has `EstimatedAvgRowSize` > 8,192 bytes; Critical if > 32,768 bytes
+- **Severity:** Info if > 8,192 bytes; Warning if > 32,768 bytes
+- **Fix:** `EstimatedAvgRowSize` is the width (in bytes) of a single row passing through this operator. When rows exceed one 8-KB page, sort and hash operators must allocate at least one buffer page per row — multiplying memory grant requirements dramatically. This is the hidden root cause of unexpectedly large memory grants. Fix: stop projecting columns that are not needed downstream. Replace `SELECT *` with explicit column lists. A 4,000-byte row in a sort of 1 million rows requires ~4 GB of sort memory — check `RequestedMemory` (S29) alongside this check.
+
+### N62 — Actual Elapsed Time Hotspot
+- **Trigger:** An operator's total `ActualElapsedms` across all threads (sum of `RunTimeCountersPerThread/@ActualElapsedms`) > 1,000 ms AND represents > 50% of total statement elapsed time (requires actual execution plan)
+- **Severity:** Warning
+- **Fix:** This operator is the dominant wall-clock bottleneck — not just the highest estimated cost (N24), but the actual time sink at runtime. Estimated cost (N24) reflects the optimizer's model; actual elapsed time reflects I/O waits, lock waits, and memory pressure that cost models do not account for. Focus optimization effort on this operator first regardless of its estimated cost percentage.
+
+### N63 — Thread Starvation (Zero-Row Thread)
+- **Trigger:** A `Parallelism` operator has one or more `RunTimeCountersPerThread` entries with `ActualRows = 0` while the total across threads is > 0 (requires actual execution plan)
+- **Severity:** Warning
+- **Fix:** One or more parallel threads processed zero rows while others did all the work. This is a stronger signal than N27 (skew ratio) — a zero-row thread consumed full thread setup and teardown overhead with zero productive contribution. Causes: hash distribution on a column where all values hash to the same bucket (extreme skew), or partition-aware parallelism where all data falls on one partition. Fix the partitioning column or use `OPTION (MAXDOP 1)` if parallelism consistently starves threads.
+
+### N64 — Wide Projection (SELECT * Anti-Pattern)
+- **Trigger:** A Scan or Seek operator's `<OutputList>` contains > 20 `<ColumnReference>` children
+- **Severity:** Info
+- **Fix:** The scan is projecting more than 20 columns upward through the plan tree. Every downstream Sort, Hash Match, or Nested Loops operator carries this wide row, inflating memory grants (see N61), row buffer sizes, and network I/O. Identify the SELECT list in the query text and replace `SELECT *` with only the columns actually needed. This is especially impactful when the scan feeds a sort or hash join — each wide row multiplies the operator's memory requirement.
+
+### N65 — Partition Elimination Not Occurring
+- **Trigger:** A scan operator has `Partitioned="1"` (or `PartitionedScan` element present) AND `ActualPartitionsAccessed` equals the full partition count of the table AND a predicate on the partition column exists (requires actual execution plan)
+- **Severity:** Warning
+- **Fix:** The query has a predicate on the partition key but SQL Server scanned all partitions anyway — partition elimination failed. Common causes: (1) implicit type conversion on the partition column (matches N8/N42); (2) predicate uses a function wrapping the partition column (matches N3); (3) the partition scheme uses a computed expression that the optimizer cannot simplify at compile time. Fix the predicate to be sargable on the partition column type. After fixing, actual partitions accessed should drop to 1 or a small subset.
+
+### N66 — Actual Rebinds Exceed Estimated Rebinds
+- **Trigger:** `PhysicalOp` = Nested Loops AND `ActualRebinds` > `EstimateRebinds` × 10 AND `ActualRebinds` > 1,000 (requires actual execution plan)
+- **Severity:** Warning
+- **Fix:** The Nested Loops operator executed far more inner-side iterations than the optimizer estimated at compile time. `EstimateRebinds` comes from the outer side cardinality estimate; when the actual outer side is much larger, every under-estimated join drives N66. This is a complement to N16 (Busy Loop based on estimates alone) that fires on actual execution evidence. Fix: correct the cardinality error on the outer side of the join (statistics update, parameter sniffing fix), or force a Hash Match join that is less sensitive to outer cardinality: `INNER HASH JOIN`.
 
 ### N34 — Wide Index Suggestion
 - **Trigger:** A `MissingIndexGroup` suggestion contains > 4 key columns OR > 5 INCLUDE columns
