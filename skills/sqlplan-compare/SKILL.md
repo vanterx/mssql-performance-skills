@@ -63,57 +63,47 @@ Compare these for each plan:
 ---
 
 ## Comparison Checks
-
 ### C1 — Seek Degraded to Scan
 - **Trigger:** A table that had a Seek operator in the baseline now has a Scan in the new plan
 - **Severity:** Critical
 - **Report:** Table name, old operator (Seek), new operator (Scan), estimated cost ratio
 - **Likely causes:** Index dropped, statistics changed causing optimizer to choose full scan, implicit conversion added
-
 ### C2 — Hash Join Degraded to Nested Loops on Large Table
 - **Trigger:** A join changed from Hash Match to Nested Loops AND `actualRows` on the probe side > 10,000
 - **Severity:** Critical
 - **Report:** Join operator location, old type, new type, row counts
 - **Likely causes:** Bad cardinality estimate making the inner side appear small; parameter sniffing
-
 ### C3 — Memory Grant Inflated > 2×
 - **Trigger:** New plan `GrantedMemory` > baseline `GrantedMemory` × 2
 - **Severity:** Warning
 - **Report:** Baseline grant, new grant, ratio
 - **Likely causes:** Row estimate inflation (stale statistics, parameter sniffing)
-
 ### C4 — Memory Grant Deflated > 2× (Spill Risk)
 - **Trigger:** New plan `GrantedMemory` < baseline `GrantedMemory` / 2 AND `MaxUsedMemory` > `GrantedMemory` in new plan
 - **Severity:** Warning
 - **Report:** Baseline grant, new grant, used memory in new plan
 - **Likely causes:** Row estimate collapse; optimizer now thinks fewer rows are involved
-
 ### C5 — Parallelism Lost
 - **Trigger:** Baseline `DegreeOfParallelism` > 1 AND new plan `DegreeOfParallelism` = 1
 - **Severity:** Warning
 - **Report:** Old DOP, new DOP, `NonParallelPlanReason` if present
 - **Likely causes:** MAXDOP hint added, scalar UDF introduced, table variable used in new code path
-
 ### C6 — New Spill to TempDb
 - **Trigger:** `SpillToTempDb` present in new plan but not in baseline
 - **Severity:** Critical
 - **Report:** Operator that spills, spill level, estimated vs actual rows at that operator
-
 ### C7 — New Key Lookup Introduced
 - **Trigger:** Key Lookup or RID Lookup operator present in new plan but not in baseline
 - **Severity:** Warning
 - **Report:** Table name, estimated rows, `costPercent`
-
 ### C8 — New Missing Index (High Impact)
 - **Trigger:** A `MissingIndexGroup` in the new plan is not present in the baseline AND `Impact` > 50
 - **Severity:** Warning
 - **Report:** Missing index details, impact score, columns
-
 ### C9 — Sort Operator Added
 - **Trigger:** Sort operator present in new plan but not in baseline AND `costPercent` ≥ 10%
 - **Severity:** Warning
 - **Report:** Sort columns, cost percent, estimated rows
-
 ### C10 — Cardinality Model Downgraded
 - **Trigger:** `CardinalityEstimationModelVersion` in new plan < baseline
 - **Severity:** Warning
@@ -140,13 +130,13 @@ Compare these for each plan:
 
 ### Regression Findings
 
-**[R1 — C2] Finding Name**
+**[R1 — C2, NodeId 8→12] Finding Name**
 - **Was:** [baseline operator/value]
 - **Now:** [new plan operator/value]
 - **Why:** [root cause — what changed and why it caused this shift]
 - **Fix:** [concrete action with code if applicable]
 
-The bracket suffix (`— C2`, `— C5`) is the check ID from the C1–C10 checks above that fired.
+The bracket suffix (`— C2`, `— C5`) is the check ID from the C1–C10 checks above that fired. Include the NodeId from both plans for each changed operator (e.g., `NodeId 8→12`). If NodeIds are absent, use operator name + table name instead.
 Findings reference each other where one is the root cause of another (e.g., "consequence of R1").
 Do not use Critical/Warning severity tiers — regression findings are ranked by fix priority, not severity.
 

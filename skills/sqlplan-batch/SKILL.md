@@ -1,6 +1,6 @@
 ---
 name: sqlplan-batch
-description: Batch-analyze a folder of SQL Server .sqlplan files and produce a summary dashboard of the top issues, most common check violations, and deduplicated missing indexes across all plans. Use after a workload capture to identify systemic problems.
+description: Batch-analyze a folder of SQL Server .sqlplan files and produce a summary dashboard of the top issues, most common check violations, and deduplicated missing indexes across all plans. Use this skill whenever a user has a folder or collection of .sqlplan files; asks for a workload-level summary across multiple plans; wants to find systemic patterns across a captured workload; or doesn't know which plan to look at first. Trigger after any workload capture that produced multiple .sqlplan files — offer this before individual sqlplan-review calls.
 triggers:
   - /sqlplan-batch
   - /plan-batch
@@ -203,10 +203,12 @@ For each plan with at least one Critical or Warning finding, add a sub-section:
 
 ### `plan-name.sqlplan`
 
-| ID | Severity | Finding |
-|----|----------|---------|
-| S3 | Critical | Memory grant 1,024 MB — over-budget |
-| N21 | Warning | Row estimate 1 vs actual 9,999,999 |
+| ID | Severity | NodeId | Finding |
+|----|----------|--------|---------|
+| S3 | Critical | — | Memory grant 1,024 MB — over-budget |
+| N21 | Warning | 7 | Row estimate 1 vs actual 9,999,999 |
+
+NodeId column: populate for operator-level findings (N-prefix check IDs) using the `NodeId` attribute from the `<RelOp>` element. Use `—` for statement-level findings (S-prefix) that have no associated operator.
 
 [One sentence at the bottom pointing to the full analysis: "Full analysis: `/sqlplan-review plan-name.sqlplan`"]
 

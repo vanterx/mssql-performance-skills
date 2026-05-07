@@ -105,77 +105,62 @@ Completion time: 2025-05-27T10:32:37.8122685-04:00
 ## IO Checks (I1–I15)
 
 Evaluate per-statement and per-table IO metrics.
-
 ### I1 — High Logical Read Count
 - **Trigger:** Statement total `logical reads` ≥ 1,000,000 (warning) or ≥ 10,000,000 (critical)
 - **Severity:** Warning (≥ 1 M); Critical (≥ 10 M)
 - **Fix:** High logical reads indicate large data volumes scanned. Find the highest-% table and add a covering index to reduce reads. Run `/sqlplan-review` on the execution plan for operator-level detail.
-
 ### I2 — Excessive Scan Count
 - **Trigger:** Any single table has `scan count` ≥ 1,000 (warning) or ≥ 10,000 (critical)
 - **Severity:** Warning (1 000–9 999); Critical (≥ 10 000)
 - **Fix:** High scan count on the inner side of a Nested Loops join. Add an index on the join/seek column of the scanned table so each iteration can seek instead of scan. Confirm with `/sqlplan-review` (N5 Key Lookup, N4 Expensive Scan).
-
 ### I3 — High Physical Read Ratio
 - **Trigger:** Any table where `physical reads / logical reads ≥ 10%`
 - **Severity:** Warning
 - **Fix:** Pages not in the buffer pool. Expected on cold cache (first run after restart or DBCC DROPCLEANBUFFERS). Concerning on a warm system: indicates the working set is larger than available RAM, or this table is infrequently accessed. Solutions: add RAM, reduce logical reads via index, or pre-warm the buffer pool.
-
 ### I4 — Read-Ahead Dominant Pattern (Full Scan Signal)
 - **Trigger:** `read-ahead reads / logical reads ≥ 80%` AND `logical reads ≥ 10,000` for any table
 - **Severity:** Info
 - **Fix:** The storage engine prefetched most pages sequentially — strong indicator of a full index scan. Verify whether an index seek is possible for this table's predicate (`/tsql-review` T4, T6; `/sqlplan-review` N4).
-
 ### I5 — Single Table Dominates Logical Reads
 - **Trigger:** One table accounts for ≥ 80% (warning) or ≥ 95% (critical) of statement total logical reads
 - **Severity:** Warning (≥ 80%); Critical (≥ 95%)
 - **Fix:** Focus all index tuning effort on this table. A covering index eliminating a scan or key lookup here has the highest marginal impact. Run `/sqlplan-review` and `/sqlplan-index-advisor` targeted at this table.
-
 ### I6 — Worktable or Workfile Detected
 - **Trigger:** Table name is exactly `Worktable` or `Workfile`
 - **Severity:** Warning
 - **Fix:** SQL Server created a temporary work structure in `tempdb` for an in-memory sort or hash join that exceeded its memory grant. This corresponds to a spill to tempdb — see checks N41–N43 in `sqlplan-review`. Reduce spills by: updating statistics, adding indexes to avoid large sorts, or increasing the memory grant via `OPTION (MIN_GRANT_PERCENT)`.
-
 ### I7 — Temporary Table in IO Output
 - **Trigger:** Table name starts with `#` (explicit local temp table) or `##` (global temp table)
 - **Severity:** Info
 - **Fix:** An explicit temp table is being used. Verify it has adequate statistics (created after INSERT, not before) and appropriate indexes for subsequent joins. See `/tsql-review` T45, T46 for table variable vs temp table guidance.
-
 ### I8 — LOB Reads Present
 - **Trigger:** `lob logical reads > 0` for any table
 - **Severity:** Info
 - **Fix:** The query is accessing Large Object columns (text, ntext, image, varchar(max), nvarchar(max), xml, or json). LOB pages are stored separately from the main row and require additional I/O. Consider: reading only the needed LOB columns (replace SELECT *), or restructuring JSON/XML access.
-
 ### I9 — LOB Reads Dominant
 - **Trigger:** `lob logical reads / logical reads ≥ 50%` for any table
 - **Severity:** Warning
 - **Fix:** Most I/O for this table is LOB data. The LOB columns are likely large or numerous. Investigate: reading fewer LOB columns, compressing LOB data, or moving infrequently-accessed LOB data to a separate table.
-
 ### I10 — Columnstore Segment Skip Rate Low
 - **Trigger:** `segment skipped / (segment reads + segment skipped) < 50%` when segment data is present
 - **Severity:** Warning
 - **Fix:** Less than half of columnstore segments were skipped — the query predicate is not eliminating segments effectively. Segment elimination relies on min/max metadata per segment. Solutions: reorganize the columnstore index to improve segment clustering (rebuild, or add a clustered rowstore index to order data before loading), or add a more selective predicate.
-
 ### I11 — Columnstore Segment Skip Rate High (Good Pattern)
 - **Trigger:** `segment skipped / (segment reads + segment skipped) ≥ 90%` when segment data is present
 - **Severity:** Info
 - **Fix:** 90%+ of columnstore segments were skipped — excellent predicate selectivity at the storage layer. No action required. Document this as a well-tuned columnstore query.
-
 ### I12 — Same Table Appears Multiple Times in Statement
 - **Trigger:** The same table name appears more than once in a single statement's IO group
 - **Severity:** Info
 - **Fix:** The table was scanned or accessed multiple times in the same query. Common causes: a CTE referenced more than once (T24), multiple joins to the same table, or a subquery materializing separately. Use `/sqlplan-review` to confirm the operator topology.
-
 ### I13 — Zero Rows Affected With High Reads
 - **Trigger:** Statement has `rows affected = 0` AND total `logical reads ≥ 10,000`
 - **Severity:** Info
 - **Fix:** The query performed substantial I/O but modified or returned no rows. Possible causes: filter predicate too restrictive (all data read then filtered out), or a WHERE clause that prevents index seeks (T4, T6). Verify predicate selectivity and index coverage.
-
 ### I14 — Physical Reads Non-Zero on Warm System
 - **Trigger:** Any table has `physical reads > 0`
 - **Severity:** Info
 - **Fix:** Physical reads indicate pages read from disk rather than the buffer pool cache. On a system that has been running normally (warm cache), persistent physical reads may signal buffer pool pressure (insufficient RAM for working set). Benign on first execution or after cache flush.
-
 ### I15 — Azure SQL Page Server Reads Detected
 - **Trigger:** `page server reads > 0` for any table
 - **Severity:** Info
@@ -186,37 +171,30 @@ Evaluate per-statement and per-table IO metrics.
 ## Time Checks (W1–W7)
 
 Evaluate CPU and elapsed time metrics per statement.
-
 ### W1 — I/O or Lock Wait Dominant (CPU << Elapsed)
 - **Trigger:** `execution_cpu < 10% of execution_elapsed` AND elapsed ≥ 1,000 ms
 - **Severity:** Warning
 - **Fix:** The query spent most of its elapsed time waiting, not computing. Common causes: physical I/O (check I3, I14), lock/latch waits (blocking from concurrent queries), or network transfer time. If physical reads are low, investigate lock waits using `sys.dm_exec_requests` or Extended Events.
-
 ### W2 — Parallel Execution Detected (CPU >> Elapsed)
 - **Trigger:** `execution_cpu > 150% of execution_elapsed`
 - **Severity:** Info
 - **Fix:** CPU time exceeds elapsed time — the query ran on multiple threads (parallel plan). CPU time is the sum across all threads. This is expected and often desirable. Use `/sqlplan-review` to confirm DOP and check for thread imbalance (N30 Parallel Thread Skew).
-
 ### W3 — High Compile Time Relative to Execution
 - **Trigger:** `compile_cpu > 20% of execution_cpu` AND `compile_elapsed ≥ 200 ms`
 - **Severity:** Warning
 - **Fix:** Query compilation consumed a significant fraction of the total time. Causes: complex query structure (deep CTEs T25, many joins), missing statistics, or ad-hoc queries that aren't cached. Fix: simplify the query, ensure statistics are up to date, or use a stored procedure to enable plan reuse.
-
 ### W4 — Long Elapsed Time
 - **Trigger:** `execution_elapsed ≥ 30,000 ms` (warning) or ≥ 300,000 ms (critical)
 - **Severity:** Warning (≥ 30 s); Critical (≥ 5 min)
 - **Fix:** Query ran for > 30 seconds. Prioritize for tuning. Identify the highest-read table (I1, I5) and run `/sqlplan-review` on the captured execution plan to find the dominant operator.
-
 ### W5 — High CPU Time
 - **Trigger:** `execution_cpu ≥ 60,000 ms`
 - **Severity:** Warning
 - **Fix:** Query consumed > 60 seconds of CPU time. High CPU usually correlates with large scans, sorts, hash joins, or implicit conversions. Use `/sqlplan-review` to identify the high-CPU operators (N4 Scan, N18 Hash Match, N20 Sort).
-
 ### W6 — Multi-Batch: Highly Variable Elapsed Times
 - **Trigger:** When multiple statements are present, `max(execution_elapsed) > 10× min(execution_elapsed)` for statements with elapsed ≥ 100 ms
 - **Severity:** Info
 - **Fix:** One or more statements take dramatically longer than others. Focus tuning effort on the slowest batch. Report which statement number is the outlier.
-
 ### W7 — High Rows Affected With Low Elapsed
 - **Trigger:** `rows_affected > 1,000,000` AND `execution_elapsed < 10,000 ms`
 - **Severity:** Info
@@ -280,7 +258,7 @@ Structure your report as follows:
 ### Performance Findings
 
 #### Critical Issues
-**[C1] Issue Name** (I<N> or W<N>)
+**[C1 — Stmt 2, Table 'Orders'] Issue Name** (I<N> or W<N>)
 - Observed: [specific table name, metric value, statement number]
 - Impact: [why this matters]
 - Fix: [concrete action]
@@ -308,6 +286,7 @@ I1 ✓ (brief reason), I3 ✓ (brief reason) [list every check verified clean wi
 
 ## Notes
 
+- Finding headers include the statement number and table name as the source reference (e.g., `[C1 — Stmt 2, Table 'Orders']`). For single-statement inputs, use the table name alone (e.g., `[C1 — Table 'Orders']`).
 - Do not invent findings not triggered by the rules above.
 - `Worktable` and `Workfile` are system-generated names; do not treat them as user tables in grand totals sorting, but do include their reads in totals.
 - A compile time row that appears between two batches is a *batch separator* — assign it to the preceding batch's compile phase.

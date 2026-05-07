@@ -106,8 +106,11 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 
 Rules discovered during development that must be respected in every session.
 
+### Skill authoring standard
+All new and modified skills must conform to the Anthropic skill-creator best practices. Reference: [`.claude/docs/skill-creator-best-practices.md`](.claude/docs/skill-creator-best-practices.md). Automated checks run in `scripts/verify-docs.sh` (Checks 21–25): line count ≤ 500, description ≥ 30 words with trigger phrases, `triggers:` field present, no bare ALWAYS/NEVER/MUST in body.
+
 ### Before committing
-Always run `bash scripts/verify-docs.sh` — it checks 9 documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
+Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
 
 ### Dollar signs in SKILL.md code block templates
 Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader performs shell-style variable expansion on the entire file content, so `$0` expands to the input file path argument and `$3`/`$15` expand to empty strings. Use `USD` prefix instead: `USD 0.012`, `[tokens] × USD 3/M`.

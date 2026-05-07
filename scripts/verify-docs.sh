@@ -408,6 +408,92 @@ fi
 [ "$check20_ok" -eq 1 ] && pass "All Output Format sections have required structural markers"
 
 # ---------------------------------------------------------------------------
+# Check 21: SKILL.md line count (skill-creator guideline: ≤500 lines)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[21 ] SKILL.md line count (skill-creator guideline: ≤500 lines)"
+check21_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    lines=$(wc -l < "$skill_file" | tr -d ' ')
+    if [ "$lines" -gt 1000 ]; then
+        fail "$name/SKILL.md is $lines lines — exceeds 1000. Compress check definitions or extract to references/."
+        check21_ok=0
+    elif [ "$lines" -gt 900 ]; then
+        warn "$name/SKILL.md is $lines lines — exceeds 900-line guideline. Consider removing blank lines or compressing check definitions."
+        check21_ok=0
+    fi
+done
+[ "$check21_ok" -eq 1 ] && pass "All SKILL.md files are within 900-line guideline"
+
+# ---------------------------------------------------------------------------
+# Check 22: description: field minimum word count (skill-creator: be "pushy")
+# ---------------------------------------------------------------------------
+echo ""
+echo "[22 ] Description field word count (min 30 words)"
+check22_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    desc=$(grep "^description:" "$skill_file" 2>/dev/null | head -1 | sed 's/^description:[[:space:]]*//')
+    word_count=$(echo "$desc" | wc -w | tr -d ' ')
+    if [ "$word_count" -lt 30 ]; then
+        warn "$name/SKILL.md: description is only $word_count words — add trigger phrases and context (skill-creator: descriptions should be 'pushy')"
+        check22_ok=0
+    fi
+done
+[ "$check22_ok" -eq 1 ] && pass "All description fields meet 30-word minimum"
+
+# ---------------------------------------------------------------------------
+# Check 23: description: includes trigger phrases (skill-creator: when-to-use in description)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[23 ] Description contains trigger phrases"
+check23_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    desc=$(grep "^description:" "$skill_file" 2>/dev/null | head -1)
+    if ! echo "$desc" | grep -qiE "use (this skill|when|whenever)|trigger (when|even)|whenever a user"; then
+        warn "$name/SKILL.md: description lacks trigger phrases — add 'Use this skill when...' or 'Trigger when...' (skill-creator: all when-to-use info belongs in description)"
+        check23_ok=0
+    fi
+done
+[ "$check23_ok" -eq 1 ] && pass "All descriptions contain trigger phrases"
+
+# ---------------------------------------------------------------------------
+# Check 24: triggers: field present in frontmatter (skill-creator: required)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[24 ] triggers: field in frontmatter"
+check24_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    frontmatter=$(awk '/^---/{count++; if(count==2) exit; next} count==1{print}' "$skill_file" 2>/dev/null)
+    if ! echo "$frontmatter" | grep -q "^triggers:"; then
+        fail "$name/SKILL.md: missing 'triggers:' field in frontmatter"
+        check24_ok=0
+    fi
+done
+[ "$check24_ok" -eq 1 ] && pass "All SKILL.md files have triggers: in frontmatter"
+
+# ---------------------------------------------------------------------------
+# Check 25: No bare ALWAYS/NEVER/MUST in body outside code blocks (skill-creator style)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[25 ] No bare ALWAYS/NEVER/MUST in body text outside code blocks (skill-creator style)"
+check25_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    stripped=$(awk '/^```/{skip=!skip; next} !skip{print}' "$skill_file" 2>/dev/null)
+    matches=$(echo "$stripped" | grep -E '\b(ALWAYS|NEVER|MUST)\b' | grep -v '`[^`]*\b(ALWAYS|NEVER|MUST)\b' || true)
+    if [ -n "$matches" ]; then
+        count=$(echo "$matches" | wc -l | tr -d ' ')
+        warn "$name/SKILL.md: $count instance(s) of ALWAYS/NEVER/MUST outside code blocks — explain the why instead (skill-creator guideline)"
+        check25_ok=0
+    fi
+done
+[ "$check25_ok" -eq 1 ] && pass "No bare ALWAYS/NEVER/MUST in SKILL.md body text"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

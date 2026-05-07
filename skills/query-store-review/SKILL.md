@@ -163,32 +163,26 @@ FROM sys.database_query_store_options;
 ## Regressed Queries (Q1–Q6)
 
 Evaluate whether query performance changed between two time periods.
-
 ### Q1 — Duration Regressed vs Baseline
 - **Trigger:** A query's `avg_duration_ms` in the current period is ≥ 2× the baseline period AND baseline `avg_duration_ms` ≥ 100 ms
 - **Severity:** Critical
 - **Fix:** Capture the current execution plan (via Query Store `query_plan` XML or `Ctrl+M` in SSMS) and run `/sqlplan-review`. Compare against the baseline plan using `/sqlplan-compare`. Common causes: stale statistics causing the optimizer to choose a worse plan, parameter sniffing (one plan shape for all parameter values), or a new missing index after schema change.
-
 ### Q2 — CPU Regressed vs Baseline
 - **Trigger:** A query's `avg_cpu_ms` in the current period is ≥ 2× the baseline period AND baseline `avg_cpu_ms` ≥ 50 ms
 - **Severity:** Warning
 - **Fix:** Increased CPU usually means a scan replaced a seek, a hash join replaced a nested loops join, or an implicit conversion was introduced. Run `/sqlplan-review` on the current plan and `/sqlplan-compare` if you have the baseline plan.
-
 ### Q3 — Logical Reads Regressed vs Baseline
 - **Trigger:** A query's `avg_logical_reads` in the current period is ≥ 3× the baseline period AND baseline `avg_logical_reads` ≥ 1,000
 - **Severity:** Warning
 - **Fix:** A large increase in logical reads usually indicates a new Key Lookup or an index seek that degraded to a scan. Run `/sqlplan-index-advisor` on the current plan to generate covering index DDL.
-
 ### Q4 — New Plan for Previously Stable Query
 - **Trigger:** A query has `plan_count ≥ 2` in the current period but had `plan_count = 1` in the baseline period
 - **Severity:** Info
 - **Fix:** A new plan appeared. Check if the new plan is better or worse. If worse, force the good plan via `sp_query_store_force_plan`. Investigate why the new plan was generated: statistics update, schema change, or compatibility level change. Run `/sqlplan-compare` if you have both plans.
-
 ### Q5 — Variant Plan Performs Worse
 - **Trigger:** A query has `plan_count ≥ 2` AND the max `avg_duration_ms` across its plans is ≥ 3× the min `avg_duration_ms` across its plans
 - **Severity:** Warning
 - **Fix:** One plan performs significantly worse than another for the same query. This is a parameter sniffing signal — different parameter values trigger different plan shapes. Evaluate: `OPTION (RECOMPILE)` for high-variance small queries, `OPTION (OPTIMIZE FOR)` for known typical values, or separate procedures for high/low cardinality paths.
-
 ### Q6 — Regressed Query with Forced Plan Failure
 - **Trigger:** A query has `is_forced_plan = 1` AND `force_failure_count > 0` AND appears in the regressed list
 - **Severity:** Critical
@@ -199,32 +193,26 @@ Evaluate whether query performance changed between two time periods.
 ## Plan Stability (Q7–Q12)
 
 Evaluate whether query plans are stable or exhibiting problems.
-
 ### Q7 — Plan Instability (Excessive Plans)
 - **Trigger:** A query has `plan_count ≥ 3` for the same `query_hash`
 - **Severity:** Warning
 - **Fix:** The optimizer is generating multiple different plans for the same query. This is usually a parameter sniffing problem: different parameter values cause the optimizer to estimate different row counts and choose different strategies. If all plans perform well, no action needed. If one plan is consistently bad, force the best-performing plan. If variance is unavoidable, add `OPTION (RECOMPILE)` at the cost of compilation overhead.
-
 ### Q8 — Forced Plan Failure
 - **Trigger:** A query has `is_forced_plan = 1` AND `last_force_failure_reason_desc IS NOT NULL` AND `force_failure_count > 0`
 - **Severity:** Critical
 - **Fix:** The forced plan cannot be used. Common reasons: index referenced in the stored plan was dropped, schema changed (column data type, table structure), or statistics on a computed column were dropped. Unforce the plan, fix the underlying cause (recreate missing index, update statistics), and then re-force if appropriate.
-
 ### Q9 — High Aborted Execution Rate
 - **Trigger:** A query has `aborted_count / total_executions > 0.10` (10% aborted)
 - **Severity:** Warning
 - **Fix:** More than 10% of executions are being aborted (client timeout, attention event, or query cancel). This wastes resources and indicates the query is slower than the client is willing to wait. Run `/sqlplan-review` on the plan. Increase client timeout only after confirming the query cannot be made faster.
-
 ### Q10 — Exception Executions Present
 - **Trigger:** A query has `exception_count > 0`
 - **Severity:** Warning
 - **Fix:** One or more executions terminated with an error. Run `/tsql-review` on the query text for correctness issues (T16–T28). Common causes: division by zero, overflow, conversion errors, or constraint violations on specific parameter values.
-
 ### Q11 — RECOMPILE Hint on Infrequent Query
 - **Trigger:** Query text contains `RECOMPILE` AND `total_executions < 100` in the analysis period AND `avg_duration_ms ≥ 100 ms`
 - **Severity:** Info
 - **Fix:** RECOMPILE is being used but the query runs infrequently and takes ≥ 100 ms — the compile overhead may be noticeable. Consider whether the parameter sniffing issue this RECOMPILE is fixing could be handled with `OPTION (OPTIMIZE FOR)` instead. For very infrequent queries (< 10 executions per day), RECOMPILE overhead is negligible.
-
 ### Q12 — Plan Feedback Active (SQL 2022+)
 - **Trigger:** Query Store data includes `plan_feedback` information (plan was adjusted by automated feedback)
 - **Severity:** Info
@@ -235,32 +223,26 @@ Evaluate whether query plans are stable or exhibiting problems.
 ## Resource Hotspots (Q13–Q18)
 
 Evaluate whether individual queries consume a disproportionate share of server resources.
-
 ### Q13 — High CPU Concentration
 - **Trigger:** A single query accounts for > 30% of total CPU (`avg_cpu_ms × total_executions`) across all captured queries
 - **Severity:** Warning
 - **Fix:** This query is the dominant CPU consumer. Prioritize it for tuning. Run `/sqlplan-review` on its plan. Focus on: expensive scans (N4), hash joins (N18), sorts (N20), and implicit conversions (N14) — all of which are CPU-intensive.
-
 ### Q14 — High Duration Concentration
 - **Trigger:** A single query accounts for > 30% of total duration across all captured queries
 - **Severity:** Warning
 - **Fix:** This query dominates wall-clock time. Determine whether duration is driven by CPU (W5) or waits (W1): run `/sqlstats-review` on `SET STATISTICS TIME ON` output. If CPU-bound, focus on scan/join reduction. If wait-bound, investigate locks, I/O, or network waits.
-
 ### Q15 — High Logical Reads Concentration
 - **Trigger:** A single query accounts for > 30% of total logical reads across all captured queries
 - **Severity:** Warning
 - **Fix:** This query is reading far more data than any other query. High logical reads usually indicate: missing index causing a full scan, a Key Lookup executing many times (N5), or a large hash join spilling to tempdb. Run `/sqlplan-index-advisor` to generate covering index DDL.
-
 ### Q16 — High Execution Frequency (N+1 Signal)
 - **Trigger:** A single query accounts for > 30% of total executions across all captured queries
 - **Severity:** Warning
 - **Fix:** This query runs frequently — possible N+1 pattern where the application executes a query inside a loop instead of fetching data in one batch. Run `/tsql-review` on the query text (T8 correlated subqueries, T47 nested subqueries). Run `/sqltrace-review` if a trace is available for cross-event pattern confirmation (X13 high-frequency). Consider batching: fetch all data first, then join in application code.
-
 ### Q17 — High Memory Grant Concentration
 - **Trigger:** A single query accounts for > 30% of total memory grant (`avg_memory_grant_mb × total_executions`) across all captured queries
 - **Severity:** Warning
 - **Fix:** This query is requesting large memory grants, which can cause RESOURCE_SEMAPHORE waits for other queries. Large memory grants are driven by large sorts and hash joins with inflated row estimates. Update statistics on the involved tables, check for parameter sniffing inflating estimates (S2 in `sqlplan-review`), or add indexes to avoid the sort/hash operation entirely.
-
 ### Q18 — Workload Concentration
 - **Trigger:** The top 3 queries account for > 80% of total CPU, duration, reads, or executions
 - **Severity:** Info
@@ -271,22 +253,18 @@ Evaluate whether individual queries consume a disproportionate share of server r
 ## Query-Level Waits (Q19–Q22)
 
 Evaluate wait statistics per query (requires SQL 2017+ with `WAIT_STATS_CAPTURE_MODE = ON`).
-
 ### Q19 — Query Spending Majority of Time Waiting
 - **Trigger:** For a given query, `total_query_wait_time_ms > 50% of avg_duration_ms × total_executions`
 - **Severity:** Warning
 - **Fix:** More than half of this query's elapsed time is spent waiting, not computing. Check the dominant wait category (from Query B output). Lock waits → investigate blocking source. Buffer IO waits → reduce logical reads via indexing. Network IO waits → investigate client-side row-by-row processing.
-
 ### Q20 — Lock Waits Dominant
 - **Trigger:** The `LCK` wait category accounts for ≥ 20% of a query's total wait time
 - **Severity:** Warning
 - **Fix:** This query is blocked by locks from other sessions. Run `/sqlplan-deadlock` if deadlocks occur. For blocking: check whether `READ_COMMITTED_SNAPSHOT` is enabled (RCSI). If not, enabling it eliminates reader/writer blocking. If already enabled, investigate the blocking session via `sys.dm_exec_requests`.
-
 ### Q21 — Memory Grant Waits Present
 - **Trigger:** The `MEMORY` wait category has `total_query_wait_time_ms > 0`
 - **Severity:** Warning
 - **Fix:** This query waited for a memory grant before executing (RESOURCE_SEMAPHORE). The optimizer overestimated the memory needed or the server is under memory pressure. Run `/sqlplan-review` S2 (excessive memory grant) and S3 (memory grant wait time). Update statistics to improve row estimates, or increase server memory.
-
 ### Q22 — Network IO Waits Dominant
 - **Trigger:** The `NETWORK_IO` wait category is the #1 wait for a query
 - **Severity:** Info
@@ -297,17 +275,14 @@ Evaluate wait statistics per query (requires SQL 2017+ with `WAIT_STATS_CAPTURE_
 ## Operational Health (Q23–Q25)
 
 Evaluate Query Store configuration health.
-
 ### Q23 — Query Store Near Size Limit
 - **Trigger:** `current_storage_size_mb > 80% of max_storage_size_mb` (or > 800 MB if `max_storage_size_mb` is 1 GB)
 - **Severity:** Warning
 - **Fix:** Query Store is approaching its maximum size. When it hits the limit, it will switch to READ_ONLY mode and stop collecting new data. Increase `max_storage_size_mb` (the default 1 GB is often insufficient for busy servers). Alternatively: reduce the data collection window by lowering `stale_query_threshold_days`, change `capture_mode` to AUTO or CUSTOM, or purge old data with `sp_query_store_flush_db` followed by `sp_query_store_remove_query`.
-
 ### Q24 — Query Store Capture Disabled
 - **Trigger:** `actual_state_desc = 'READ_ONLY'` OR `capture_mode_desc = 'NONE'`
 - **Severity:** Critical
 - **Fix:** Query Store is not capturing new query data. If READ_ONLY: the size cap was reached — increase `max_storage_size_mb`, then run `ALTER DATABASE CURRENT SET QUERY_STORE = ON (SIZE_BASED_CLEANUP_MODE = AUTO)` to resume capture. If capture_mode = NONE: run `ALTER DATABASE CURRENT SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO)` to start collecting.
-
 ### Q25 — No Wait Stats Collection
 - **Trigger:** Query Store is enabled (Query A returns data) but Query B returns no rows, AND `wait_stats_capture_mode_desc != 'ON'` in Query C
 - **Severity:** Info

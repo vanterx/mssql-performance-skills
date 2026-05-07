@@ -1,0 +1,261 @@
+# changes.log — mssql-performance-skills
+# Repo created 2026-05-02 16:35:11 UTC | 11 commits | vanterx <tsx113@gmail.com>
+# Generated 2026-05-07 19:30:00 +1200
+# =====================================================================
+# REGENERATION INSTRUCTIONS
+# =====================================================================
+# When you need an updated changes.log, run these commands from the repo
+# root in PowerShell:
+#
+#   # 0. Get repo creation date:
+#   gh repo view --json createdAt
+#
+#   # 1. Get commit log with dates (human-readable summary):
+#   git log --all --format="%H | %ai | %an <%ae> | %s" --reverse
+#
+#   # 2. Get commit log with file-level change counts:
+#   git log --all --format="=== %H | %ai | %an <%ae> | %s ===" --numstat --reverse
+#
+#   # 3. Get pull requests (requires GitHub CLI `gh`):
+#   gh pr list --state all --json number,title,url,author,state,createdAt,mergedAt,mergeCommit --limit 100
+#
+# Then paste the output into a new changes.log following this file's format.
+# Commit order: chronological (oldest first).
+# File change format:  "{+adds} / {-dels}  file/path"
+
+======================================================================
+COMMITS
+======================================================================
+
+[1/11] 2026-05-03 04:40:56 +1200
+       84d6579 — Initial commit: LLM-agnostic SQL Server performance tuning skills — 234 checks across 9 skills
+       Files: 44 added, 0 modified
+       Key files:
+         .claude/docs/architectural_patterns.md (+228)
+         .claude/settings.json (+15)
+         AGENTS.md (+41)
+         CLAUDE.md (+151)
+         LICENSE (+21)
+         LLM_COST_ESTIMATION.md (+266)
+         PERFORMANCE_TUNING_GUIDE.md (+744)
+         README.md (+896)
+         example/horrible-analysis.md (+209)
+         example/horrible.sqlplan (+147)
+         example/sqlplan-batch/batch-analysis.md (+195)
+         example/sqlplan-batch/plans/customer_lookup.sqlplan (+34)
+         example/sqlplan-batch/plans/order_report.sqlplan (+80)
+         example/sqlplan-compare/baseline.sqlplan (+38)
+         example/sqlplan-compare/comparison-analysis.md (+96)
+         example/sqlplan-compare/regression.sqlplan (+40)
+         example/sqlplan-deadlock/deadlock-analysis.md (+137)
+         example/sqlplan-deadlock/deadlock.xml (+65)
+         example/sqlplan-index-advisor/advisor_input-analysis.md (+221)
+         example/sqlplan-index-advisor/advisor_input.sqlplan (+169)
+         example/sqlplan-index-advisor/index-advisor-analysis.md (+113)
+         example/sqlstats-review/stats_output-analysis.md (+115)
+         example/sqlstats-review/stats_output.txt (+20)
+         example/sqltrace-review/trace_output-analysis.md (+108)
+         example/sqltrace-review/trace_output.txt (+25)
+         example/sqlwait-review/wait_stats-analysis.md (+206)
+         example/sqlwait-review/wait_stats.txt (+38)
+         example/sqlwait-review/wait_trend-analysis.md (+205)
+         example/sqlwait-review/wait_trend.txt (+78)
+         example/tsql-review/slow_proc-analysis.md (+105)
+         example/tsql-review/slow_proc.sql (+73)
+         scripts/verify-docs.sh (+347)
+         skills/sqlplan-batch/CHECKS_EXPLAINED.md (+212)
+         skills/sqlplan-batch/SKILL.md (+193)
+         skills/sqlplan-compare/CHECKS_EXPLAINED.md (+242)
+         skills/sqlplan-compare/SKILL.md (+170)
+         skills/sqlplan-deadlock/CHECKS_EXPLAINED.md (+323)
+         skills/sqlplan-deadlock/SKILL.md (+220)
+         skills/sqlplan-index-advisor/CHECKS_EXPLAINED.md (+212)
+         skills/sqlplan-index-advisor/SKILL.md (+380)
+         skills/sqlplan-review/CHECKS_EXPLAINED.md (+3192)
+         skills/sqlplan-review/SKILL.md (+564)
+         skills/sqlstats-review/CHECKS_EXPLAINED.md (+794)
+         skills/sqlstats-review/SKILL.md (+325)
+         skills/sqltrace-review/CHECKS_EXPLAINED.md (+734)
+         skills/sqltrace-review/SKILL.md (+268)
+         skills/sqlwait-review/CHECKS_EXPLAINED.md (+1015)
+         skills/sqlwait-review/SKILL.md (+628)
+         skills/tsql-review/CHECKS_EXPLAINED.md (+1870)
+         skills/tsql-review/SKILL.md (+371)
+
+[2/11] 2026-05-03 21:30:33 +1200
+       70bbe97 — feat(sqlwait-review): add 7 new checks V30-V36 from Microsoft tigertoolbox
+       Files: 4 changed
+         PERFORMANCE_TUNING_GUIDE.md (+10 / -6)
+         README.md (+4 / -4)
+         skills/sqlwait-review/CHECKS_EXPLAINED.md (+230 / -5)
+         skills/sqlwait-review/SKILL.md (+51 / -8)
+
+[3/11] 2026-05-03 23:58:50 +1200
+       04db1ee — feat(query-store-review): add Query Store analysis skill — 25 checks (Q1-Q25) across 5 categories
+       Files: 18 changed
+         AGENTS.md (+2 / -2)
+         CLAUDE.md (+6 / -2)
+         LLM_COST_ESTIMATION.md (+3)
+         PERFORMANCE_TUNING_GUIDE.md (+29 / -3)
+         README.md (+89 / -1)
+         example/query-store-review/qs-top-consumers-analysis.md (+131)
+         example/query-store-review/qs-top-consumers.txt (+20)
+         skills/query-store-review/CHECKS_EXPLAINED.md (+745)
+         skills/query-store-review/SKILL.md (+414)
+         skills/sqlplan-batch/SKILL.md (+1)
+         skills/sqlplan-compare/SKILL.md (+1)
+         skills/sqlplan-deadlock/SKILL.md (+1)
+         skills/sqlplan-index-advisor/SKILL.md (+1)
+         skills/sqlplan-review/SKILL.md (+1)
+         skills/sqlstats-review/SKILL.md (+1)
+         skills/sqltrace-review/SKILL.md (+1)
+         skills/sqlwait-review/SKILL.md (+1)
+         skills/tsql-review/SKILL.md (+1)
+
+[4/11] 2026-05-04 00:17:34 +1200
+       f2042d5 — feat(sqlwait-review): add V37-V40 memory/I-O detail checks and enhance sqltrace-review X19
+       Files: 6 changed
+         LLM_COST_ESTIMATION.md (+2 / -2)
+         PERFORMANCE_TUNING_GUIDE.md (+2 / -1)
+         README.md (+3 / -3)
+         skills/sqltrace-review/SKILL.md (+2 / -2)
+         skills/sqlwait-review/CHECKS_EXPLAINED.md (+133)
+         skills/sqlwait-review/SKILL.md (+91 / -2)
+
+[5/11] 2026-05-04 01:28:14 +1200
+       7aab742 — feat: enhance sqlplan-review with additional checks and refine other skills
+       Files: 12 changed
+         .claude/settings.local.json (+8)
+         scripts/verify-docs.sh (+82)
+         skills/query-store-review/SKILL.md (+11 / -1)
+         skills/sqlplan-batch/SKILL.md (+40 / -1)
+         skills/sqlplan-compare/SKILL.md (+27 / -12)
+         skills/sqlplan-deadlock/SKILL.md (+51 / -27)
+         skills/sqlplan-index-advisor/SKILL.md (+2 / -1)
+         skills/sqlplan-review/SKILL.md (+110 / -16)
+         skills/sqlstats-review/SKILL.md (+1 / -1)
+         skills/sqltrace-review/SKILL.md (+1 / -1)
+         skills/sqlwait-review/SKILL.md (+12 / -1)
+         skills/tsql-review/SKILL.md (+1 / -1)
+
+[6/11] 2026-05-05 22:36:16 +1200
+       941b6d4 — feat: add procstats-review skill, full DMV collection framework, and data capture scripts
+       Files: 36 changed
+         CLAUDE.md (+6 / -2)
+         LLM_COST_ESTIMATION.md (+2)
+         PERFORMANCE_TUNING_GUIDE.md (+4 / -1)
+         README.md (+45)
+         example/procstats-review/proc_stats_output-analysis.md (+161)
+         example/procstats-review/proc_stats_output.txt (+14)
+         scripts/verify-docs.sh (+1 / -1)
+         skills/procstats-review/CHECKS_EXPLAINED.md (+631)
+         skills/procstats-review/SKILL.md (+320)
+         sql/collection/00_bootstrap.sql (+89)
+         sql/collection/01_create_tables.sql (+219)
+         sql/collection/02_usp_collect_procstats.sql (+348)
+         sql/collection/03_usp_calculate_deltas.sql (+227)
+         sql/collection/04_report_queries.sql (+220)
+         sql/collection/05_create_agent_job.sql (+103)
+         sql/collection/06_usp_collect_wait_stats.sql (+278)
+         sql/collection/07_usp_collect_query_stats.sql (+344)
+         sql/collection/08_usp_collect_file_io.sql (+239)
+         sql/collection/09_usp_collect_memory.sql (+224)
+         sql/collection/10_usp_collect_perf_counters.sql (+241)
+         sql/collection/11_usp_collect_all.sql (+91)
+         sql/collection/12_report_all_collections.sql (+188)
+         sql/collection/Deploy-DmvCollection.ps1 (+237)
+         sql/deadlock/01_read_system_health_deadlocks.sql (+90)
+         sql/deadlock/02_create_dedicated_xe_session.sql (+78)
+         sql/deadlock/03_read_dedicated_session.sql (+47)
+         sql/query-store/01_capture_queries.sql (+222)
+         sql/sqlplan/01_capture_from_cache.sql (+94)
+         sql/sqlplan/02_capture_running_query.sql (+89)
+         sql/sqlplan/03_capture_query_store_plan.sql (+94)
+         sql/sqlstats/01_capture_statistics.sql (+63)
+         sql/sqltrace/01_create_xe_session.sql (+109)
+         sql/sqltrace/02_read_ring_buffer.sql (+50)
+         sql/sqltrace/03_read_file_target.sql (+45)
+         sql/sqltrace/04_read_legacy_trc.sql (+76)
+         sql/wait-stats/01_capture_wait_stats.sql (+233)
+         sql/wait-stats/02_capture_active_requests.sql (+105)
+
+[7/11] 2026-05-06 00:17:39 +1200
+       9660f52 — fix: housekeeping — gitignore, dedup 01_create_tables, update docs, add trend example
+       Files: 8 changed
+         .claude/settings.local.json (+0 / -8)
+         .gitignore (+3)
+         AGENTS.md (+8 / -5)
+         README.md (+61)
+         example/procstats-review/proc_stats_trend-analysis.md (+101)
+         example/procstats-review/proc_stats_trend.txt (+12)
+         skills/procstats-review/SKILL.md (+3)
+         sql/collection/01_create_tables.sql (+2 / -61)
+
+[8/11] 2026-05-06 22:30:10 +1200
+       a1eefe7 — fix: use schema-qualified object names in skill output and example analyses
+       Files: 5 changed
+         example/horrible-analysis.md (+8 / -8)
+         example/procstats-review/proc_stats_output-analysis.md (+34 / -34)
+         example/procstats-review/proc_stats_trend-analysis.md (+13 / -13)
+         skills/procstats-review/SKILL.md (+6 / -2)
+         skills/sqlplan-review/SKILL.md (+6)
+
+[9/11] 2026-05-06 23:17:10 +1200
+       5a689ae — feat(sqlplan-review): add 12 new checks S28-S33 and N61-N66 (87→99 checks)
+       Files: 5 changed
+         LLM_COST_ESTIMATION.md (+5 / -5)
+         PERFORMANCE_TUNING_GUIDE.md (+5 / -5)
+         README.md (+9 / -9)
+         skills/sqlplan-review/CHECKS_EXPLAINED.md (+380 / -3)
+         skills/sqlplan-review/SKILL.md (+76 / -4)
+
+[10/11] 2026-05-06 23:48:57 +1200
+       9121f8d — refactor: move sqlplan-review examples to example/sqlplan-review/ subfolder
+       Files: 10 changed
+         .claude/docs/architectural_patterns.md (+1 / -1)
+         AGENTS.md (+0 / -2)
+         CLAUDE.md (+2 / -5)
+         README.md (+1 / -1)
+         example/sqlplan-batch/batch-analysis.md (+5 / -5)
+         example/sqlplan-index-advisor/index-advisor-analysis.md (+2 / -2)
+         example/sqlplan-review/horrible-analysis.md (+1 / -1, moved from example/)
+         example/sqlplan-review/horrible.sqlplan (+0 / -0, moved from example/)
+         scripts/verify-docs.sh (+2 / -3)
+         skills/sqlplan-review/SKILL.md (+1 / -1)
+
+[11/11] 2026-05-07 19:07:57 +1200
+       f50a589 — fix(sqlplan-review): add multi-statement plan support, clarify truncation is display-only, fix stale 87→99 count refs
+       Files: 8 changed
+         CLAUDE.md (+2 / -2)
+         skills/query-store-review/SKILL.md (+1 / -1)
+         skills/sqlplan-batch/SKILL.md (+2 / -2)
+         skills/sqlplan-compare/SKILL.md (+1 / -1)
+         skills/sqlplan-deadlock/SKILL.md (+1 / -1)
+         skills/sqlplan-index-advisor/SKILL.md (+1 / -1)
+         skills/sqlplan-review/SKILL.md (+40 / -3)
+         skills/sqltrace-review/SKILL.md (+1 / -1)
+
+[12/12] 2026-05-07 (session)
+       feat: skill-creator compliance — citations, verify checks 21-25, description trigger phrases, docs update
+       Files: 17 changed
+         .claude/docs/architectural_patterns.md — updated check prefix table (added V/Q/R rows, corrected S/N counts), pipeline diagram (added query-store-review + procstats-review), threshold description, skills table; added Section 0 (Skill Authoring Standard)
+         .claude/docs/skill-creator-best-practices.md (+486) — new: Anthropic skill-creator SKILL.md saved as local reference
+         CLAUDE.md — added skill authoring standard constraint referencing skill-creator-best-practices.md
+         README.md — intro (302 checks, added wait stats/QS/procstats); workflow diagram (added query-store-review + procstats-review blocks); Check Reference expanded from 99 (sqlplan only) to all 302 checks across 11 skills
+         scripts/verify-docs.sh — added Checks 21-25: line count (warn >900 / fail >1000), description word count (≥30), trigger phrases in description, triggers: field present, no bare ALWAYS/NEVER/MUST outside code blocks
+         skills/sqlplan-batch/SKILL.md — description rewritten with trigger phrases (Check 23 fix); citation format added; blank lines between checks removed
+         skills/sqlplan-compare/SKILL.md — citation format added (NodeId baseline→new); blank lines removed
+         skills/sqlplan-deadlock/SKILL.md — blank lines between checks removed
+         skills/sqlplan-index-advisor/SKILL.md — description rewritten with trigger phrases; blank lines removed
+         skills/sqlplan-review/SKILL.md — citation format added (Stmt N, NodeId); blank lines removed
+         skills/sqlstats-review/SKILL.md — citation format added (Stmt N, Table); blank lines removed
+         skills/sqltrace-review/SKILL.md — citation format added (Row N SPID timestamp / Pattern N); blank lines removed
+         skills/sqlwait-review/SKILL.md — citation format added (wait type name + aggregate limitation note); blank lines removed
+         skills/tsql-review/SKILL.md — description rewritten with trigger phrases; citation format added (Line N); blank lines removed
+         skills/query-store-review/SKILL.md — blank lines removed
+         skills/procstats-review/SKILL.md — blank lines removed
+
+======================================================================
+PULL REQUESTS
+======================================================================
+None. All 12 commits were pushed directly to main (no PRs exist).

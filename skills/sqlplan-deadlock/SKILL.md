@@ -90,49 +90,41 @@ For each resource:
 ---
 
 ## Pattern Library
-
 ### P1 — Classic Forward/Reverse Access Order
 - **Signature:** Process A holds X on resource R1, waits for resource R2. Process B holds X on R2, waits for R1.
 - **Severity:** High
 - **Cause:** Two transactions update the same pair of rows in opposite order.
 - **Fix:** Enforce a consistent access order in application code (always update table A before table B, always process rows in ascending PK order).
-
 ### P2 — Reader/Writer Deadlock (Shared vs Exclusive)
 - **Signature:** Process A holds S lock (SELECT), waits for X. Process B holds X (UPDATE), waits for S to be released.
 - **Severity:** High
 - **Cause:** A long-running read transaction blocks a writer; another reader prevents the writer from completing, causing a cycle.
 - **Fix:** Enable READ_COMMITTED_SNAPSHOT isolation (`ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT ON`). Readers take no shared locks under RCSI — the most common fix for reader/writer deadlocks without changing application code.
-
 ### P3 — Update Lock Escalation Deadlock
 - **Signature:** Multiple processes hold U locks on different rows, each waiting for U on the other's row.
 - **Severity:** High
 - **Cause:** `UPDATE` statements taking U locks in different orders on the same table.
 - **Fix:** Add an index on the `WHERE` clause columns so each update targets exactly one row (reduces lock scope). Consider using `WITH (ROWLOCK)` hint. Consistent access order also applies.
-
 ### P4 — Missing Index Causing Page Lock Escalation
 - **Signature:** `objectlock` or `pagelock` resource type (not `keylock`) in the resource list.
 - **Severity:** High
 - **Cause:** Without a row-level index, SQL Server takes page or table locks. Multiple transactions competing for the same page deadlock each other.
 - **Fix:** Add a nonclustered index on the filter column so SQL Server takes row-level (`keylock`) locks instead of page locks. Use the `sqlplan-index-advisor` skill if an execution plan is available.
-
 ### P5 — Bookmark Lookup Deadlock (Key Lookup)
 - **Signature:** Two `keylock` resources: one on a nonclustered index, one on the clustered index (PK). Process A holds lock on NC index, waits for PK. Process B holds lock on PK, waits for NC index.
 - **Severity:** Medium
 - **Cause:** A query does a Key Lookup (NC index → PK), taking locks on both. Another query updates via the PK, taking locks in reverse order.
 - **Fix:** Eliminate the Key Lookup by adding INCLUDE columns to the NC index so no bookmark lookup is needed. This removes the two-resource lock acquisition.
-
 ### P6 — SERIALIZABLE Phantom Deadlock
 - **Signature:** `isolationlevel = serializable` on one or more processes AND range locks (RangeX-X, RangeS-U) visible in the resource type.
 - **Severity:** Medium
 - **Cause:** SERIALIZABLE isolation holds range locks to prevent phantoms. Two transactions holding range locks on adjacent ranges block each other's inserts.
 - **Fix:** Downgrade to SNAPSHOT isolation if application semantics allow. SNAPSHOT uses optimistic row versioning and eliminates range locks entirely. If SERIALIZABLE is required, reduce transaction scope.
-
 ### P7 — Foreign Key Check Deadlock
 - **Trigger:** `objectname` in the resource list references a parent table, and one process is inserting into the child table while another deletes from the parent.
 - **Severity:** Medium
 - **Cause:** Inserting into a child table takes a shared lock on the parent (FK validation). Deleting from the parent takes an exclusive lock. If done concurrently in opposite order, deadlock occurs.
 - **Fix:** Add an index on the FK column in the child table (prevents table scan during FK validation). Ensure parent deletes and child inserts do not overlap in concurrent transactions.
-
 ### P8 — Self-Deadlock (Single Process)
 - **Signature:** `victim-list` and `process-list` contain only one process ID.
 - **Severity:** Medium

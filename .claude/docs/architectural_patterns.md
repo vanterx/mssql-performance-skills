@@ -4,6 +4,20 @@ Patterns that appear across multiple files in this repository. Follow these when
 
 ---
 
+## 0. Skill Authoring Standard
+
+All skills in this repo must follow the Anthropic skill-creator best practices:
+→ [skill-creator-best-practices.md](skill-creator-best-practices.md)
+
+Key criteria enforced by `scripts/verify-docs.sh` (Checks 21–25):
+- SKILL.md > 900 lines → warn; > 1000 lines → fail
+- `description:` field ≥ 30 words
+- `description:` includes at least one trigger phrase ("Use this skill when…", "Trigger when…", "whenever a user…")
+- `triggers:` field present in frontmatter
+- No bare ALWAYS/NEVER/MUST in all-caps outside code blocks (warn — explain the why instead)
+
+---
+
 ## 1. Skill Frontmatter Block
 
 **Where:** Every `SKILL.md` in `skills/*/`
@@ -20,7 +34,7 @@ triggers:
 ---
 ```
 
-**Convention:** `name` must be lowercase-hyphenated and match the directory name under `skills/`. `description` is what appears in the Claude skill picker and must be self-contained (no pronouns, no "this skill"). `triggers` lists all slash commands that invoke the skill, primary first.
+**Convention:** `name` must be lowercase-hyphenated and match the directory name under `skills/`. `description` must be self-contained, multi-sentence, and include trigger phrases — see skill-creator best practices in [skill-creator-best-practices.md](skill-creator-best-practices.md). `triggers` lists all slash commands that invoke the skill, primary first.
 
 **Current skills and their prefixes:**
 
@@ -34,6 +48,9 @@ triggers:
 | `skills/tsql-review/` | `/tsql-review` | T |
 | `skills/sqlstats-review/` | `/sqlstats-review` | I, W |
 | `skills/sqltrace-review/` | `/sqltrace-review` | X |
+| `skills/sqlwait-review/` | `/sqlwait-review` | V |
+| `skills/query-store-review/` | `/query-store-review` | Q |
+| `skills/procstats-review/` | `/procstats-review` | R |
 
 ---
 
@@ -59,8 +76,8 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|
-| `S` | `sqlplan-review` | Statement-level (once per query) | S1–S27 |
-| `N` | `sqlplan-review` | Node-level (per operator) | N1–N60 |
+| `S` | `sqlplan-review` | Statement-level (once per query) | S1–S33 |
+| `N` | `sqlplan-review` | Node-level (per operator) | N1–N66 |
 | `C` | `sqlplan-compare` | Regression comparison checks | C1–C10 |
 | `D` | `sqlplan-index-advisor` | Derived index rules (operator patterns) | D1–D8 |
 | `P` | `sqlplan-deadlock` | Deadlock patterns | P1–P8 |
@@ -68,8 +85,11 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `I` | `sqlstats-review` | IO metrics checks | I1–I15 |
 | `W` | `sqlstats-review` | Time/wait metrics checks | W1–W7 |
 | `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X20 |
+| `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V40 |
+| `Q` | `query-store-review` | Query Store health and regression checks | Q1–Q25 |
+| `R` | `procstats-review` | Procedure/trigger/function runtime stats | R1–R20 |
 
-**Convention:** IDs are sequential and never reused within or across skills. When adding a check: assign the next available number, update the section header (`N1–N60` → `N1–N61`), the frontmatter description count, and the Purpose section count. The same ID must appear in both `SKILL.md` and `CHECKS_EXPLAINED.md`.
+**Convention:** IDs are sequential and never reused within or across skills. When adding a check: assign the next available number, update the section header range (e.g., `N1–N66` → `N1–N67`), the frontmatter description count, and the Purpose section count. The same ID must appear in both `SKILL.md` and `CHECKS_EXPLAINED.md`.
 
 ---
 
@@ -153,18 +173,21 @@ All analysis skills share this base structure:
 Skills compose into a pipeline ordered by diagnostic depth:
 
 ```
-/tsql-review source.sql          — static: catch source-code anti-patterns before execution
+/tsql-review source.sql              — static: catch source-code anti-patterns before execution
     ↓
-/sqlstats-review                 — runtime I/O: measure reads, scans, timing per table
-/sqltrace-review trace.txt       — workload: N+1 patterns, sniffing, top consumers
+/sqlwait-review waits.txt            — server: identify dominant bottleneck (I/O, locks, CPU, memory)
+/sqlstats-review                     — runtime I/O: measure reads, scans, timing per table
+/sqltrace-review trace.txt           — workload: N+1 patterns, sniffing, top consumers
+/query-store-review qs_output.txt    — QS: regressed queries, plan instability, top consumers
+/procstats-review proc_stats.txt     — objects: top CPU/IO procedures, triggers, functions
     ↓
-/sqlplan-review plan.sqlplan     — deep: operator choices, row estimates, memory, spills
-/sqlplan-index-advisor plan.sqlplan — indexes: ranked CREATE INDEX script
+/sqlplan-review plan.sqlplan         — deep: operator choices, row estimates, memory, spills
+/sqlplan-index-advisor plan.sqlplan  — indexes: ranked CREATE INDEX script
     ↓
 /sqlplan-compare a.sqlplan b.sqlplan — regression: what changed and why
-/sqlplan-deadlock deadlock.xml   — deadlocks: lock cycle root cause and fix
+/sqlplan-deadlock deadlock.xml       — deadlocks: lock cycle root cause and fix
     ↓
-/sqlplan-batch folder/           — workload: aggregate dashboard across many plans
+/sqlplan-batch folder/               — workload: aggregate dashboard across many plans
 ```
 
 **Convention:** When a skill's output feeds another, document it explicitly in `## Companion Skills`. Aggregation skills (`sqlplan-batch`) must name their check source (`sqlplan-review`) rather than re-defining check logic. Cross-references must appear in both directions — if A lists B as a companion, B should list A.

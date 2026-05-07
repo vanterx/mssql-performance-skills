@@ -85,62 +85,50 @@ Accept any of:
 ## Event-Level Checks (X1–X12)
 
 Evaluate per-event rows. A check fires if any single event meets its trigger condition.
-
 ### X1 — Long-Duration Query
 - **Trigger:** Any `SQL:BatchCompleted`, `RPC:Completed`, or `sql_statement_completed` event where `duration ≥ 5,000 ms` (warning) or `≥ 30,000 ms` (critical). Duration column is in microseconds — divide by 1,000 before comparing.
 - **Severity:** Warning (5 s – 29.9 s); Critical (≥ 30 s)
 - **Fix:** Capture the execution plan for this query and run `/sqlplan-review`. Run `/sqlstats-review` on `SET STATISTICS IO, TIME ON` output. Identify whether the query is CPU-bound (X2) or wait-bound (high duration, low CPU).
-
 ### X2 — High CPU Query
 - **Trigger:** Any completed query event where `cpu ≥ 5,000 ms`
 - **Severity:** Warning
 - **Fix:** High CPU indicates scans, large sorts, hash joins, or implicit conversions. Use `/sqlplan-review` to find the dominant operator. Use `/sqlplan-index-advisor` for covering index recommendations.
-
 ### X3 — High Logical Reads Query
 - **Trigger:** Any completed query event where `logical_reads ≥ 100,000` (warning) or `≥ 1,000,000` (critical)
 - **Severity:** Warning (≥ 100 K); Critical (≥ 1 M)
 - **Fix:** Run `/sqlstats-review` on this query's STATISTICS IO output to identify the highest-read table. Run `/sqlplan-index-advisor` to get a covering index. Each 8 KB page read = ~8 MB of data accessed.
-
 ### X4 — High Write Count
 - **Trigger:** Any completed query event where `writes ≥ 10,000 pages`
 - **Severity:** Warning
 - **Fix:** Large write counts indicate bulk DML, large sorts spilling to tempdb, or excessive worktable writes. If the query is a SELECT, writes indicate a tempdb spill — check X9 (Sort Warning) and X10 (Hash Warning). If DML, verify it was intentional and consider batching (see `/tsql-review` W7).
-
 ### X5 — Attention Event (Client Timeout or Cancel)
 - **Trigger:** Any event with class 16 (`Attention`) or XE event `attention`
 - **Severity:** Warning
 - **Fix:** The client disconnected or cancelled the query — either a command timeout was hit or the user cancelled manually. The query was running long enough to trigger the client's timeout. Run `/sqlplan-review` on the query to understand why it runs long. Consider increasing timeout only after optimizing the query.
-
 ### X6 — Lock Timeout Event
 - **Trigger:** Any event with class 54 (`Lock:Timeout`) or XE event `lock_timeout`
 - **Severity:** Warning
 - **Fix:** A session waited for a lock and timed out (LOCK_TIMEOUT setting > 0). The blocking session holds a lock this query needs. Investigate: add a missing index to reduce lock duration, switch to READ_COMMITTED_SNAPSHOT isolation, or use `/sqlplan-deadlock` if deadlock graphs are also present.
-
 ### X7 — Recompile Event
 - **Trigger:** ≥ 3 recompile events (class 37 or 50, XE `sql_statement_recompile`) for the same stored procedure or normalized query within the trace window
 - **Severity:** Warning
 - **Fix:** Repeated recompilations are CPU-expensive and indicate plan instability. Common causes: schema changes to referenced objects mid-execution, SET option changes between calls, table variable row count changes after first reference, use of `OPTION(RECOMPILE)` in a hot path, or statistics updates. See `/tsql-review` T28 for OPTION(RECOMPILE) trade-offs.
-
 ### X8 — Exception / Error Event
 - **Trigger:** Any event with class 33 (Exception) or XE `error_reported` where severity < 20 (warning) or ≥ 20 (critical)
 - **Severity:** Warning (severity < 20 — informational/user errors); Critical (severity ≥ 20 — fatal/hardware errors)
 - **Fix:** Log the error number and message. Severity ≥ 20 errors indicate server-level problems (out of memory, disk errors, corruption) — escalate immediately. Lower severity errors (deadlock victim 1205, constraint violation 547, duplicate key 2627) are application logic issues — review the calling code.
-
 ### X9 — Sort Warning Event
 - **Trigger:** Any event with class 69 (`Sort Warnings`) or XE `sort_warning`
 - **Severity:** Warning
 - **Fix:** A sort operator ran out of its memory grant and spilled to tempdb. This is the same condition as `sqlplan-review` checks N41–N43. Fix: update statistics (stale stats → bad row estimate → wrong grant), add an index that pre-sorts the data (eliminating the Sort operator), or use `OPTION (MIN_GRANT_PERCENT = n)` to force a larger grant.
-
 ### X10 — Hash Warning Event (Bailout or Recursion)
 - **Trigger:** Any event with class 65 (`Hash Warning`) or XE `hash_warning`
 - **Severity:** Warning
 - **Fix:** A hash join or hash aggregate ran out of memory and either bailed out to a less efficient strategy or recursively partitioned to disk. Same root cause as Sort Warning — stale statistics, missing index on a join column, or insufficient memory grant. Use `/sqlplan-review` to identify the spilling Hash Match operator (N41).
-
 ### X11 — Missing Column Statistics Event
 - **Trigger:** Any event with class 79 (`Missing Column Statistics`) or XE `missing_column_statistics`
 - **Severity:** Info
 - **Fix:** The optimizer needed statistics on a column to estimate cardinality but found none. It used a guess instead. Create statistics: `CREATE STATISTICS stat_name ON dbo.TableName (ColumnName)`. For indexed columns, statistics are auto-created — check whether auto-create statistics is enabled at the database level.
-
 ### X12 — Missing Join Predicate Event
 - **Trigger:** Any event with class 80 (`Missing Join Predicate`) or XE `missing_join_predicate`
 - **Severity:** Warning
@@ -151,42 +139,34 @@ Evaluate per-event rows. A check fires if any single event meets its trigger con
 ## Workload-Level Checks (X13–X20)
 
 Evaluate aggregated patterns across all events in the trace.
-
 ### X13 — High-Frequency Query (N+1 Signal)
 - **Trigger:** Any normalized query pattern with ≥ 1,000 executions within the trace window
 - **Severity:** Warning
 - **Fix:** A query executing 1,000+ times in the trace window is a classic N+1 pattern — the application loops over a result set and issues one query per row. Rewrite as a single set-based query with a JOIN or use a table-valued parameter to batch the lookups. Even if each execution is fast, 10,000 round trips × 1 ms = 10 seconds of serial latency per batch.
-
 ### X14 — Parameter Sniffing Signal (High Duration Variance)
 - **Trigger:** Same normalized query pattern with ≥ 10 executions where `max(duration) > 10 × min(duration)`
 - **Severity:** Warning
 - **Fix:** The cached plan was compiled for one parameter value but executes poorly for others. Fixes ranked by impact: (1) `OPTION(RECOMPILE)` on the query — per-execution plan, eliminates sniffing; (2) `OPTION(OPTIMIZE FOR (@param = typical_value))` — pins a representative plan; (3) separate stored procedures for high/low cardinality paths; (4) use Query Store to force the good plan. Use `/sqlplan-compare` to diff the fast and slow plans.
-
 ### X15 — Ad-Hoc / Unparameterized Workload
 - **Trigger:** Distinct normalized query texts / total query events > 80%, OR large number of near-identical queries with embedded literals (e.g., `WHERE Id = 1`, `WHERE Id = 2`, ..., `WHERE Id = N`)
 - **Severity:** Info
 - **Fix:** The application is sending literal-embedded SQL rather than parameterized queries. Each distinct literal produces a unique plan cache entry — the plan cache fills with single-use plans, evicting useful plans. Fix: use `sp_executesql` with bound parameters, or ORM parameterization. Enable "optimize for ad hoc workloads" as a short-term mitigation (`sp_configure 'optimize for ad hoc workloads', 1`).
-
 ### X16 — Excessive Global Recompilations
 - **Trigger:** Recompile events (class 37 or 50) > 5% of total completed query events (class 10 + 12)
 - **Severity:** Warning
 - **Fix:** Global recompile pressure degrades the entire server — every recompile consumes CPU and a schema lock. Investigate the most-recompiled objects. Common causes: DDL on referenced objects (schema stability), SET option differences across connections, deferred compilation on temp tables (use `OPTION(KEEP PLAN)`).
-
 ### X17 — Top Resource Consumers Summary
 - **Trigger:** Always fires — this check always produces output
 - **Severity:** Info
 - **Fix:** No fix required for this check — it surfaces the top 5 queries by total CPU, total logical reads, and max duration. These are the highest-leverage targets for tuning. Run `/sqlplan-review` and `/sqlplan-index-advisor` on the top 1–3 entries.
-
 ### X18 — Workload Concentration (Few Queries Dominate)
 - **Trigger:** Top 3 normalized query patterns account for > 80% of total CPU time across all events
 - **Severity:** Info
 - **Fix:** Highly concentrated workloads are good news for tuning — fixing 3 queries improves the whole system. Focus effort entirely on those 3 queries before addressing anything else.
-
 ### X19 — Auto-Grow Event Detected
 - **Trigger:** Any event with class 92 (`Data File Auto Grow`) or 93 (`Log File Auto Grow`), or XE `database_file_size_change` with `is_auto_grow = 1`
 - **Severity:** Warning (≥ 1 event in trace window, normal growth); Critical (≥ 5 events in trace window, frequent growth — file is sized too small for the workload)
 - **Fix:** Auto-grow events pause all activity on the database while the file expands. Frequency matters more than individual duration: one 2-second auto-grow is less concerning than 50 auto-grows at 50 ms each — every grow pauses all database transactions. For data files: pre-size the file to avoid mid-workload grows; set instant file initialization (Windows privilege `SE_MANAGE_VOLUME_NAME`) to eliminate file zeroing on data file growth (not applicable to log files). For log files: either pre-size or investigate what is driving high log volume (large uncommitted transactions, bulk inserts without minimal logging, log backup frequency). If auto-grow duration exceeds 1,000 ms (slow auto-grow), the file system or storage subsystem cannot allocate space quickly enough — pre-size the file immediately. For any auto-grow that uses percent growth (the default on older SQL Server versions) rather than fixed-size growth, switch to fixed-size growth to avoid geometrically increasing growth amounts.
-
 ### X20 — ShowPlan XML Events Present in Trace
 - **Trigger:** Any event with class 146 (`Showplan XML`) or XE `query_post_execution_showplan`
 - **Severity:** Info
@@ -230,7 +210,8 @@ Structure your report as follows:
 ### Performance Findings
 
 #### Critical Issues
-**[C1] Issue Name** (X<N>)
+**[C1 — Row 47 (SPID 52, 14:23:01)] Issue Name** (X<N>)  ← event-level (X1–X12)
+**[C1 — Pattern 3] Issue Name** (X<N>)                    ← workload aggregate (X13–X20)
 - Observed: [query text snippet, metric value, SPID, timestamp or frequency]
 - Impact: [why this matters]
 - Fix: [concrete action]
@@ -249,6 +230,7 @@ X5 ✓ (brief reason), X6 ✓ (brief reason) [list every check verified clean wi
 
 ## Notes
 
+- For event-level findings (X1–X12), include the specific row in the bracket using RowNumber, SPID, and StartTime from the trace (e.g., `[C1 — Row 47 (SPID 52, 14:23:01)]`). For workload aggregate findings (X13–X20), include the normalized query pattern number or query hash (e.g., `[C1 — Pattern 3]`).
 - Do not invent findings not triggered by the rules above.
 - Duration in the input may be in microseconds (`.trc` / XE) or milliseconds (some XE configurations) — confirm the unit from column headers or context before applying thresholds.
 - Query normalization: replace integer and string literals with `?`, replace multi-value IN lists with `IN (?,?,?)`, preserve object names and structure. Two queries that differ only in parameter values should be grouped as the same pattern.

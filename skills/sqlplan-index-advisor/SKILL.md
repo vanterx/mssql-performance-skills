@@ -1,6 +1,6 @@
 ---
 name: sqlplan-index-advisor
-description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Derives independent index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops) AND consolidates the optimizer's explicit MissingIndexGroup suggestions. Use after sqlplan-review or on any .sqlplan file.
+description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Derives index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops — D1–D8) and the optimizer's explicit MissingIndexGroup suggestions. Use this skill whenever a user wants index recommendations from an execution plan; asks what indexes would help a query; mentions Key Lookup, index scan, missing index, or covering index; or asks to generate CREATE INDEX statements. Trigger after sqlplan-review findings or directly on any .sqlplan file.
 triggers:
   - /sqlplan-index-advisor
   - /index-advisor
@@ -38,7 +38,6 @@ Accept any of:
 ## Source A: Operator-Derived Recommendations
 
 Apply these rules to every operator node. Each fired rule produces a candidate recommendation with an estimated impact derived from the operator's `costPercent` or `actualExecutions`.
-
 ### D1 — Key Lookup / RID Lookup: Extend NC Index
 
 **When:** `physicalOp` = Key Lookup or RID Lookup
@@ -64,7 +63,6 @@ WITH (ONLINE = ON, DROP_EXISTING = ON);
 **Cross-reference:** sqlplan-review N5
 
 ---
-
 ### D2 — Expensive Scan: Add Seek Index
 
 **When:** `physicalOp` = Index Scan or Table Scan AND `costPercent` ≥ 25% AND a predicate is present on the operator
@@ -87,7 +85,6 @@ ON [dbo].[Orders] ([CustomerId], [CreatedDate]);
 **Cross-reference:** sqlplan-review N4, N39
 
 ---
-
 ### D3 — Residual Predicate on Seek: Promote Column to Key
 
 **When:** A Seek operator has both `<SeekPredicates>` AND `<Predicate>` (residual), AND when runtime data is present `actualRows / actualRowsRead` < 0.2 (seek fetches 5× more rows than it returns)
@@ -112,7 +109,6 @@ ON [dbo].[Orders] ([CustomerId], [Status]);   -- Status as key, not INCLUDE
 **Cross-reference:** sqlplan-review N43
 
 ---
-
 ### D4 — Eager Index Spool: Replace with Permanent Index
 
 **When:** `logicalOp` = Eager Spool AND operator name contains "Index" (distinguishes from table spools)
@@ -135,7 +131,6 @@ INCLUDE ([OrderId], [Quantity], [Price]);
 **Cross-reference:** sqlplan-review N2
 
 ---
-
 ### D5 — Costly Sort: Add Pre-Sorted Index
 
 **When:** `physicalOp` = Sort AND `costPercent` ≥ 10%
@@ -157,7 +152,6 @@ ON [dbo].[Orders] ([CustomerId], [OrderDate] DESC);
 **Cross-reference:** sqlplan-review N22
 
 ---
-
 ### D6 — High-Count Nested Loops: Index the Inner Side
 
 **When:** `physicalOp` = Nested Loops AND `actualExecutions` > 1,000 AND the inner side operator is a Scan (no seek on the join column)
@@ -179,7 +173,6 @@ ON [dbo].[LineItems] ([OrderId]);
 **Cross-reference:** sqlplan-review N15
 
 ---
-
 ### D7 — Heap Scan: Add Clustered Index
 
 **When:** `physicalOp` = Table Scan (indicates a heap — table with no clustered index)
@@ -204,7 +197,6 @@ CREATE CLUSTERED INDEX [CIX_StagingOrders_OrderRef] ON [dbo].[StagingOrders] ([O
 **Cross-reference:** sqlplan-review N39
 
 ---
-
 ### D8 — Backward Scan: Add DESC Index
 
 **When:** Any scan or seek operator has `ScanDirection` = BACKWARD

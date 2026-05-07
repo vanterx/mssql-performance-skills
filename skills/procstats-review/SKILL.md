@@ -88,27 +88,22 @@ For trend checks (R16–R20), Q5 output with ≥ 3 rows per object is required. 
 ## Statement-Level Checks (R1–R5): Top Resource Consumers
 
 Run these first. They identify which objects dominate the workload in the collection interval.
-
 ### R1 — CPU Hotspot
 - **Trigger:** `cpu_ms_per_sec` ≥ 50 for a single object, OR that object's `total_worker_time_delta` represents > 50% of the sum across all objects in the result set
 - **Severity:** Warning if ≥ 50 ms/s or > 50%; Critical if ≥ 500 ms/s or > 80%
 - **Fix:** Run `/sqlplan-review` on this procedure's cached plan to identify the expensive operator. Check for missing indexes, implicit conversions, or missing parallelism. Use `OPTION (RECOMPILE)` as immediate mitigation if parameter sniffing is suspected (see R9).
-
 ### R2 — Read Hotspot
 - **Trigger:** `reads_per_sec` ≥ 5,000 for a single object, OR that object's `total_logical_reads_delta` represents > 50% of total reads in the result
 - **Severity:** Warning if ≥ 5,000 reads/s or > 50%; Critical if ≥ 50,000 reads/s or > 80%
 - **Fix:** The object reads disproportionately from the buffer pool. Run `/sqlplan-index-advisor` on its execution plan. High `avg_logical_reads` (see R7) indicates a per-execution index problem; high `reads_per_sec` with low `avg_logical_reads` indicates high frequency (see R4/R12).
-
 ### R3 — Duration Hotspot
 - **Trigger:** `avg_elapsed_ms` ≥ 5,000 ms AND `execs_in_interval` > 0
 - **Severity:** Warning if ≥ 5,000 ms; Critical if ≥ 30,000 ms
 - **Fix:** Objects with high elapsed time are holding connections and blocking dependent code. If `avg_elapsed_ms` >> `avg_cpu_ms` (see R8 blocking signal), investigate locking with `/sqlwait-review` or `/sqlplan-deadlock`. If `avg_elapsed_ms` ≈ `avg_cpu_ms`, the work itself is expensive — run `/sqlplan-review`.
-
 ### R4 — Execution Frequency Hotspot
 - **Trigger:** `execs_in_interval` ≥ 10,000 in a single collection window
 - **Severity:** Warning
 - **Fix:** A highly executed object deserves extra scrutiny even if per-execution cost is low. Total resource consumption is execution count × per-call cost. Pair with R11 (N+1) and R12 (chatty) checks to understand the caller pattern.
-
 ### R5 — Physical I/O Hotspot (Cache Miss)
 - **Trigger:** `physical_reads_delta` > 0 AND `physical_pct` > 10% (more than 1 in 10 page reads goes to disk)
 - **Severity:** Warning if `physical_pct` > 10%; Critical if > 50%
@@ -119,17 +114,14 @@ Run these first. They identify which objects dominate the workload in the collec
 ## Node-Level Checks (R6–R10): Per-Execution Efficiency
 
 Apply these regardless of execution count — an infrequent but expensive proc matters.
-
 ### R6 — High Average CPU per Execution
 - **Trigger:** `avg_cpu_ms` ≥ 1,000 ms
 - **Severity:** Warning if ≥ 1,000 ms; Critical if ≥ 10,000 ms
 - **Fix:** The object does significant work per call. Capture its actual execution plan (`SET STATISTICS TIME ON` or SSMS actual plan) and run `/sqlplan-review`. Focus on the highest-cost operator. Common causes: full table scans from missing indexes, sort spills, hash join spills, large row sets.
-
 ### R7 — High Average Reads per Execution
 - **Trigger:** `avg_logical_reads` ≥ 50,000 per execution
 - **Severity:** Warning if ≥ 50,000; Critical if ≥ 500,000
 - **Fix:** The object reads many buffer pool pages per call. At 8 KB per page, 50,000 reads = 400 MB of data touched per execution. Run `/sqlplan-index-advisor` on its plan to generate covering index DDL. Check for table scans, key lookups, and missing WHERE clause indexes.
-
 ### R8 — CPU-Elapsed Skew (Parallelism Waste or Blocking Signal)
 - **Trigger:**
   - `cpu_to_elapsed_ratio` > 1.5: CPU > elapsed → object uses parallelism, but threads may be poorly utilized (CXPACKET waits)
@@ -137,12 +129,10 @@ Apply these regardless of execution count — an infrequent but expensive proc m
 - **Severity:** Warning if ratio > 1.5 or < 0.2; Critical if > 3.0 or < 0.05
 - **Fix (parallel waste):** Run `/sqlplan-review` and check N27 (thread skew) and S8 (ineffective parallelism). Consider reducing MAXDOP.
 - **Fix (blocking/IO):** Run `/sqlwait-review` to identify the dominant wait type. If `PAGEIOLATCH`, investigate missing indexes. If `LCK_M_*`, investigate blocking chains or isolation level.
-
 ### R9 — Max vs Average CPU Skew (Parameter Sniffing Signal)
 - **Trigger:** `max_to_avg_cpu_ratio` ≥ 10 (worst single execution used 10× the average CPU)
 - **Severity:** Info if ≥ 3; Warning if ≥ 10; Critical if ≥ 100
 - **Fix:** The plan was compiled for one parameter set but executed with a very different set. The worst execution was dramatically more expensive than the average. Add `OPTION (RECOMPILE)` as immediate mitigation. Long term: use `OPTION (OPTIMIZE FOR)`, filtered statistics, or a plan guide. Run `/sqlplan-review` on the bad-parameter plan.
-
 ### R10 — High Spills per Execution
 - **Trigger:** `avg_spills` ≥ 1 (the object spills to TempDb on average at least once per execution)
 - **Severity:** Warning if ≥ 1; Critical if ≥ 10
@@ -151,27 +141,22 @@ Apply these regardless of execution count — an infrequent but expensive proc m
 ---
 
 ## Pattern Checks (R11–R15): Behavioral Patterns
-
 ### R11 — N+1 Caller Pattern
 - **Trigger:** `execs_in_interval` ≥ 1,000 AND `avg_logical_reads` < 100 AND `avg_cpu_ms` < 10
 - **Severity:** Info
 - **Fix:** A lightweight procedure called thousands of times per interval — a classic N+1 pattern. Each call is cheap but the aggregate load is high. Look for application-layer loops calling this procedure once per record. Rewrite to accept a table-valued parameter (TVP) or use `IN (...)` to batch the calls. Check `cpu_ms_per_sec` — even cheap procs at high frequency add up.
-
 ### R12 — Chatty High-Frequency Procedure
 - **Trigger:** `execs_per_sec` ≥ 10 (10 or more executions every second)
 - **Severity:** Warning if ≥ 10/s; Critical if ≥ 100/s
 - **Fix:** The procedure is called extremely frequently. Even with low per-call cost, plan cache lookups, lock acquisitions, and connection overhead add up. Evaluate: (1) Can calls be batched (TVP or set-based)? (2) Can results be cached at the application layer? (3) Is there a missing index that makes each call look up one row when it could be a set?
-
 ### R13 — Plan Instability / Frequent Recompile Signal
 - **Trigger:** Multiple rows in the result set share the same `database_name` + `object_name` but have different `plan_handle` values, AND `cache_age_minutes` for at least one row is < 60
 - **Severity:** Warning
 - **Fix:** The procedure's plan is being recompiled or evicted frequently. Common causes: `WITH RECOMPILE` on the procedure definition, `OPTION (RECOMPILE)` on inner statements, schema changes, statistics updates mid-execution, or SET option mismatches from different callers. Run `DBCC FREEPROCCACHE` monitoring or Extended Events to capture the recompile reason.
-
 ### R14 — Workload Concentration
 - **Trigger:** The top object in the result accounts for > 50% of total `total_worker_time_delta` across all rows in the result set, OR the top 3 account for > 90%
 - **Severity:** Info if top 3 > 70%; Warning if top 1 > 50%; Warning if top 3 > 90%
 - **Fix:** The workload is concentrated on a small number of objects. This is common and not inherently a problem — but it means tuning R1/R2/R6/R7 on the top object will have outsized impact. It also means if that object fails or degrades, the entire server is affected. Consider read-scale, caching, or workload distribution.
-
 ### R15 — Infrequent but Expensive
 - **Trigger:** `execs_in_interval` ≤ 5 AND `avg_logical_reads` ≥ 100,000
 - **Severity:** Info
@@ -183,27 +168,22 @@ Apply these regardless of execution count — an infrequent but expensive proc m
 
 Skip these checks and state "Cannot evaluate R16–R20 — Q5 trend data not provided" if
 the input does not contain multiple rows per object across different `collection_time` values.
-
 ### R16 — Worsening CPU Trend
 - **Trigger:** `avg_cpu_ms` or `cpu_ms_per_sec` increases monotonically across ≥ 3 consecutive snapshots for the same object
 - **Severity:** Info (2 snapshots worsening); Warning (≥ 3 consecutive)
 - **Fix:** The procedure is getting slower over time. Causes: (1) data growth making plans suboptimal — rebuild indexes and update statistics; (2) plan regression from statistics update — use Query Store to identify and force the prior good plan; (3) application change increasing workload per call — instrument with `SET STATISTICS IO, TIME ON`.
-
 ### R17 — Execution Rate Spike
 - **Trigger:** `execs_in_interval` for the most recent snapshot > 2× the mean of prior snapshots for the same object
 - **Severity:** Warning if > 2× mean; Critical if > 5× mean
 - **Fix:** Something caused a sudden surge in call frequency — a batch job, application retry loop, or viral traffic. Identify the caller from `sys.dm_exec_sessions` or Extended Events. Check for application loops triggered by errors (error → retry → error spiral). Reduce call frequency or add circuit-breaker logic.
-
 ### R18 — Read Regression
 - **Trigger:** `avg_logical_reads` increases by > 50% between the oldest and newest snapshot for the same object
 - **Severity:** Warning
 - **Fix:** The procedure is reading more pages per execution than it used to. Common causes: (1) plan regression — capture before/after plans with `/sqlplan-compare`; (2) data growth making a seek read more rows; (3) index dropped or disabled. Compare `plan_handle` across snapshots (see R20 — if it changed, the plan regressed).
-
 ### R19 — New High-Cost Entry
 - **Trigger:** An object appears in the result for the first time (no prior rows in the time window) AND `cpu_ms_per_sec` ≥ 50 OR `avg_logical_reads` ≥ 50,000
 - **Severity:** Info
 - **Fix:** A new or previously-idle procedure appeared with high resource usage. This may indicate: (1) a newly deployed stored procedure; (2) a batch job that started running; (3) a procedure that was previously executing cheaply but now has a bad plan. Capture its execution plan and run `/sqlplan-review`.
-
 ### R20 — Plan Instability Signal (Trend)
 - **Trigger:** The same `database_name` + `object_name` shows different `plan_handle` values across consecutive snapshots in the trend output
 - **Severity:** Warning
