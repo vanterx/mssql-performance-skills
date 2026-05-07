@@ -213,7 +213,7 @@ Structure your report as follows:
 ### Top Resource Consumers
 
 **By Total CPU** (top 5)
-| # | Query (first 80 chars) | Executions | Avg CPU ms | Total CPU ms | % of Workload |
+| # | Query (first 80 chars, for display only) | Executions | Avg CPU ms | Total CPU ms | % of Workload |
 |---|------------------------|-----------|-----------|-------------|---------------|
 | 1 | SELECT o.OrderId FROM dbo.Orders... | 12,841 | 18 | 231,138 | 42.1% |
 

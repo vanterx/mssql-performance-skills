@@ -165,7 +165,7 @@ For each resource:
 |--|--------|--------|
 | **SPID** | X | Y |
 | **Host** | [hostname] | [hostname] |
-| **Procedure / Batch** | [proc name or first 80 chars of ad-hoc SQL] | [proc name or first 80 chars] |
+| **Procedure / Batch** | [proc name or first 80 chars of ad-hoc SQL, for display only] | [proc name or first 80 chars, for display only] |
 | **Started** | [timestamp] | [timestamp] |
 | **Log used** | [KB] | [KB] |
 | **Pattern detected** | [P1–P8 or Unknown] | — |

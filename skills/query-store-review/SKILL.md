@@ -393,7 +393,7 @@ Always end the report with this table. Order: (a) fixes that unblock others firs
 **Formatting rules:**
 - Time values: display as `N ms` (e.g., `842 ms`) or `N s` (e.g., `8.4 s`) for values ≥ 10,000 ms
 - IO values: comma-formatted thousands separators (e.g., `2,568,900`)
-- Query text: truncate to 200 characters with "..." suffix if longer
+- Query text: in output tables, truncate to 200 characters with "..." suffix if longer. Always use the full `query_sql_text` for analysis and companion-skill handoffs.
 - Query hash: display as `0x` + hex string (8 bytes)
 - Include baseline comparison numbers only when regression data (Query D) is provided
 - If Query B (wait stats) is not provided, note "Query Store wait stats capture not enabled — run Query C and see Q25" in the Wait Summary section

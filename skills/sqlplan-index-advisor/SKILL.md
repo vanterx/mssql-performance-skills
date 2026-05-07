@@ -375,7 +375,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 
 ## Companion Skills
 
-- **sqlplan-review** — Run the full 87-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
+- **sqlplan-review** — Run the full 99-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
 - **sqlplan-compare** — After deploying the recommended indexes, capture a new plan and diff against the baseline to confirm the improvement.
 - **sqlplan-batch** — Run index advisor across a folder of plans to produce a single consolidated `CREATE INDEX` script for the whole workload.
 - **tsql-review** — If the plan shows implicit conversion warnings (S12), review the T-SQL source (T5) to fix the type mismatch that prevents index seeks.

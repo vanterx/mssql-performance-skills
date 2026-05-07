@@ -23,7 +23,18 @@ If the user provides XML, extract the relevant attributes yourself before runnin
 
 ## How to Run
 
-Work top-down: statement-level checks first, then walk node-level checks for each operator. Report every triggered finding — do not stop at the first match.
+A `.sqlplan` XML contains one or more `<StmtSimple>` elements (a single query, or many in a stored procedure).
+
+**For each `<StmtSimple>` in the XML:**
+1. Record the `StatementId` and a short excerpt from `StatementText` for the overview table label (use the full `StatementText` for all checks — never truncate during analysis)
+2. Run all 33 statement-level checks (S1–S33) against this statement's attributes
+3. Walk every `<RelOp>` node in this statement's plan tree recursively, applying all 66 node-level checks (N1–N66)
+4. Label every finding with the statement source
+
+**Single-statement plans** (one `<StmtSimple>`): the `StatementId` prefix may be omitted for brevity.
+**Multi-statement plans** (> 1 `<StmtSimple>`): every finding carries a `StatementId` label. See the multi-statement section in Output Format below.
+
+Report every triggered finding — do not stop at the first match per statement. Walk all statements completely.
 
 ---
 
@@ -74,7 +85,7 @@ Work top-down: statement-level checks first, then walk node-level checks for eac
 
 ## Statement-Level Checks (S1–S33)
 
-Run these once per statement before inspecting individual operators.
+Run these once per `<StmtSimple>` element before inspecting individual operators.
 
 ### S1 — Serial Plan
 - **Trigger:** `NonParallelPlanReason` attribute is present AND `StatementSubTreeCost` ≥ 1.0 AND `StatementOptmLevel` ≠ TRIVIAL
@@ -600,9 +611,35 @@ output in `example/sqlplan-review/horrible-analysis.md` demonstrates the expecte
 ## Execution Plan Analysis
 
 ### Summary
+- **N statements** in plan (omit for single-statement plans)
 - **X Critical** issues, **Y Warnings**, **Z Info** items
 - Primary bottleneck: [one sentence identifying the root cause and which operators it affects]
 ```
+
+---
+
+#### Multi-Statement Plans (conditional — apply when > 1 `<StmtSimple>`)
+
+**Statement Overview table** (precedes findings):
+
+```
+### Statement Overview
+
+| StmtId | Text (excerpt) | Cost | Rows Est | Compile CPU | DOP | Memory Grant |
+|--------|----------------|------|----------|-------------|-----|--------------|
+| 1      | SELECT u.* ... | 98.7K| 1        | 512 ms      | 8   | 1,048,576 KB |
+| 2      | INSERT INTO ...| 0.1  | 1,000    | 15 ms       | 1   | N/A          |
+```
+
+**Finding labels** include `StatementId` for every finding:
+
+```
+### [C1 — Statement 1, S4] Memory Grant Wait — 5,000 ms
+```
+
+**Passed Checks:** For multi-statement plans, omit the Passed Checks table. Per-statement triggered findings are exhaustive; a cross-statement PASS enumeration is unwieldy and redundant. Single-statement plans keep the Passed Checks table as prescribed.
+
+---
 
 ---
 
@@ -656,7 +693,7 @@ report it as a named Info item — never bury it in a prose note:
   ```
 ```
 
-S25, S26, N17, N32, and N52 findings also go in the Info section.
+S25, S26, N17, N32, and N52 findings also go in the Info section (labeled by statement in multi-statement plans).
 
 ---
 

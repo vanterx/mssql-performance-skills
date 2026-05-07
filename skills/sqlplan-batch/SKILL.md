@@ -37,7 +37,7 @@ For each plan, collect:
 | Field | Source |
 |-------|--------|
 | File name | file system |
-| Query text (first 200 chars) | `StmtSimple/@StatementText` |
+| Query text (first 200 chars, for display only; use full StatementText for analysis) | `StmtSimple/@StatementText` |
 | Statement cost | `StmtSimple/@StatementSubTreeCost` |
 | DOP | `QueryPlan/@DegreeOfParallelism` |
 | Memory grant (MB) | `MemoryGrantInfo/@GrantedMemory` ÷ 1024 |
@@ -225,7 +225,7 @@ For each plan with at least one Critical or Warning finding, add a sub-section:
 
 ## Companion Skills
 
-- **sqlplan-review** — Deep-dive analysis on any individual plan from the batch. Apply the full 87-check ruleset to the highest-cost or most-critical plan.
+- **sqlplan-review** — Deep-dive analysis on any individual plan from the batch. Apply the full 99-check ruleset to the highest-cost or most-critical plan.
 - **sqlplan-index-advisor** — Generate a deployment-ready `CREATE INDEX` script from the consolidated missing index recommendations in the batch report.
 - **sqlplan-compare** — Diff the worst-performing plan against a known-good baseline to explain why a specific query regressed.
 - **sqlplan-deadlock** — If deadlock graphs were captured alongside the `.sqlplan` files, analyze them with this companion skill.
