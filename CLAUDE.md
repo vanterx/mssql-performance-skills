@@ -74,6 +74,14 @@ Provides eleven slash-command skills that Claude uses when asked to review T-SQL
 
 ## Installing Skills
 
+**Prerequisites:** [Node.js](https://nodejs.org) (>= 18)
+
+```bash
+npx skills add vanterx/mssql-performance-skills          # recommended
+npx skills add vanterx/mssql-performance-skills -g       # global
+```
+
+**Manual fallback:**
 ```bash
 cp -r skills/* ~/.claude/skills/          # global (all 11 skills)
 cp -r skills/* .claude/skills/            # project-scoped
