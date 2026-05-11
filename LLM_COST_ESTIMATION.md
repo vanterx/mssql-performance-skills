@@ -36,13 +36,15 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 |-------|----------------|
 | `sqlplan-review` | ~13,500 |
 | `tsql-review` | ~8,500 |
+| `sqlwait-review` | ~7,000 |
+| `sqltrace-review` | ~5,200 |
 | `sqlstats-review` | ~4,800 |
+| `query-store-review` | ~3,400 |
 | `sqlplan-index-advisor` | ~3,700 |
+| `procstats-review` | ~2,800 |
 | `sqlplan-deadlock` | ~2,400 |
 | `sqlplan-compare` | ~1,750 |
 | `sqlplan-batch` | ~1,500 |
-| `query-store-review` | ~3,400 |
-| `procstats-review` | ~2,800 |
 
 ### Your input artifact
 

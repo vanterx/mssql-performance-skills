@@ -11,7 +11,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 50 checks for anti-patterns, security, logic bugs |
 | [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
-| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 36 checks (V1–V36): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo |
+| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 40 checks (V1–V40): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency |
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 99 checks across operators, memory, parallelism, row widths, elapsed timing |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans to explain a regression |
@@ -304,6 +304,38 @@ The output tells you which queries to focus on and which companion skill to use 
 
 ---
 
+### "I want to find my worst stored procedures, triggers, or functions — I have sys.dm_exec_procedure_stats data"
+
+**Use: `/procstats-review`**
+
+Collect procedure/trigger/function runtime stats from the DMV and paste the output. No execution plan needed — the skill applies 20 checks to identify top CPU and I/O consumers, per-execution efficiency (cost per call), N+1 callers (a procedure called thousands of times per minute), parameter sniffing signals (execution time variance), and trend analysis when multiple snapshots are provided.
+
+```sql
+-- Quick capture: top 20 procedures by total CPU
+SELECT TOP 20
+    OBJECT_SCHEMA_NAME(ps.object_id, ps.database_id) AS schema_name,
+    OBJECT_NAME(ps.object_id, ps.database_id) AS proc_name,
+    ps.execution_count,
+    ps.total_worker_time / 1000 AS total_cpu_ms,
+    ps.total_worker_time / ps.execution_count / 1000 AS avg_cpu_ms,
+    ps.total_logical_reads,
+    ps.total_logical_reads / ps.execution_count AS avg_logical_reads,
+    ps.cached_time, ps.last_execution_time
+FROM sys.dm_exec_procedure_stats ps
+WHERE ps.database_id = DB_ID()
+ORDER BY ps.total_worker_time DESC;
+```
+
+```
+/procstats-review
+
+[paste query output]
+```
+
+Once the worst procedure is identified, pivot to `/tsql-review` on its source, `/sqlstats-review` while running it, and `/sqlplan-review` on its execution plan.
+
+---
+
 ### "I have a mix of different artifact types"
 
 ## The Standard Tuning Workflow
@@ -434,6 +466,15 @@ After a version upgrade, migration, or workload capture.
 2. Drill into the worst 5–10 plans with **`/sqlplan-review`**.
 3. Generate targeted index DDL for each with **`/sqlplan-index-advisor`**.
 
+### "I want to find my worst stored procedures / functions by resource usage — no specific query yet"
+
+You have Query Store disabled or don't want to capture a trace. You have `sys.dm_exec_procedure_stats` available.
+
+1. **`/procstats-review`** — collect DMV data (see capture query above) and paste. R1–R5 rank procedures by CPU, reads, and duration. R11/R12 flag workload concentration — if one procedure accounts for 80%+ of CPU, it's the target.
+2. Run `/tsql-review` on the worst procedure's body — catch source-level anti-patterns before capturing a plan.
+3. Run the procedure with `SET STATISTICS IO, TIME ON` → **`/sqlstats-review`** — identify which statement is the bottleneck.
+4. Capture the plan for that statement → **`/sqlplan-review`** → **`/sqlplan-index-advisor`**.
+
 ---
 
 ## Skill Scope Comparison
@@ -463,7 +504,7 @@ Trace / XE                │  Profiler .trc / XE .xel / fn_trace_gettable()
 Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
 ──────────────────────────┼─────────────────────────────────────────
 /sqlwait-review           │  Server bottleneck: why is the server slow?
-                          │  36 checks V1–V36: I/O (PAGEIOLATCH), locks (LCK_M),
+                          │  40 checks V1–V40: I/O (PAGEIOLATCH), locks (LCK_M),
                           │  parallelism (CXPACKET/HT*), memory grants (RESOURCE_SEMAPHORE),
                           │  log I/O (WRITELOG/LOGBUFFER), CPU (SOS_SCHEDULER_YIELD),
                           │  TempDB (PAGELATCH), latch contention (LATCH_EX),
@@ -475,6 +516,8 @@ Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
                           │  V30–V36 Modern features: In-Memory OLTP (XTP*), Columnstore,
                           │  Query Store (QDS*), Transaction/DTC, Service Broker,
                           │  Full Text Search, Parallel Redo (Always On secondary)
+                          │  V37–V40 Memory/I/O detail: forced grants, grant timeouts,
+                          │  stolen memory, file-level I/O latency
                           │  Configuration-aware: MAXDOP, CTPfP, RCSI, TempDB files,
                           │  recovery model, delayed durability, Always On commit mode
 

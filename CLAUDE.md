@@ -21,7 +21,7 @@ Provides eleven slash-command skills that Claude uses when asked to review T-SQL
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 50 checks (T1–T50) — structural, correctness, security, deprecated syntax, performance smells |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 22 checks (I1–I15 IO, W1–W7 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 20 checks (X1–X12 event-level, X13–X20 workload aggregate), top-consumer tables |
-| [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 29 checks (V1–V29) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis |
+| [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 40 checks (V1–V40) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency |
 | [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 99 checks (S1–S33, N1–N66), thresholds, output format |
 | [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C10) |
 | [skills/sqlplan-index-advisor/SKILL.md](skills/sqlplan-index-advisor/SKILL.md) | Index recommendations: `sqlplan-index-advisor`. Derive indexes from operator patterns (D1–D8) + optimizer suggestions |
@@ -109,6 +109,10 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 7. Add the skill file size row to [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md)
 8. Add example input + analysis files to `example/<skill-name>/`
 9. Add `tsql-review` as companion in `sqlplan-review/SKILL.md` (or the relevant existing companion)
+
+## Development Scratch Log
+
+`changes.log` is a local, uncommitted development scratch log. It is `.gitignore`d and tracks work-in-progress notes during active development sessions. It is not part of the canonical project history — use `git log` for that.
 
 ## Development Constraints
 

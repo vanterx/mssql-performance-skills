@@ -494,6 +494,32 @@ done
 [ "$check25_ok" -eq 1 ] && pass "No bare ALWAYS/NEVER/MUST in SKILL.md body text"
 
 # ---------------------------------------------------------------------------
+# Check 26: Per-skill check count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance
+#           matches the actual count in the skill's SKILL.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[26 ] Per-skill count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance matches SKILL.md"
+check26_ok=1
+while IFS= read -r skill_file; do
+    name=$(basename "$(dirname "$skill_file")")
+    actual=$(grep -c "^### [A-Z][0-9]" "$skill_file" 2>/dev/null || echo 0)
+    # sqlplan-batch has no original checks (aggregator) — skip
+    [ "$name" = "sqlplan-batch" ] && continue
+    # sqlplan-index-advisor uses derivation rules, not ### headers — skip
+    [ "$name" = "sqlplan-index-advisor" ] && continue
+    # Look for "N checks" in the Skills at a Glance table row for this skill
+    guide_count=$(awk '/^## Skills at a Glance/{f=1;next} f && /^---/{exit} f{print}' \
+        PERFORMANCE_TUNING_GUIDE.md 2>/dev/null \
+        | grep "$name" | grep -o '[0-9]* checks' | head -1 | grep -o '^[0-9]*')
+    [ -z "$guide_count" ] && continue  # skill row has no count — skip
+    if [ "$guide_count" != "$actual" ]; then
+        fail "$name: PERFORMANCE_TUNING_GUIDE.md Skills at a Glance says '$guide_count checks' but SKILL.md has $actual — update the table"
+        check26_ok=0
+    fi
+done < <(ls skills/*/SKILL.md 2>/dev/null)
+[ "$check26_ok" -eq 1 ] && pass "Per-skill check counts in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance match SKILL.md"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

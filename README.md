@@ -28,6 +28,22 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 
 ---
 
+## Quick Start
+
+**5 minutes to your first analysis:**
+
+1. Install the skills (see [Installation](#installation) below)
+2. In SSMS, open [example/sqlplan-review/horrible.sqlplan](example/sqlplan-review/horrible.sqlplan)
+3. In Claude Code, type:
+   ```
+   /sqlplan-review example/sqlplan-review/horrible.sqlplan
+   ```
+4. Compare the output to [example/sqlplan-review/horrible-analysis.md](example/sqlplan-review/horrible-analysis.md) — that's the reference gold-standard output showing the expected Critical / Warning / Info findings and Passed Checks table.
+
+**Don't have a plan yet?** Use the symptom-based routing in [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) to pick the right skill for what you have.
+
+---
+
 ## Installation
 
 ### Recommended: npx skills add
