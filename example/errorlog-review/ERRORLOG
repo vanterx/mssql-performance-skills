@@ -1,0 +1,99 @@
+2026-01-15 14:00:01.37 spid5s      Microsoft SQL Server 2019 (RTM-CU22) (KB5027702) - 15.0.4316.3 (X64) Jul 17 2023 14:09:33 Copyright (C) Microsoft Corporation  Enterprise Edition (64-bit) on Windows Server 2022 Standard 10.0 (Build 20348: ) (Hypervisor)
+2026-01-15 14:00:01.41 spid5s      UTC adjustment: -5:00
+2026-01-15 14:00:01.41 spid5s      (c) Microsoft Corporation.
+2026-01-15 14:00:01.41 spid5s      All rights reserved.
+2026-01-15 14:00:01.42 spid5s      Server process ID is 4821.
+2026-01-15 14:00:01.44 spid5s      System Manufacturer: 'VMware, Inc.', System Model: 'VMware Virtual Platform'.
+2026-01-15 14:00:01.44 spid5s      Authentication mode is MIXED.
+2026-01-15 14:00:01.45 spid5s      Logging SQL Server messages in file 'C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\Log\ERRORLOG'.
+2026-01-15 14:00:01.46 spid5s      The error log has been reinitialized. See the previous log for older entries.
+2026-01-15 14:00:01.47 spid5s      Registry startup parameters:
+2026-01-15 14:00:01.47 spid5s           -d C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\DATA\master.mdf
+2026-01-15 14:00:01.47 spid5s           -e C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\Log\ERRORLOG
+2026-01-15 14:00:01.47 spid5s           -l C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\DATA\mastlog.ldf
+2026-01-15 14:00:01.47 spid5s           -T 3226
+2026-01-15 14:00:01.47 spid5s           -T 4199
+2026-01-15 14:00:01.48 spid5s      Trace flag 3226 is set. This is an informational message only; no user action required.
+2026-01-15 14:00:01.48 spid5s      Trace flag 4199 is set. This is an informational message only; no user action required.
+2026-01-15 14:00:01.49 spid5s      SQL Server detected 1 sockets with 8 cores per socket and 16 logical processors per socket, 16 total logical processors; using 16 logical processors based on SQL Server licensing. This is an informational message; no user action is required.
+2026-01-15 14:00:01.52 spid5s      SQL Server is starting at normal priority base (=7). This is an informational message only. No user action is required.
+2026-01-15 14:00:01.55 spid5s      Detected 131072 MB of RAM. This is an informational message; no user action is required.
+2026-01-15 14:00:01.57 spid5s      Using conventional memory in the memory manager.
+2026-01-15 14:00:01.63 spid5s      Lock partitioning is enabled.  This is an informational message only. No user action is required.
+2026-01-15 14:00:02.11 spid5s      The service account is 'CONTOSO\svc-sqlengine'. This is an informational message; no user action is required.
+2026-01-15 14:00:02.22 spid5s      sys.databases.is_auto_update_stats_on = 1 for database 'SalesDB'.
+2026-01-15 14:00:03.44 spid5s      Default collation: SQL_Latin1_General_CP1_CI_AS (us_english 1033).
+2026-01-15 14:00:03.66 spid5s      The SQL Server Network Interface library could not register the Service Principal Name (SPN) for the SQL Server service.
+2026-01-15 14:00:05.01 spid7s      Starting up database 'master'.
+2026-01-15 14:00:05.22 spid19s     Starting up database 'mssqlsystemresource'.
+2026-01-15 14:00:05.44 spid19s     The resource database build version is 15.00.4316. This is an informational message only. No user action is required.
+2026-01-15 14:00:05.77 spid7s      Recovery is complete. This is an informational message only. No user action is required.
+2026-01-15 14:00:06.12 spid10s     Starting up database 'model'.
+2026-01-15 14:00:06.55 spid51s     Starting up database 'msdb'.
+2026-01-15 14:00:06.88 spid10s     Clearing tempdb database.
+2026-01-15 14:00:07.33 spid10s     Starting up database 'tempdb'.
+2026-01-15 14:00:07.88 spid26s     The Service Broker endpoint is in disabled or stopped state.
+2026-01-15 14:00:08.11 spid26s     The Database Mirroring endpoint is in disabled or stopped state.
+2026-01-15 14:00:08.44 spid26s     Service Broker manager has started.
+2026-01-15 14:00:09.01 spid44s     Starting up database 'SalesDB'.
+2026-01-15 14:00:09.88 spid44s     Starting up database 'ReportingDB'.
+2026-01-15 14:00:10.11 spid44s     Starting up database 'AdventureWorks2019'.
+2026-01-15 14:00:11.44 spid5s      Recovery is complete. This is an informational message only. No user action is required.
+2026-01-15 14:00:12.03 spid28s     Always On Availability Groups: The local replica of availability group 'AG1' is preparing to transition to the primary role in response to a request from the Windows Server Failover Cluster (WSFC) cluster. This is an informational message only. No user action is required.
+2026-01-15 14:00:12.44 spid28s     Always On Availability Groups: The availability group 'AG1' is changing to primary role. This is an informational message only. No user action is required.
+2026-01-15 14:00:13.11 spid5s      SQL Server is now ready for client connections. This is an informational message; no user action is required.
+2026-01-15 14:00:14.33 Logon       Error: 18456, Severity: 14, State: 38. Login failed for user 'AppUser'. Reason: Failed to open the explicitly specified database 'OldAppDB'. [CLIENT: 10.0.1.55]
+2026-01-15 14:00:14.45 Logon       Error: 18456, Severity: 14, State: 38. Login failed for user 'AppUser'. Reason: Failed to open the explicitly specified database 'OldAppDB'. [CLIENT: 10.0.1.55]
+2026-01-15 14:02:33.11 spid55s     Autogrow of file 'SalesDB_log' in database 'SalesDB' took 1244 milliseconds. Consider using ALTER DATABASE to set a fixed file size to avoid this delay.
+2026-01-15 14:15:01.88 Backup      Database backed up. Database: SalesDB, creation date(time): 2024/03/01(00:00:00), pages dumped: 441829, first LSN: 48374:3821:1, last LSN: 48374:4103:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\SalesDB_log_20260115_1415.bak'}). This is an informational message only. No user action is required.
+2026-01-15 14:20:01.44 Backup      Database backed up. Database: ReportingDB, creation date(time): 2024/05/15(00:00:00), pages dumped: 88220, first LSN: 22104:1021:1, last LSN: 22104:1122:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\ReportingDB_log_20260115_1420.bak'}). This is an informational message only. No user action is required.
+2026-01-15 14:25:03.77 spid55s     Autogrow of file 'SalesDB_log' in database 'SalesDB' took 1887 milliseconds. Consider using ALTER DATABASE to set a fixed file size to avoid this delay.
+2026-01-15 14:28:44.02 spid5s      SQL Server has encountered 1 occurrence(s) of I/O requests taking longer than 15 seconds to complete on file [E:\Data\AG1_SalesDB.mdf] in database [SalesDB] (database ID 7). The OS file handle is 0x000000000000016C. The offset of the latest long I/O is: 0x000003a00000.
+2026-01-15 14:28:50.18 spid5s      SQL Server has encountered 1 occurrence(s) of I/O requests taking longer than 15 seconds to complete on file [E:\Data\AG1_SalesDB_log.ldf] in database [SalesDB] (database ID 7). The OS file handle is 0x000000000000016E. The offset of the latest long I/O is: 0x00000004a80000.
+2026-01-15 14:29:11.04 spid5s      SQL Server has encountered 2 occurrence(s) of I/O requests taking longer than 15 seconds to complete on file [E:\Data\AG1_SalesDB.mdf] in database [SalesDB] (database ID 7). The OS file handle is 0x000000000000016C. The offset of the latest long I/O is: 0x0000022800000.
+2026-01-15 14:29:33.44 spid44s     Always On Availability Groups: The availability group 'AG1' has failed to take the necessary action. The primary availability replica encountered an error while attempting to update the availability group status information. Please refer to the SQL Server error log for details about this error.
+2026-01-15 14:31:58.07 spid5s      The availability group 'AG1' exceeded the health-check timeout of 30000 ms as part of the WSFC health-check. SQL Server will perform automatic failover.
+2026-01-15 14:32:05.12 spid28s     The lease between the availability group 'AG1' and the Windows Server Failover Cluster has expired. A connectivity problem occurred between the instance of SQL Server and the Windows Server Failover Cluster (WSFC). To determine whether the availability group is failing over correctly, check the corresponding availability group resource in the WSFC cluster.
+2026-01-15 14:32:08.34 spid28s     Always On Availability Groups: The local replica of availability group 'AG1' is changing roles from 'PRIMARY' to 'SECONDARY' because of an automatic failover in response to a request from the Windows Server Failover Cluster (WSFC) cluster. This is an informational message only. No user action is required.
+2026-01-15 14:32:09.01 spid28s     Always On Availability Groups: availability group 'AG1' is changing roles from PRIMARY to SECONDARY.
+2026-01-15 14:32:09.88 spid29s     Always On Availability Groups: The local replica of availability group 'AG1' is preparing to transition to the primary role in response to a request from the Windows Server Failover Cluster (WSFC) cluster. This is an informational message only. No user action is required.
+2026-01-15 14:32:12.44 spid29s     Always On Availability Groups: The availability group 'AG1' is changing to primary role. This is an informational message only. No user action is required.
+2026-01-15 14:33:01.11 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.22 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.33 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.41 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.54 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.66 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.78 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:01.89 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.01 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.12 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.22 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.33 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.44 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.55 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.66 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.77 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.88 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:02.99 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.11 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.22 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.33 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.44 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.55 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.67 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.78 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.89 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:33:03.99 Logon       Error: 18456, Severity: 14, State: 8. Login failed for user 'sa'. Reason: Password did not match that for the login provided. [CLIENT: 203.0.113.44]
+2026-01-15 14:35:22.44 spid51s     Always On Availability Groups: Replica 'AG1-SECONDARY\INST01' is now participating in the availability group. This is an informational message only. No user action is required.
+2026-01-15 14:35:23.01 spid51s     Always On Availability Groups: Availability database 'SalesDB' joining availability group 'AG1'. This is an informational message only. No user action is required.
+2026-01-15 14:35:23.88 spid51s     Always On Availability Groups: Availability database 'ReportingDB' joining availability group 'AG1'. This is an informational message only. No user action is required.
+2026-01-15 14:36:03.44 spid44s     Autogrow of file 'SalesDB_log' in database 'SalesDB' took 2033 milliseconds. Consider using ALTER DATABASE to set a fixed file size to avoid this delay.
+2026-01-15 14:38:15.11 Backup      Database backed up. Database: SalesDB, creation date(time): 2024/03/01(00:00:00), pages dumped: 441912, first LSN: 48374:5210:1, last LSN: 48374:5488:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\SalesDB_log_20260115_1438.bak'}). This is an informational message only. No user action is required.
+2026-01-15 14:42:09.88 spid5s      FILESTREAM: effective level = 0, configured level = 0, file system access share name = 'MSSQLSERVER'.
+2026-01-15 14:45:03.11 Backup      Database backed up. Database: ReportingDB, creation date(time): 2024/05/15(00:00:00), pages dumped: 88275, first LSN: 22104:1198:1, last LSN: 22104:1301:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\ReportingDB_log_20260115_1445.bak'}). This is an informational message only. No user action is required.
+2026-01-15 14:48:55.22 spid78s     Autogrow of file 'SalesDB_log' in database 'SalesDB' took 1671 milliseconds. Consider using ALTER DATABASE to set a fixed file size to avoid this delay.
+2026-01-15 14:50:01.33 Backup      Database backed up. Database: SalesDB, creation date(time): 2024/03/01(00:00:00), pages dumped: 441988, first LSN: 48374:6012:1, last LSN: 48374:6244:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\SalesDB_log_20260115_1450.bak'}). This is an informational message only. No user action is required.
+2026-01-15 14:58:44.03 spid5s      SQL Server has encountered 1 occurrence(s) of I/O requests taking longer than 15 seconds to complete on file [E:\Data\AG1_SalesDB.mdf] in database [SalesDB] (database ID 7). The OS file handle is 0x000000000000016C. The offset of the latest long I/O is: 0x0000054c00000.
+2026-01-15 15:00:01.22 Backup      Database backed up. Database: AdventureWorks2019, creation date(time): 2019/04/20(00:00:00), pages dumped: 25104, first LSN: 9841:2201:1, last LSN: 9841:2299:1, number of dump devices: 1, device information: (FILE=1, TYPE=DISK: {'\\BACKUPSRV\SQLBKP\AdventureWorks2019_log_20260115_1500.bak'}). This is an informational message only. No user action is required.
+2026-01-15 15:00:33.77 spid5s      SQL Server is terminating in response to a 'stop' request from Service Control Manager. This is an informational message only. No user action is required.

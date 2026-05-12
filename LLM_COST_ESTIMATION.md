@@ -45,6 +45,9 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlplan-deadlock` | ~2,400 |
 | `sqlplan-compare` | ~1,750 |
 | `sqlplan-batch` | ~1,500 |
+| `clusterlog-review` | ~3,200 |
+| `hadr-health-review` | ~2,900 |
+| `errorlog-review` | ~3,100 |
 
 ### Your input artifact
 

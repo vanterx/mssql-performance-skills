@@ -731,3 +731,5 @@ Always end the single-snapshot section with this table. Order: (a) emergency/poi
 - **sqltrace-review** — If `ASYNC_NETWORK_IO` (V6) or `OLEDB` (V11) is high, use a Profiler/XE trace to identify which specific queries generate the most of these waits.
 - **sqlconfig-review** — If `CXPACKET` (V3) is dominant and MAXDOP or Cost Threshold for Parallelism is misconfigured, use this skill to audit and correct the server-level settings.
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **clusterlog-review** — If HADR_WORK_QUEUE or HADR_SYNC_COMMIT waits are dominant (V3X range), correlate with WSFC CLUSTER.LOG to identify the cluster-level root cause (lease timeout, node eviction, network partition).
+- **hadr-health-review** — If AG-related waits appear, cross-reference with `sys.dm_hadr_*` DMV output to confirm replica sync state, redo queue depth, and secondary lag.

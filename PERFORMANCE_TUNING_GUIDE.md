@@ -19,6 +19,8 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
 | [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
+| [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 25 checks (L1–L25): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
+| [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
 
 ---
 
@@ -737,8 +739,11 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
 | `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
 | `R1–R20` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis | 20 |
+| `L1–L25` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals | 25 |
+| `H1–H22` | `hadr-health-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, and configuration | 22 |
+| `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
 
-**Total: 302 checks across all skills.**
+**Total: 377 checks across all skills.**
 
 ---
 

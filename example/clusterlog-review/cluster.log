@@ -1,0 +1,116 @@
+00002cc4.00001264::2026/01/15-14:20:00.001 INFO [RCM] Resource 'SQL Server Availability Group (AG1)' State: Online.
+00002cc4.00001264::2026/01/15-14:20:00.015 INFO [hadrag] Lease renewal successful. Next renewal in 10000 ms.
+00002cc4.00001264::2026/01/15-14:20:00.020 INFO [hadrag] IsAlive check passed. sp_server_diagnostics result: OK.
+00002cc4.00001264::2026/01/15-14:20:00.030 INFO [NM] Cluster network 'Cluster Network 1' state: Up. NODE1 interface: Online.
+00002cc4.00001264::2026/01/15-14:20:00.035 INFO [NM] Cluster network 'Cluster Network 1' state: Up. NODE2 interface: Online.
+00003dd5.00001300::2026/01/15-14:20:00.050 INFO [RCM] [NODE2] Resource 'SQL Server Availability Group (AG1)' State: Secondary. Health: OK.
+00002cc4.00001264::2026/01/15-14:20:10.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:20:10.010 INFO [hadrag] LooksAlive check passed.
+00003dd5.00001300::2026/01/15-14:20:15.050 INFO [hadrag] [NODE2] Replica connection state: CONNECTED. Endpoint: tcp://NODE1.domain.local:5022.
+00002cc4.00001264::2026/01/15-14:20:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:20:20.010 INFO [hadrag] IsAlive check passed.
+00002cc4.00001264::2026/01/15-14:20:30.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:20:30.010 INFO [hadrag] LooksAlive check passed.
+00003dd5.00001300::2026/01/15-14:20:35.050 INFO [RCM] [NODE2] AG1 secondary health: OK. Redo queue: 0 KB.
+00002cc4.00001264::2026/01/15-14:20:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:20:50.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:21:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:21:00.010 INFO [hadrag] IsAlive check passed. Duration: 52 ms.
+00003dd5.00001300::2026/01/15-14:21:05.050 INFO [RCM] [NODE2] Resource 'SQL Server Availability Group (AG1)' State: Secondary. Health: OK.
+00002cc4.00001264::2026/01/15-14:21:10.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:21:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:21:30.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:21:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:22:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:22:00.010 INFO [hadrag] IsAlive check passed. Duration: 48 ms.
+00003dd5.00001300::2026/01/15-14:22:05.050 INFO [RCM] [NODE2] AG1 replica: CONNECTED. Send queue: 0 KB.
+00002cc4.00001264::2026/01/15-14:22:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:22:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:23:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:23:00.010 INFO [hadrag] IsAlive check passed. Duration: 55 ms.
+00003dd5.00001300::2026/01/15-14:23:10.050 INFO [RCM] [NODE2] AG1 secondary: SYNCHRONIZED. Redo queue: 0 KB.
+00002cc4.00001264::2026/01/15-14:23:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:23:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:24:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:24:00.010 INFO [hadrag] IsAlive check passed. Duration: 60 ms.
+00002cc4.00001264::2026/01/15-14:24:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:24:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:25:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:25:00.010 INFO [hadrag] IsAlive check passed. Duration: 58 ms.
+00003dd5.00001300::2026/01/15-14:25:05.050 INFO [RCM] [NODE2] AG1 secondary health: OK.
+00002cc4.00001264::2026/01/15-14:25:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:25:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:26:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:26:00.010 INFO [hadrag] IsAlive check passed. Duration: 62 ms.
+00002cc4.00001264::2026/01/15-14:26:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:26:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:27:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:27:00.010 INFO [hadrag] IsAlive check passed. Duration: 59 ms.
+00003dd5.00001300::2026/01/15-14:27:10.050 INFO [RCM] [NODE2] AG1 replica: CONNECTED. Redo queue: 0 KB.
+00002cc4.00001264::2026/01/15-14:27:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:27:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:28:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:28:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:28:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:29:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:29:00.010 INFO [hadrag] IsAlive check passed. Duration: 71 ms.
+00003dd5.00001300::2026/01/15-14:29:15.050 INFO [RCM] [NODE2] AG1 secondary: SYNCHRONIZED.
+00002cc4.00001264::2026/01/15-14:29:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:29:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:30:00.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:30:00.010 INFO [hadrag] IsAlive check passed. Duration: 79 ms.
+00002cc4.00001264::2026/01/15-14:30:20.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:30:40.001 INFO [hadrag] Lease renewal successful.
+00002cc4.00001264::2026/01/15-14:31:00.001 INFO [hadrag] Lease renewal attempt. Scheduler latency: 1850 ms.
+00002cc4.00001264::2026/01/15-14:31:00.010 INFO [hadrag] IsAlive check passed. Duration: 210 ms.
+00002cc4.00001264::2026/01/15-14:31:10.001 WARN [hadrag] Lease renewal delayed. Scheduler not available. Latency: 4200 ms.
+00002cc4.00001264::2026/01/15-14:31:20.001 WARN [hadrag] Lease renewal delayed. Scheduler not available. Latency: 6800 ms.
+00002cc4.00001264::2026/01/15-14:31:30.001 WARN [hadrag] Lease renewal delayed. Scheduler not available. Latency: 9100 ms.
+00003dd5.00001300::2026/01/15-14:31:35.050 INFO [RCM] [NODE2] AG1 secondary: SYNCHRONIZED.
+00002cc4.00001264::2026/01/15-14:31:40.001 WARN [hadrag] Lease renewal failed. SQL Server scheduler not available. Elapsed since last renewal: 15200 ms.
+00002cc4.00001264::2026/01/15-14:31:42.005 ERR  [hadrag] Lease renewal failed — elapsed time approaching HealthCheckTimeout. Last successful renewal: 14:31:00.001.
+00002cc4.00001264::2026/01/15-14:31:44.100 ERR  [hadrag] Lease renewal failed. Elapsed: 18100 ms. HealthCheckTimeout: 20000 ms.
+00002cc4.00001264::2026/01/15-14:31:45.200 ERR  [RCM]   Resource DLL API call (LooksAlive) for 'SQL Server Availability Group (AG1)' returned after 62000 ms. DllWatchdogTimeout = 60000 ms.
+00002cc4.00001264::2026/01/15-14:31:55.100 ERR  [hadrag] Lease renewal failed — elapsed 20050 ms exceeds HealthCheckTimeout 20000 ms.
+00002cc4.00001264::2026/01/15-14:31:58.012 ERR  [hadrag] IsAlive check failed. HealthCheckTimeout exceeded. sp_server_diagnostics did not return within 30000 ms.
+00002cc4.00001264::2026/01/15-14:31:59.400 ERR  [hadrag] SQL Server resource failure imminent. Initiating resource failure sequence.
+00002cc4.00001264::2026/01/15-14:32:01.100 ERR  [hadrag] Lease Thread terminated. Lease time expired. Failover required.
+00002cc4.00001264::2026/01/15-14:32:01.543 ERR  [RES]   SQL Server Availability Group (AG1): [hadrag] Lease expired. Offline call issued.
+00002cc4.00001264::2026/01/15-14:32:01.600 ERR  [RCM]   Resource 'SQL Server Availability Group (AG1)': TransitionToState(Online-->Offline) OfflineCallIssued.
+00002cc4.00001264::2026/01/15-14:32:01.750 ERR  [hadrag] AG1: PRIMARY_ROLE transitioning to RESOLVING_NORMAL. Reason: Lease expiry.
+00002cc4.00001264::2026/01/15-14:32:02.000 INFO [NODE]  NODE2 notified: AG1 primary role lost on NODE1. Initiating failover.
+00003dd5.00001300::2026/01/15-14:32:02.100 INFO [hadrag] [NODE2] AG1: SECONDARY_ROLE transitioning to PRIMARY_ROLE. Reason: Failover from NODE1.
+00003dd5.00001300::2026/01/15-14:32:02.200 INFO [RCM]   [NODE2] Resource 'SQL Server Availability Group (AG1)': TransitionToState(Secondary-->OnlinePending).
+00002cc4.00001264::2026/01/15-14:32:02.300 INFO [RCM]   Resource 'SQL Server Availability Group (AG1)' on NODE1: Offline.
+00003dd5.00001300::2026/01/15-14:32:03.400 WARN [NODE]  Missed heartbeat #1 from NODE1. (SameSubnetThreshold = 3)
+00002cc4.00001264::2026/01/15-14:32:03.500 INFO [hadrag] AG1 offline on NODE1. Role: None.
+00003dd5.00001300::2026/01/15-14:32:05.500 WARN [NODE]  Missed heartbeat #2 from NODE1.
+00003dd5.00001300::2026/01/15-14:32:06.100 INFO [hadrag] [NODE2] Waiting for local SQL Server to accept AG1 as primary.
+00003dd5.00001300::2026/01/15-14:32:07.500 WARN [NODE]  Missed heartbeat #3 from NODE1 — SameSubnetThreshold reached.
+00003dd5.00001300::2026/01/15-14:32:07.600 INFO [NODE]  NODE1 declared unresponsive. Votes recalculated: NODE2=1, Witness=1. Quorum maintained.
+00003dd5.00001300::2026/01/15-14:32:40.200 INFO [hadrag] [NODE2] AG1: PRIMARY_ROLE established. Databases online.
+00003dd5.00001300::2026/01/15-14:32:40.500 INFO [RCM]   [NODE2] Resource 'SQL Server Availability Group (AG1)': TransitionToState(OnlinePending-->Online). Duration: 38.3 sec.
+00003dd5.00001300::2026/01/15-14:32:40.600 INFO [RCM]   [NODE2] AG1 is now Online on NODE2.
+00002cc4.00001264::2026/01/15-14:33:00.001 INFO [RCM]   NODE1 cluster service restarting.
+00002cc4.00001264::2026/01/15-14:33:15.000 INFO [NODE]  NODE1 rejoined cluster membership. Votes: {NODE1=1, NODE2=1, Witness=1}.
+00002cc4.00001264::2026/01/15-14:33:20.001 INFO [hadrag] AG1 secondary role accepted on NODE1.
+00002cc4.00001264::2026/01/15-14:33:20.100 INFO [RCM]   Resource 'SQL Server Availability Group (AG1)' on NODE1: Secondary (not hosting primary).
+00003dd5.00001300::2026/01/15-14:33:25.050 INFO [hadrag] [NODE2] AG1 primary: Replica NODE1 connection state: CONNECTING.
+00003dd5.00001300::2026/01/15-14:33:28.100 INFO [hadrag] [NODE2] AG1 primary: Replica NODE1 connection state: CONNECTED.
+00003dd5.00001300::2026/01/15-14:34:00.001 INFO [hadrag] [NODE2] Lease renewal successful. New primary established.
+00003dd5.00001300::2026/01/15-14:34:00.010 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 45 ms.
+00002cc4.00001264::2026/01/15-14:34:15.001 INFO [hadrag] [NODE1-secondary] Lease renewal on secondary: OK.
+00003dd5.00001300::2026/01/15-14:34:30.001 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 44 ms.
+00003dd5.00001300::2026/01/15-14:35:00.001 INFO [RCM]   [NODE2] AG1 health: Online. Primary: NODE2. Secondary: NODE1 (SYNCHRONIZED).
+00002cc4.00001264::2026/01/15-14:35:15.001 INFO [hadrag] [NODE1-secondary] Redo queue: 0 KB. All databases synchronized.
+00003dd5.00001300::2026/01/15-14:36:00.001 INFO [hadrag] [NODE2] Lease renewal successful.
+00003dd5.00001300::2026/01/15-14:36:00.010 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 43 ms.
+00003dd5.00001300::2026/01/15-14:36:30.001 INFO [RCM]   [NODE2] AG1 is Online. All replicas connected.
+00003dd5.00001300::2026/01/15-14:37:00.001 INFO [hadrag] [NODE2] Lease renewal successful.
+00003dd5.00001300::2026/01/15-14:37:00.010 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 42 ms.
+00003dd5.00001300::2026/01/15-14:38:00.001 INFO [hadrag] [NODE2] Lease renewal successful.
+00003dd5.00001300::2026/01/15-14:38:00.010 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 44 ms.
+00002cc4.00001264::2026/01/15-14:38:30.001 INFO [hadrag] [NODE1-secondary] Replica: SYNCHRONIZED. Redo queue: 0 KB.
+00003dd5.00001300::2026/01/15-14:39:00.001 INFO [hadrag] [NODE2] Lease renewal successful.
+00003dd5.00001300::2026/01/15-14:39:00.010 INFO [hadrag] [NODE2] IsAlive check passed. Duration: 47 ms.
+00003dd5.00001300::2026/01/15-14:40:00.001 INFO [RCM]   [NODE2] AG1 health: Online. All replicas SYNCHRONIZED.
