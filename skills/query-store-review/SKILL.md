@@ -397,3 +397,4 @@ Always end the report with this table. Order: (a) fixes that unblock others firs
 - **sqlstats-review** — Run `SET STATISTICS IO, TIME ON` on regressed queries to cross-reference I/O metrics with Query Store runtime stats.
 - **sqltrace-review** — If a Profiler/XE trace captured the same workload period, cross-reference event-level patterns with Query Store aggregates.
 - **sqlwait-review** — If Query Store shows widespread memory or I/O waits (Q19–Q21), run wait statistics analysis at the server level to confirm the bottleneck category.
+- **hadr-health-review** — After an AG failover, check `sys.dm_hadr_*` state to confirm the new primary is healthy before tuning regressed queries on a replica that may still be catching up.

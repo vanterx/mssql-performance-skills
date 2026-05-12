@@ -1,0 +1,249 @@
+---
+name: clusterlog-review
+description: Analyzes Windows Server Failover Cluster (WSFC) CLUSTER.LOG files for Always On Availability Group root-cause diagnosis. Use this skill when an availability group has gone offline, a failover occurred unexpectedly, or a node was evicted, and you need to identify the WSFC-level cause that SQL Server DMVs cannot see. Applies 25 checks (L1–L25) covering lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, and AG resource transitions.
+triggers:
+  - /clusterlog-review
+---
+
+# WSFC Cluster Log Review Skill
+
+## Purpose
+
+Analyze Windows Server Failover Cluster (WSFC) CLUSTER.LOG files to diagnose Always On
+Availability Group failures at the cluster level — the layer below SQL Server DMVs. Applies
+25 checks (L1–L25) across four categories:
+
+- **L1–L8** — File-wide patterns: lease timeouts, health check failures, RHS crashes, error
+  bursts, repeated failover cycling, quorum loss, node eviction, log time gaps
+- **L9–L17** — AG resource checks: offline transitions, SQL connectivity loss, forced failovers,
+  long pending states, DLL init failures, API timeouts, cascade failures, primary role loss,
+  replica disconnection
+- **L18–L22** — Network and node: partition/split-brain, NIC failure, heartbeat timeout,
+  witness failure, node isolation
+- **L23–L25** — Configuration signals: VerboseLogging=0, SeparateMonitor absent, incomplete
+  node coverage
+
+## Input
+
+Accept any of:
+
+- **File path** — path to `CLUSTER.LOG` (e.g., `C:\Windows\Cluster\Reports\CLUSTER.LOG`)
+- **Inline paste** — raw CLUSTER.LOG content pasted directly into chat
+- **Natural language description** — describe symptoms ("the AG went offline at 14:32,
+  SQL error log shows lease expiry")
+
+For full analysis, the log should cover at least the 10 minutes before the incident
+and include entries from all cluster nodes. If only a partial extract is available, note which
+time range and nodes are covered and flag L25 if node coverage appears incomplete.
+
+### Log Entry Format
+
+WSFC log entries follow this pattern:
+
+```
+<tid>.<pid>::<YYYY>/<MM>/<DD>-<HH>:<MM>:<SS>.<ms> <LEVEL> [<COMPONENT>] <message>
+```
+
+Key components:
+- `[RES]` — Resource DLL host (hadrres.dll operations)
+- `[hadrag]` — AG-specific resource agent inside RES
+- `[RHS]` — Resource Hosting Subsystem (manages RES process lifecycle)
+- `[RCM]` — Resource Control Manager (orchestrates state transitions)
+- `[NM]` — Network Manager
+- `[NODE]` — Node membership and heartbeat
+- `ERR` / `WARN` / `INFO` — Severity prefixes in log lines
+
+---
+
+## Thresholds Reference
+
+| Threshold | Value | Used by |
+|-----------|-------|---------|
+| Error burst window | >10 ERR lines in 5 min → Critical; >5 → Warning | L4 |
+| Failover cycling | ≥3 group moves in 30 min → Critical; ≥2 → Warning | L5 |
+| Log time gap | >30 min → Critical; >5 min → Warning | L8 |
+| Pending state duration | >120 sec → Critical; >30 sec → Warning | L12 |
+| Lease timeout | 20 sec (SQL Server default HealthCheckTimeout for lease) | L1 |
+| Health check timeout | 30 sec (SQL Server default HealthCheckTimeout) | L2 |
+| Heartbeat timeout | 3 missed heartbeats (WSFC CrossSubnetDelay × CrossSubnetThreshold) | L20 |
+
+---
+
+## File-Wide Pattern Checks (L1–L8)
+
+Evaluate these first — they reveal root causes that explain all downstream AG failures.
+### L1 — Lease Timeout
+- **Trigger:** Log contains `[hadrag] Lease Thread terminated`, `lease time expired`, `HealthCheckTimeout` associated with a lease expiry message, or `LeaseExpired` in `[RES]` or `[hadrag]` context
+- **Severity:** Critical — lease expiry causes an immediate AG resource failure with no grace period
+- **Fix:** Lease timeout indicates the SQL Server health check thread did not respond within the lease window (see Thresholds Reference). Root causes: (1) SQL Server scheduler starvation — check for long-running queries blocking the health thread; (2) memory pressure causing paging — review sys.dm_os_memory_clerks; (3) storage I/O latency > 10 ms on the system drive — check Windows Performance Monitor; (4) if underlying cause is none of the above, increase `sp_server_diagnostics` timeout via `CLUSTER_DIAGNOSTICS_TIMEOUT` or raise `HealthCheckTimeout` in the AG resource properties.
+### L2 — Health Check Failure
+- **Trigger:** Log contains `IsAlive check failed`, `LooksAlive check failed`, `HealthCheckTimeout`, or `sp_server_diagnostics` returning a failure state (`STATE = 3` or `STATE = 4`) in `[RES]`/`[hadrag]` messages
+- **Severity:** Critical — consecutive health check failures trigger resource restart or failover
+- **Fix:** Identify whether LooksAlive or IsAlive failed. LooksAlive failures (process-level ping) indicate SQL Server process termination or severe hangs. IsAlive failures (sp_server_diagnostics query) indicate scheduler starvation, I/O hangs, or insufficient health check timeout. Capture `sys.dm_os_ring_buffers` for the incident time and review the SQL ERRORLOG for the matching `SPID N` error.
+### L3 — RHS Process Crash
+- **Trigger:** Log contains `RHS process terminated`, `RHS.EXE terminated unexpectedly`, `creating new RHS process`, `rhs.exe` exit in `[RHS]` context, or `RHS exiting` / `unhandled exception in RHS`
+- **Severity:** Critical — RHS crash causes all resources hosted in that process to go offline
+- **Fix:** RHS crash is a Windows-level failure, not SQL Server. Capture the Windows Application and System event logs at the incident time. Look for `Event ID 1146` (RHS terminated) and corresponding Dr. Watson / crash dump. Common causes: a resource DLL (hadrres.dll or another DLL) threw an unhandled exception, or a third-party DLL was loaded into RHS and faulted. Enable `SeparateMonitor` on the AG resource to isolate hadrres.dll in its own RHS process (see L24).
+### L4 — Error Burst Density
+- **Trigger:** More than 5 ERR-level lines appear within any 5-minute window in the log
+- **Severity:** Warning if >5 ERR lines in 5 min; Critical if >10 ERR lines in 5 min (see Thresholds Reference)
+- **Fix:** An error burst signals that multiple subsystems are failing simultaneously — often the symptom of a single root cause (L1, L6, L18). Identify the first ERR line in the burst — that is the originating failure. All subsequent ERRs in the burst are usually cascades. Fix the root cause first; the cascade errors will stop.
+### L5 — Repeated Failover Cycling
+- **Trigger:** The log contains ≥2 `[RCM]` or `[hadrag]` group Move, Online, or Offline events for the same AG resource within any 30-minute window
+- **Severity:** Warning if ≥2 moves in 30 min; Critical if ≥3 moves in 30 min (see Thresholds Reference)
+- **Fix:** Rapid cycling means the AG resource goes online, fails again, and attempts recovery repeatedly. This exhausts `MaxRestarts` and eventually leaves the AG permanently offline. Root cause is almost always L1, L2, or L18 — a recurring condition that fails every recovery attempt. Identify and fix the root cause before the next failover window. Consider temporarily suspending the AG resource to prevent further cycling while the root cause is resolved.
+### L6 — Quorum Loss
+- **Trigger:** Log contains `quorum loss`, `quorum not achieved`, `no quorum`, `lost quorum`, or `cluster service stopping — no quorum` in any component
+- **Severity:** Critical — quorum loss stops the cluster service on all nodes, taking all AG resources offline
+- **Fix:** Identify how many votes were lost. Review which nodes are in the log — if a majority-node-set configuration lost too many nodes, quorum fails. Immediate action: if a node is temporarily isolated, restore network connectivity. If a witness (disk/FSW/cloud) is unavailable, fix the witness first (see L21). Long-term: review quorum configuration — avoid even-node clusters without a witness.
+### L7 — Node Eviction
+- **Trigger:** Log contains node eviction, `removing node`, `node was removed from membership`, `evicted from cluster`, or `NodeMembership` showing a node leaving in `[NODE]` or `[NM]` context
+- **Severity:** Critical — node eviction means the cluster forcibly removed a node from membership, ending all resources that were primary on that node
+- **Fix:** Node eviction is caused by sustained communication failure (heartbeat timeout, network partition) or manual eviction. Check `[NODE]` entries immediately before the eviction for heartbeat failures (L20) or network partition signals (L18). If eviction was manual, the cluster is operating as expected. If unexpected, review NIC bonding configuration and cross-subnet latency.
+### L8 — Log Time Gap
+- **Trigger:** Consecutive log entries have a timestamp gap larger than 5 minutes with no intervening entries from any component
+- **Severity:** Warning if >5 min; Critical if >30 min (see Thresholds Reference)
+- **Fix:** A large time gap means the cluster log was not recording events — either the cluster service stopped, the node was powered off, or VerboseLogging was too low to capture events at the right frequency (see L23). If the gap coincides with the incident time, critical diagnostic data is missing. Retrieve CLUSTER.LOG from all nodes — one node may have continued logging while another was silent. Enable verbose logging proactively on all cluster nodes.
+
+---
+
+## AG Resource Checks (L9–L17)
+
+These checks fire on SQL Server AG-specific resource events within the WSFC log layer.
+### L9 — AG Offline Transition
+- **Trigger:** Log contains `TransitionToState ... Online-->Offline`, `TransitionToState ... OnlinePending-->Offline`, `OfflineCallIssued`, or `resource going offline` in `[RCM]` or `[hadrag]` for an AG resource
+- **Severity:** Critical if transition source is Online (unexpected); Warning if transition source is OnlinePending (resource never completed initialization)
+- **Fix:** The AG resource transitioned to Offline. Identify whether the transition was initiated by WSFC (health check failure — see L2) or by SQL Server itself (the AG resource DLL called OfflineResource). If initiated by WSFC: fix L1 or L2. If initiated by the DLL: capture the `[hadrag]` log entries immediately before the transition — they explain the SQL-side reason (replica disconnect, data sync failure, or SQL Server error).
+### L10 — SQL Connectivity Loss
+- **Trigger:** Log contains `Disconnect from SQL Server`, `SQL Server connection failed`, `ODBC error`, or `SqlConnect failed` in `[hadrag]` or `[RES]` context
+- **Severity:** Critical — loss of connectivity between hadrres.dll and the local SQL Server instance means health checks cannot run and the AG resource will fail
+- **Fix:** The resource DLL connects to SQL Server on the local loopback to run health checks. Failure means: (1) SQL Server service is stopped or starting — check Windows Service Control Manager; (2) SQL Server is overloaded and not accepting new connections — check for max connections reached (`sys.dm_exec_sessions` vs. `max connections`); (3) the dedicated admin connection (DAC) is in use — hadrres.dll uses a regular connection, not DAC, so this is not a DAC issue. Restart SQL Server if terminated unexpectedly.
+### L11 — Forced Failover
+- **Trigger:** Log contains `forced failover` in `[hadrag]`, `[RCM]`, or `[RES]` context, or `FAILOVER_MODE = MANUAL` paired with an Online event on a formerly secondary node
+- **Severity:** Warning — forced failover may result in data loss if the secondary was not synchronized
+- **Fix:** Determine whether the forced failover was administrator-initiated or automatic. If automatic: this should not happen in a normal AG — a forced failover implies the primary failed and automatic failover was configured. Check whether data loss occurred by comparing `last_commit_lsn` on the former secondary (now primary) with the last confirmed `last_hardened_lsn` on the old primary. If administrator-initiated: document the reason and verify the replica is in synchronized state.
+### L12 — Long Pending State
+- **Trigger:** An AG resource remains in `OnlinePending` or `OfflinePending` state for longer than the pending state thresholds (see Thresholds Reference) — calculated from the timestamp of the Pending entry to the next state transition entry
+- **Severity:** Warning if >30 sec in pending; Critical if >120 sec (see Thresholds Reference)
+- **Fix:** Pending states longer than expected indicate the resource DLL's Online or Offline call is not returning promptly. For OnlinePending: hadrres.dll is waiting for SQL Server to complete AG initialization — check SQL ERRORLOG for slow database recovery or role change. For OfflinePending: the DLL is waiting for the AG to gracefully suspend — if the wait is very long, a KILL or forced offline may be issued by WSFC, causing a dirty shutdown.
+### L13 — hadrres.dll Init Failure
+- **Trigger:** Log contains DLL load failure, `hadrres.dll` initialization error, `failed to initialize`, or `DLL could not be loaded` in `[RES]` or `[RHS]` context
+- **Severity:** Critical — the AG resource DLL cannot run, so the AG resource cannot come online on this node
+- **Fix:** DLL init failure is usually caused by a missing dependency (Visual C++ runtime, Windows Server feature) or a corrupted hadrres.dll. Steps: (1) verify SQL Server is fully installed and the path in the cluster resource properties points to the correct hadrres.dll version; (2) check the Windows Application event log for DLL load errors; (3) run `sfc /scannow` to check for corrupted system files; (4) if after a SQL Server patch, the cluster resource DLL path may need to be updated manually.
+### L14 — Resource DLL API Timeout
+- **Trigger:** Log contains `API call timed out`, `Resource DLL returned ... after ... ms`, or `Dll timeout` in `[RCM]` or `[RHS]` context for an AG resource
+- **Severity:** Warning — if the DLL API timeout repeats, WSFC will declare the resource failed
+- **Fix:** The resource DLL took longer than the configured DllWatchdogTimeout to respond to a WSFC API call (Online, Offline, LooksAlive, IsAlive). Caused by the same conditions as L1 and L2 — SQL Server scheduler starvation or I/O hangs. Correlate the timeout timestamp with SQL Server ERRORLOG. If timeouts recur, raise the cluster resource `DllWatchdogTimeout` value or fix the underlying SQL Server performance issue.
+### L15 — Cascade Across AGs
+- **Trigger:** Multiple distinct AG resource names appear in ERR lines within the same 5-minute window — indicating more than one AG failed concurrently
+- **Severity:** Warning — simultaneous multi-AG failure indicates a shared infrastructure failure (network partition, node failure) rather than an AG-specific issue
+- **Fix:** Multiple AGs failing at the same time rules out AG-specific tuning as the solution. Focus on the shared infrastructure: network (L18, L19), node health (L7), or quorum (L6). Identify which AG failed first — that is the originating AG; the others are cascades caused by the same underlying event. Fix the root infrastructure issue.
+### L16 — Primary Role Loss
+- **Trigger:** Log contains `[hadrag]` messages showing the primary replica transitioning to Resolving or Secondary role without a corresponding planned failover command
+- **Severity:** Warning — unexpected primary role loss means the AG is momentarily without a primary; all write workloads will fail
+- **Fix:** Unexpected primary role loss is caused by WSFC declaring the AG resource offline (see L1, L2, L9) or by a network split that caused the primary to lose quorum. Check whether a secondary promoted to primary simultaneously — if so, a failover completed. If no secondary promoted, the AG is in a Resolving state and requires manual intervention to bring a replica online. Review L6 for quorum loss.
+### L17 — Replica Disconnection
+- **Trigger:** Log contains `DISCONNECTED`, `replica disconnected`, or connectivity failure messages in `[hadrag]` or `[RES]` context that refer to a remote replica endpoint
+- **Severity:** Warning — a disconnected replica means data is not flowing to that secondary; during failover, the disconnected replica will have a stale copy
+- **Fix:** Replica disconnection is a network-layer event — the AG mirroring endpoint (typically TCP 5022) cannot reach the remote replica. Check: (1) firewall rules on port 5022; (2) SQL Server Database Mirroring Endpoint is in STARTED state on both replicas; (3) network latency and packet loss between nodes; (4) DNS resolution for the AG listener and endpoint addresses. Run `/sqlwait-review` and check for HADR_SYNC_COMMIT and HADR_WORK_QUEUE waits that signal the send queue is backing up.
+
+---
+
+## Network and Node Checks (L18–L22)
+### L18 — Network Partition / Split-Brain
+- **Trigger:** Log contains `network partition`, `split brain`, `lost quorum due to network`, or `unable to communicate with a quorum of nodes` in any component
+- **Severity:** Critical — split-brain means two node subsets each believe they hold quorum; only the subset with a majority/witness actually holds it; the other loses all resources
+- **Fix:** Network partition is a physical or virtual network failure. Immediate: identify which subnet was lost. Check NIC bonding/teaming configuration — a single physical NIC for cluster heartbeats is a single point of failure. Check switch VLAN configuration. Long-term: implement redundant NICs for the cluster network, configure multiple cluster networks, and ensure the heartbeat network is dedicated (not shared with SQL client traffic).
+### L19 — Cluster Network Interface Failure
+- **Trigger:** Log contains `cluster network` offline, NIC failure, `network interface`, `adapter`, or `NetworkInterface` going to failed state in `[NM]` context
+- **Severity:** Warning — a NIC failure degrades cluster network redundancy; if the remaining network also fails, it becomes L18
+- **Fix:** A cluster network interface failed. Check Windows Device Manager and the System event log on the affected node for NIC driver errors (Event ID 27, 32). Common causes: cable failure, switch port failure, NIC driver bug, or power management putting the NIC in a low-power state. For VMs: check vSwitch configuration and the hypervisor's virtual NIC health. Replace or repair the hardware, then ensure the cluster network is verified healthy in Failover Cluster Manager before the next planned maintenance.
+### L20 — Heartbeat Timeout
+- **Trigger:** Log contains `missed heartbeats`, `heartbeat timeout`, `node is not responding`, or `connectivity timeout between nodes` in `[NODE]` or `[NM]` context — particularly when the count of missed heartbeats reaches or exceeds the CrossSubnetThreshold or SameSubnetThreshold (see Thresholds Reference)
+- **Severity:** Critical if the node is subsequently evicted; Warning if heartbeats resume before eviction
+- **Fix:** Node heartbeats are the cluster's mechanism for detecting node failures. Missed heartbeats are caused by: (1) network congestion or latency spike on the heartbeat network; (2) node CPU starvation (100% CPU prevents the heartbeat thread from running); (3) memory pressure causing paging on the heartbeat buffer. Tune `CrossSubnetDelay` and `CrossSubnetThreshold` for geographically distributed clusters (higher latency = higher threshold needed). Do not tune same-subnet thresholds unless explicitly recommended by Microsoft — reducing them increases false evictions.
+### L21 — Witness Access Failure
+- **Trigger:** Log contains disk witness, file share witness, or cloud witness failure — phrases such as `witness resource failed`, `disk witness offline`, `cannot access file share witness`, or `cloud witness` errors in `[RES]` or `[RCM]`
+- **Severity:** Critical — without the witness, an even-node cluster cannot achieve quorum after any single node failure
+- **Fix:** For disk witness: check that the witness disk is online in Disk Management on all nodes; verify the disk's cluster resource is Online. For file share witness: verify the UNC path is accessible from all nodes and the cluster service account has write permissions. For cloud witness: verify Azure storage account connectivity (TCP 443 outbound to `*.blob.core.windows.net`), and that the storage account key in the cluster configuration matches the current key.
+### L22 — Node Isolation
+- **Trigger:** Log contains `node isolated`, `unable to communicate with` followed by multiple node names, or `all communication lost` for a node in `[NODE]` or `[NM]` context
+- **Severity:** Critical — an isolated node cannot vote in quorum, and all primary resources on it will fail over (or fail entirely if quorum is lost)
+- **Fix:** Node isolation is the most severe form of L18/L20 — the node has lost communication with all peers simultaneously. Check all network adapters on the isolated node. If it is a VM, check the hypervisor host's network health. If a physical host, check switch port configuration. If the node recovers connectivity, WSFC should automatically re-admit it to membership. If the node is permanently isolated, evict it from the cluster and re-add after restoring connectivity.
+
+---
+
+## Configuration Signal Checks (L23–L25)
+### L23 — VerboseLogging = 0 (Sparse Events)
+- **Trigger:** The log contains fewer than 20 entries per minute in the period surrounding the incident, or contains `VerboseLogging = 0` or `VerboseLogging disabled` explicitly, or critical diagnostic context (API call durations, resource state details) is absent from entries that would normally include it
+- **Severity:** Info — VerboseLogging=0 does not cause failures but reduces diagnostic detail
+- **Fix:** Enable verbose logging before the next maintenance window: `(Get-ClusterResource "AG Resource Name") | Set-ClusterParameter VerboseLogging 1`. Verbose logging captures API call durations, state transition details, and health check results that are essential for post-incident diagnosis. Note that verbose logging increases disk I/O for the cluster log on busy clusters — test the disk impact before enabling in production.
+### L24 — SeparateMonitor Not Set
+- **Trigger:** The log contains multiple resource DLL entries from the same RHS process (same thread ID prefix) — indicating hadrres.dll shares rhs.exe with other resource DLLs, and `SeparateMonitor` is not enabled for the AG resource
+- **Severity:** Info — SeparateMonitor isolates hadrres.dll in its own RHS process; without it, a fault in any other DLL in the shared process can crash the AG resource (see L3)
+- **Fix:** Enable SeparateMonitor on the AG resource: `(Get-ClusterResource "AG Resource Name") | Set-ClusterParameter SeparateMonitor 1`. This causes the AG resource DLL to run in a dedicated rhs.exe process. An RHS crash in another resource DLL will no longer affect the AG. This is a Microsoft best practice for SQL Server AG resources on Windows Server 2012 R2 and later.
+### L25 — Missing Node Coverage
+- **Trigger:** Log entries reference nodes or IP addresses not seen in the file-wide node list, or the expected number of cluster nodes (from `[NODE]` membership entries) is greater than the number of distinct node identifiers that appear as log entry sources
+- **Severity:** Info — incomplete node coverage means the analysis cannot rule out failures on uncovered nodes
+- **Fix:** CLUSTER.LOG is per-node — each node writes its own log. Collect logs from all cluster nodes for the same time window: `Get-ClusterLog -Node * -Destination C:\ClusterLogs -TimeSpan 60`. Without logs from all nodes, an isolated node failure or network partition seen only from the failing node's perspective may not be visible. State which nodes are covered in the analysis summary.
+
+---
+
+## Output Format
+
+Structure the report as follows. The reference output in
+`example/clusterlog-review/cluster-analysis.md` demonstrates the expected quality level.
+
+```
+## Cluster Log Analysis
+
+### Summary
+- X Critical, Y Warnings, Z Info
+- Time range: [first timestamp] – [last timestamp]
+- Nodes covered: [node list from log entries]
+- Highest-risk finding: [check name and check ID]
+
+### Critical Issues
+### [C1 — L1] Lease Timeout — ag_primary (14:32:01)
+- **Observed:** [specific log lines, timestamps, and component tags]
+- **Impact:** [why this matters at runtime — what failed and what the user experienced]
+- **Fix:** [concrete action referencing the check fix steps]
+
+### Warnings
+### [W1 — L4] Error Burst — 8 ERR lines in 3 min (14:31:58–14:34:47)
+- **Observed:** ...
+- **Impact:** ...
+- **Fix:** ...
+
+### Info
+### [I1 — L23] VerboseLogging = 0 — sparse event density
+- **Observed:** ...
+- **Impact:** ...
+- **Fix:** ...
+
+### Passed Checks
+| Check | Result |
+|-------|--------|
+| L6 — Quorum Loss | PASS — no quorum loss entries in log |
+| L7 — Node Eviction | PASS — no eviction events found |
+```
+
+**Labeling convention:** Output labels use `[C1]`, `[W1]`, `[I1]` — not raw check IDs.
+Check IDs (`L1`, `L9`) appear in parentheses after the label in finding headers.
+
+Each finding states **Observed** (exact log evidence) → **Impact** (runtime effect) → **Fix**
+(actionable step). The Passed Checks table explicitly lists every L-check that was evaluated
+and not triggered, to signal analysis confidence.
+
+If fewer than two cluster nodes are represented in the log, note this in the Summary and
+flag L25. If the log covers less than 5 minutes, note the limited time window.
+
+---
+
+## Companion Skills
+
+- `/hadr-health-review` — SQL-side AG state snapshot: replica sync health, redo/send queue sizes, estimated data loss — the complement to CLUSTER.LOG root-cause analysis
+- `/errorlog-review` — SQL Server ERRORLOG timeline: AG failover events, lease expiry messages, memory pressure, and I/O warnings that correspond to WSFC events
+- `/sqlwait-review` — correlate HADR_WORK_QUEUE, HADR_SYNC_COMMIT, and HADR_REPLICA_DDL_END waits with cluster log timestamps to connect the SQL-side wait signal to the WSFC-level event
+- `/query-store-review` — after an AG failover identified in CLUSTER.LOG, use Query Store to detect plan regressions on the new primary
+- `/sqlplan-review` — if scheduler starvation caused L1 or L2, analyze the long-running query that blocked the health check thread

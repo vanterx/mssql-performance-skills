@@ -1,0 +1,29 @@
+-- Capture query output: sys.dm_hadr_* health snapshot
+-- AG: SalesAG | Primary: NODE1\SQL2022 | Captured: 2026-05-12 09:14:32
+-- Three replicas: NODE1\SQL2022 (PRIMARY), NODE2\SQL2022 (SECONDARY), NODE3\SQL2022 (SECONDARY)
+--
+-- NOTE: log_send_queue_size, log_send_rate, redo_queue_size, redo_rate,
+--       secondary_lag_seconds, estimated_data_loss_seconds, estimated_recovery_time_seconds
+--       are only populated for secondary replica rows as returned from the primary.
+--
+-- Columns (tab-delimited):
+-- ag_name | replica_server_name | availability_mode_desc | failover_mode_desc | role_desc | connected_state_desc | synchronization_health_desc | last_connect_error_number | last_connect_error_description | database_name | synchronization_state_desc | db_sync_health | log_send_queue_size | log_send_rate | redo_queue_size | redo_rate | secondary_lag_seconds | estimated_data_loss_seconds | estimated_recovery_time_seconds
+
+SalesAG	NODE1\SQL2022	SYNCHRONOUS_COMMIT	AUTOMATIC	PRIMARY	CONNECTED	HEALTHY	0	NULL	SalesDB	SYNCHRONIZED	HEALTHY	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SalesAG	NODE1\SQL2022	SYNCHRONOUS_COMMIT	AUTOMATIC	PRIMARY	CONNECTED	HEALTHY	0	NULL	HRDB	SYNCHRONIZED	HEALTHY	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SalesAG	NODE1\SQL2022	SYNCHRONOUS_COMMIT	AUTOMATIC	PRIMARY	CONNECTED	HEALTHY	0	NULL	ReportingDB	SYNCHRONIZED	HEALTHY	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SalesAG	NODE2\SQL2022	SYNCHRONOUS_COMMIT	MANUAL	SECONDARY	DISCONNECTED	NOT_HEALTHY	35206	The connection attempt to secondary replica 'NODE2\SQL2022' timed out. This is a transient error. The remote endpoint may be inaccessible.	SalesDB	NOT SYNCHRONIZING	NOT_HEALTHY	450120	0	635904	0	85	42	388
+SalesAG	NODE2\SQL2022	SYNCHRONOUS_COMMIT	MANUAL	SECONDARY	DISCONNECTED	NOT_HEALTHY	35206	The connection attempt to secondary replica 'NODE2\SQL2022' timed out. This is a transient error. The remote endpoint may be inaccessible.	HRDB	NOT SYNCHRONIZING	NOT_HEALTHY	218440	0	180224	0	77	36	210
+SalesAG	NODE2\SQL2022	SYNCHRONOUS_COMMIT	MANUAL	SECONDARY	DISCONNECTED	NOT_HEALTHY	35206	The connection attempt to secondary replica 'NODE2\SQL2022' timed out. This is a transient error. The remote endpoint may be inaccessible.	ReportingDB	NOT SYNCHRONIZING	NOT_HEALTHY	92160	0	98304	0	68	29	142
+SalesAG	NODE3\SQL2022	ASYNCHRONOUS_COMMIT	MANUAL	SECONDARY	CONNECTED	PARTIALLY_HEALTHY	0	NULL	SalesDB	SYNCHRONIZING	PARTIALLY_HEALTHY	524800	14200	0	18400	12	8	0
+SalesAG	NODE3\SQL2022	ASYNCHRONOUS_COMMIT	MANUAL	SECONDARY	CONNECTED	PARTIALLY_HEALTHY	0	NULL	HRDB	SYNCHRONIZED	HEALTHY	0	18900	0	19200	0	0	0
+SalesAG	NODE3\SQL2022	ASYNCHRONOUS_COMMIT	MANUAL	SECONDARY	CONNECTED	PARTIALLY_HEALTHY	0	NULL	ReportingDB	SYNCHRONIZED	HEALTHY	0	15600	0	16100	0	0	0
+
+-- Listener configuration query output:
+-- ag_name | dns_name | port | ip_address | ip_subnet_mask | replica_server_name | read_only_routing_url
+-- (no rows returned — listener not configured for SalesAG)
+
+-- Readable secondary check (sys.availability_replicas):
+-- ag_name | replica_server_name | secondary_role_allow_connections_desc | read_only_routing_url
+SalesAG	NODE2\SQL2022	ALL	NULL
+SalesAG	NODE3\SQL2022	READ_ONLY	NULL
