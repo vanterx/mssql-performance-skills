@@ -56,6 +56,204 @@ This is the **double-hop problem** — Kerberos tickets cannot be forwarded with
 
 ---
 
+## Kerberos Encryption Types
+
+Kerberos tickets are encrypted. The client, KDC, and target service must share a supported encryption type or authentication fails before SQL Server ever sees the connection.
+
+| Type | Strength | Notes |
+|------|----------|-------|
+| AES256-CTS-HMAC-SHA1-96 | Strongest | Default and preferred on Windows Server 2008 R2+ |
+| AES128-CTS-HMAC-SHA1-96 | Strong | Fallback when AES256 is unavailable |
+| RC4-HMAC | Weak | Legacy; disabled by default on Windows Server 2022+ and Windows 11 |
+| DES-CBC-MD5 / DES-CBC-CRC | Obsolete | Disabled since Windows 7 / Server 2008 R2 |
+
+**Negotiation:** The KDC and client negotiate the strongest type both support. If the type set on the target service account (`msDS-SupportedEncryptionTypes`) does not overlap with what the client or KDC allows, the ticket request fails.
+
+**Protected Users group (K27, K30):** Members are restricted to AES128/AES256 only — RC4 is unconditionally disabled for them. If any component in the authentication chain (old OS, legacy GPO, service account configured for RC4-only) requires RC4, Protected Users members fail authentication entirely.
+
+**Windows Server 2022 / Windows 11 change:** RC4 is disabled by default. Service accounts that were never explicitly configured with AES keys may fail on these platforms. Fix: `Set-ADUser <account> -KerberosEncryptionType AES256,AES128`.
+
+**GPO control:** `Computer Configuration → Windows Settings → Security Settings → Local Policies → Security Options → Network security: Configure encryption types allowed for Kerberos`. Restrictive policies on domain controllers directly gate which types the KDC will use.
+
+**Diagnostic:** `klist` shows the negotiated encryption type per cached ticket. If you see RC4 on a Windows Server 2022 domain controller, investigate the GPO and account encryption settings.
+
+---
+
+## Reading klist Output
+
+`klist` (run on the client machine as the connecting user) is the primary tool to verify whether a Kerberos ticket was issued and whether it is forwardable.
+
+```
+klist
+
+Current LogonId is 0:0x4a3f12
+
+Cached Tickets: (2)
+
+#0>     Client: jsmith @ CONTOSO.COM
+        Server: krbtgt/CONTOSO.COM @ CONTOSO.COM
+        KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+        Ticket Flags 0x40e10000 -> forwardable forwarded renewable initial pre-authent
+        Start Time: 5/13/2026 9:00:01 (local)
+        End Time:   5/13/2026 19:00:01 (local)
+        Renew Time: 5/20/2026 9:00:01 (local)
+
+#1>     Client: jsmith @ CONTOSO.COM
+        Server: MSSQLSvc/SQLNODE1.contoso.com:1433 @ CONTOSO.COM
+        KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+        Ticket Flags 0x40a10000 -> forwardable renewable pre-authent
+        Start Time: 5/13/2026 9:01:15 (local)
+        End Time:   5/13/2026 19:00:01 (local)
+```
+
+**Ticket #0** is the Ticket-Granting Ticket (TGT) — issued by the KDC to prove the user's identity. **Ticket #1** is the service ticket for SQL Server — issued only when the SPN exists in AD.
+
+**Ticket flag meanings:**
+
+| Flag | Meaning | Diagnostic significance |
+|------|---------|------------------------|
+| `forwardable` | Ticket can be forwarded by the receiving service | Required for KCD and RBCD delegation |
+| `forwarded` | This ticket was obtained via delegation | Confirms delegation actually worked end-to-end |
+| `renewable` | Ticket can be refreshed without re-entering credentials | Normal for TGTs; 7-day default |
+| `pre-authent` | Client used Kerberos pre-authentication | Absent signals a weak KDC configuration |
+| `ok-as-delegate` | KDC confirms the target service is trusted for delegation | Must be set for KCD to work |
+
+**What to look for:**
+
+- **Service ticket absent entirely** → SPN not found in AD (K1–K6, K12); run `setspn -Q MSSQLSvc/<hostname>:<port>`
+- **`forwardable` absent on the service ticket** → user in Protected Users (K27) or `AccountNotDelegated = True` (K26)
+- **Encryption type is RC4 on Windows Server 2022** → RC4 disabled; check GPO and service account encryption types
+- **`ok-as-delegate` absent** → target service account is not trusted for delegation; check K19/K21 configuration
+- **Ticket expiry < 4 hours** → user is likely in Protected Users (K27) — Protected Users limits ticket lifetime to 4 hours non-renewable
+
+**Testing workflow:**
+```powershell
+klist purge          # Clear cached tickets to force fresh acquisition
+# Re-attempt the connection
+klist               # Verify the new service ticket and its flags
+```
+
+---
+
+## Windows Security Event IDs for Kerberos Failures
+
+When Kerberos fails, the Domain Controller writes events to its Security event log. These are the authoritative source of failure reasons — they show exactly which step failed and why.
+
+| Event ID | Logged on | Trigger | Key field to check |
+|----------|-----------|---------|-------------------|
+| 4768 | DC | TGT request (client authenticating to domain) | `Result Code` |
+| 4769 | DC | Service ticket request (client requesting ticket for SQL Server) | `Result Code` |
+| 4771 | DC | Pre-authentication failure | `Failure Code` |
+
+**Critical result codes for SQL/SPN diagnosis (Event 4769):**
+
+| Code | Meaning | Related check |
+|------|---------|---------------|
+| `0x0` | Success | — |
+| `0x7` KDC_ERR_S_PRINCIPAL_UNKNOWN | SPN not found in AD | K1–K6, K12 |
+| `0xC` KDC_ERR_BADOPTION | Delegation not permitted (user or service) | K19, K26, K27 |
+| `0x1F` KRB_AP_ERR_SKEW | Clock skew > 5 minutes between client and DC | Not an SPN issue |
+| `0x12` KDC_ERR_CLIENT_REVOKED | Account disabled, locked, or expired | Not an SPN issue |
+| `0x17` KDC_ERR_KEY_EXPIRED | Password expired | Not an SPN issue |
+| `0x22` KDC_ERR_CLIENT_NOT_TRUSTED | Smart card required or not trusted | Not an SPN issue |
+
+**How to query from PowerShell (run on the DC or with DC access):**
+```powershell
+Get-WinEvent -ComputerName DC01 -FilterHashtable @{
+    LogName = 'Security'
+    Id      = 4769
+    StartTime = (Get-Date).AddHours(-1)
+} | Where-Object { $_.Message -like '*MSSQLSvc*' } |
+    Select-Object TimeCreated, Message | Format-List
+```
+
+**Clock skew note:** Kerberos requires all participating machines to be within 5 minutes of DC time. SQL Server hosts using an incorrect NTP source or with no time sync commonly fail with `0x1F`. This is not an SPN problem — fix time synchronization first, then re-test authentication.
+
+---
+
+## SQL Server ERRORLOG SPN Signals
+
+SQL Server writes several distinct messages when SPN registration fails or when Kerberos authentication is rejected. These are the primary indicators visible without accessing the DC.
+
+| ERRORLOG message pattern | Meaning | Related check |
+|--------------------------|---------|---------------|
+| `could not register the Service Principal Name (SPN) [...] Windows return code: 0x2098` | Service account lacks Write SPN permission | K18 |
+| `Error: 17806, Severity: 20, State: 14 — SSPI handshake failed` | SQL Server received a Kerberos token it could not decrypt — SPN is on the wrong account or duplicate exists | K7, K8 |
+| `Error: 17807, Severity: 20 — SSPI lookup failed` | Client could not obtain a Kerberos service ticket — SPN missing | K1, K2 |
+| `Error: 17832, Severity: 20 — Unable to read login packet` | Network or SSPI negotiation failure during login | K5, K7 |
+| `Error: 17836, Severity: 20 — Length specified in network packet payload did not match number of bytes read` | Corrupt or mismatched Kerberos token; often wrong SPN key | K7, K8 |
+| `The target principal name is incorrect` | Client's SPN lookup failed | K1–K6, K8 |
+
+**Note:** Error 18456 "Login failed" with `auth_scheme = Kerberos` in `sys.dm_exec_connections` means Kerberos authentication *succeeded* — but the domain account has no SQL Server login. This is a permissions issue, not an SPN problem.
+
+**How to extract from ERRORLOG:**
+```powershell
+Get-Content "C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Log\ERRORLOG" |
+    Select-String "SPN|SSPI|17806|17807|17832|17836|principal name"
+```
+
+Cross-reference: `/errorlog-review` check E22 surfaces login failure bursts that may have SPN misconfig as root cause.
+
+---
+
+## setspn -A vs -S: Avoiding Duplicate SPNs
+
+The `setspn` command has two modes for adding SPNs. Using the wrong one is the most common cause of K8 (Duplicate SPN):
+
+```powershell
+# DANGEROUS — adds without checking for duplicates across the domain
+setspn -A MSSQLSvc/SQLNODE1:1433 CONTOSO\sqlsvc
+
+# SAFE — checks domain-wide for an existing identical SPN before adding
+setspn -S MSSQLSvc/SQLNODE1:1433 CONTOSO\sqlsvc
+```
+
+**`-A` behavior:** Adds the SPN to the account unconditionally, even if the same SPN already exists on another account. The duplicate is invisible until `setspn -X` is run or Kerberos authentication breaks.
+
+**`-S` behavior:** Searches the entire domain for a matching SPN first. If a duplicate would be created, it prints a warning and refuses to add. Available since Windows Server 2008 R2.
+
+**Safe SPN workflow:**
+```powershell
+# 1. Check if SPN already exists anywhere in domain
+setspn -Q MSSQLSvc/SQLNODE1:1433
+
+# 2. If clean, add with duplicate protection
+setspn -S MSSQLSvc/SQLNODE1:1433 CONTOSO\sqlsvc
+setspn -S MSSQLSvc/SQLNODE1.contoso.com:1433 CONTOSO\sqlsvc
+
+# 3. Confirm no duplicates were introduced
+setspn -X
+```
+
+Never use `-A` in production. If legacy scripts use `-A`, replace them with `-S`.
+
+---
+
+## Loopback Connections and Kerberos
+
+Loopback connections occur when SQL Server connects to itself — SQL Server Agent jobs, SSIS packages running on the SQL host, `OPENQUERY` to `(local)`, maintenance scripts, or linked servers pointing back to the same instance. Windows Kerberos loopback detection blocks these by default.
+
+**Symptom:** Kerberos works for remote client connections but fails for connections originating from the SQL Server host itself. `sys.dm_exec_connections` shows `auth_scheme = 'NTLM'` for these sessions.
+
+**Cause:** Windows checks whether the target hostname resolves to the local machine. If it does, Windows refuses to issue a Kerberos service ticket (loopback restriction — mitigates NTLM relay and reflection attacks). This is a security feature, not a bug.
+
+**This is not an SPN problem.** The SPN may be perfectly correct; it is the loopback detection that prevents the ticket from being issued.
+
+**Resolution options:**
+
+| Option | Registry setting | Security impact |
+|--------|-----------------|----------------|
+| Disable loopback check entirely | `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\DisableLoopbackCheck = 1` (DWORD) | Reduces protection against reflection attacks — use only if BackConnectionHostNames is not feasible |
+| Whitelist specific hostnames | `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0\BackConnectionHostNames` (REG_MULTI_SZ) — add each hostname that needs loopback Kerberos | Preferred — scoped to specific names only |
+
+A restart is required after either registry change.
+
+**Alternative:** Reconfigure the loopback connection to use a service account login (SQL auth) or Windows auth with explicit credentials rather than pass-through Kerberos — this avoids the loopback restriction entirely for administrative jobs.
+
+Related check: K20 (NTLM Fallback Signal).
+
+---
+
 ### K1 — Missing Default-Instance SPN
 
 **What it means:** The SQL Server default instance (always on port 1433) has no SPN registered for its hostname. The KDC has nothing to look up when a client requests a Kerberos ticket for this SQL Server.

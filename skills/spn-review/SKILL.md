@@ -52,6 +52,10 @@ setspn -L DOMAIN\sqlsvc
 setspn -X
 Get-ADUser DOMAIN\sqlsvc -Properties TrustedForDelegation, TrustedToAuthForDelegation, msDS-AllowedToDelegateTo, ServicePrincipalNames, MemberOf
 Get-ADComputer SQLNODE1 -Properties TrustedForDelegation, msDS-AllowedToActOnBehalfOfOtherIdentity, ServicePrincipalNames
+# Verify cached Kerberos tickets on the client machine (run as the connecting user)
+klist
+# Clear ticket cache to force fresh acquisition during testing
+klist purge
 ```
 
 ---
@@ -152,7 +156,7 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 - **Severity:** Warning
 - **Fix:** `setspn -S HTTP/<host> DOMAIN\svcaccount`; Kerberos delegation to HTTP targets requires the HTTP SPN on the target service account
 ### K18 — SPN Registration Permission Gap
-- **Trigger:** Service account lacks the `Write ServicePrincipalName` permission on its own AD user object, preventing self-registration of SPNs
+- **Trigger:** Service account lacks the `Write ServicePrincipalName` permission on its own AD user object, preventing self-registration of SPNs; or SQL Server ERRORLOG contains error 17806, 17807, or Windows return code 0x2098 in an SPN registration failure message
 - **Severity:** Warning
 - **Fix:** Grant the service account Self-Write SPN permission via ADSI Edit or `dsacls`; alternatively, a Domain Admin can register SPNs manually using `setspn -S`
 ### K19 — Unconstrained Delegation Enabled
@@ -160,7 +164,7 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 - **Severity:** Critical
 - **Fix:** Disable unconstrained delegation in AD Users and Computers; configure Kerberos Constrained Delegation (KCD) instead by populating `msDS-AllowedToDelegateTo` with only the target service SPNs; unconstrained delegation allows credential forwarding to any service
 ### K20 — NTLM Fallback Signal
-- **Trigger:** NTLM authentication is observed despite SPNs appearing to exist, or Kerberos ticket requests fail with "target principal name is incorrect"
+- **Trigger:** NTLM authentication is observed despite SPNs appearing to exist (`sys.dm_exec_connections` shows `auth_scheme = NTLM`); or Kerberos ticket requests fail with "target principal name is incorrect"; or the connection is a loopback (SQL Agent job, SSIS package on the same host, `OPENQUERY` to `(local)`) where Windows loopback detection blocks Kerberos regardless of SPN state
 - **Severity:** Info
 - **Fix:** Verify SPN matches the exact hostname in the client connection string (case-insensitive but must be character-for-character the same); check that SQL Server encryption settings do not redirect the connection to a different hostname; confirm the SPN is on the active service account
 
