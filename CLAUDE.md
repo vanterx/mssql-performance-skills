@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides fourteen slash-command skills that Claude uses when asked to review T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, or SQL Server ERRORLOG files. No application code — content is Markdown only.
+Provides fifteen slash-command skills that Claude uses when asked to review T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, or SQL Server SPN and Kerberos delegation configuration. No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -32,6 +32,7 @@ Provides fourteen slash-command skills that Claude uses when asked to review T-S
 | [skills/clusterlog-review/SKILL.md](skills/clusterlog-review/SKILL.md) | WSFC cluster log analysis: `clusterlog-review`. 25 checks (L1–L25) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
 | [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 22 checks (H1–H22) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 28 checks (E1–E28) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
+| [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 30 checks (K1–K30) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 
 ### Human Reference (CHECKS_EXPLAINED.md — not loaded at runtime)
 
@@ -51,12 +52,13 @@ Provides fourteen slash-command skills that Claude uses when asked to review T-S
 | [skills/clusterlog-review/CHECKS_EXPLAINED.md](skills/clusterlog-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 25 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
 | [skills/hadr-health-review/CHECKS_EXPLAINED.md](skills/hadr-health-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 22 H-checks with DMV examples, fix recipes, and Quick Reference table |
 | [skills/errorlog-review/CHECKS_EXPLAINED.md](skills/errorlog-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 28 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
+| [skills/spn-review/CHECKS_EXPLAINED.md](skills/spn-review/CHECKS_EXPLAINED.md) | Plain-English explanation of all 30 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 14 skills |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 15 skills |
 | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 231-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
@@ -80,6 +82,7 @@ Provides fourteen slash-command skills that Claude uses when asked to review T-S
 | [example/clusterlog-review/](example/clusterlog-review/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
 | [example/hadr-health-review/](example/hadr-health-review/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
 | [example/errorlog-review/](example/errorlog-review/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
+| [example/spn-review/](example/spn-review/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
 
 ## Installing Skills
 
@@ -92,7 +95,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 14 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 15 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -152,6 +155,7 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `H` | `hadr-health-review` |
 | `L` | `clusterlog-review` |
 | `E` | `errorlog-review` |
+| `K` | `spn-review` |
 
 New skills must choose an unused single uppercase letter.
 
