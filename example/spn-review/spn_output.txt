@@ -1,0 +1,117 @@
+============================================================
+SPN Configuration Capture — SQLNODE1 / CONTOSO Domain
+Captured: 2026-05-13  DBA: dbateam@contoso.com
+============================================================
+
+--- setspn -Q MSSQLSvc/* ---
+
+Checking domain DC=contoso,DC=com
+
+CN=sqlsvc,OU=ServiceAccounts,DC=contoso,DC=com
+    MSSQLSvc/SQLNODE1:1433
+    MSSQLSvc/SQLNODE1.contoso.com:1433
+
+CN=sqlsvc_2024,OU=DisabledAccounts,DC=contoso,DC=com
+    MSSQLSvc/SQLNODE1:1433
+    MSSQLSvc/SQLNODE1.contoso.com:1433
+
+Existing SPN found!
+
+
+--- setspn -L CONTOSO\sqlsvc ---
+
+Registered ServicePrincipalNames for CN=sqlsvc,OU=ServiceAccounts,DC=contoso,DC=com:
+    MSSQLSvc/SQLNODE1:1433
+    MSSQLSvc/SQLNODE1.contoso.com:1433
+
+
+--- setspn -X ---
+
+Processing entry 1
+MSSQLSvc/SQLNODE1:1433
+   CONTOSO\sqlsvc        CN=sqlsvc,OU=ServiceAccounts,DC=contoso,DC=com
+   CONTOSO\sqlsvc_2024   CN=sqlsvc_2024,OU=DisabledAccounts,DC=contoso,DC=com
+
+Processing entry 2
+MSSQLSvc/SQLNODE1.contoso.com:1433
+   CONTOSO\sqlsvc        CN=sqlsvc,OU=ServiceAccounts,DC=contoso,DC=com
+   CONTOSO\sqlsvc_2024   CN=sqlsvc_2024,OU=DisabledAccounts,DC=contoso,DC=com
+
+found 2 group(s) of duplicate SPNs.
+
+
+--- Get-ADUser CONTOSO\sqlsvc -Properties TrustedForDelegation, TrustedToAuthForDelegation, msDS-AllowedToDelegateTo, ServicePrincipalNames, MemberOf ---
+
+DistinguishedName         : CN=sqlsvc,OU=ServiceAccounts,DC=contoso,DC=com
+Enabled                   : True
+GivenName                 :
+Name                      : sqlsvc
+ObjectClass               : user
+ObjectGUID                : a1b2c3d4-e5f6-7890-abcd-ef1234567890
+SamAccountName            : sqlsvc
+SID                       : S-1-5-21-1234567890-987654321-111222333-1105
+Surname                   :
+UserPrincipalName         : sqlsvc@contoso.com
+
+TrustedForDelegation        : True
+TrustedToAuthForDelegation  : False
+msDS-AllowedToDelegateTo    : {MSSQLSvc/SQLBACK01:1433, MSSQLSvc/SQLBACK01.contoso.com:1433, cifs/FILESERVER01}
+ServicePrincipalNames       : {MSSQLSvc/SQLNODE1:1433, MSSQLSvc/SQLNODE1.contoso.com:1433}
+MemberOf                    : {CN=SQLServerAdmins,OU=Groups,DC=contoso,DC=com,
+                               CN=DomainUsers,DC=contoso,DC=com}
+
+
+--- Get-ADComputer SQLNODE1 -Properties TrustedForDelegation, msDS-AllowedToActOnBehalfOfOtherIdentity, ServicePrincipalNames ---
+
+DistinguishedName         : CN=SQLNODE1,OU=Servers,DC=contoso,DC=com
+DNSHostName               : SQLNODE1.contoso.com
+Enabled                   : True
+Name                      : SQLNODE1
+ObjectClass               : computer
+ObjectGUID                : f9e8d7c6-b5a4-3210-fedc-ba9876543210
+SamAccountName            : SQLNODE1$
+SID                       : S-1-5-21-1234567890-987654321-111222333-1200
+UserPrincipalName         :
+
+TrustedForDelegation                         : False
+msDS-AllowedToActOnBehalfOfOtherIdentity     :
+ServicePrincipalNames                        : {HOST/SQLNODE1, HOST/SQLNODE1.contoso.com,
+                                               TERMSRV/SQLNODE1, TERMSRV/SQLNODE1.contoso.com,
+                                               WSMAN/SQLNODE1, WSMAN/SQLNODE1.contoso.com,
+                                               RestrictedKrbHost/SQLNODE1, RestrictedKrbHost/SQLNODE1.contoso.com}
+
+
+--- Get-ADUser jsmith -Properties AccountNotDelegated, MemberOf ---
+
+DistinguishedName         : CN=John Smith,OU=Users,DC=contoso,DC=com
+Enabled                   : True
+GivenName                 : John
+Name                      : John Smith
+ObjectClass               : user
+SamAccountName            : jsmith
+Surname                   : Smith
+UserPrincipalName         : jsmith@contoso.com
+
+AccountNotDelegated       : False
+MemberOf                  : {CN=Protected Users,CN=Users,DC=contoso,DC=com,
+                             CN=FinanceUsers,OU=Groups,DC=contoso,DC=com,
+                             CN=DomainUsers,DC=contoso,DC=com}
+
+
+--- Additional context from DBA ---
+
+SQL Server instance: SQLNODE1 (default instance, port 1433)
+SQL Server service account: CONTOSO\sqlsvc
+Previous service account (decommissioned 2024-03): CONTOSO\sqlsvc_2024
+
+The application team reports that linked server queries from SQLNODE1 to SQLBACK01
+fail with "Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'" — indicating
+the double-hop delegation is not working.
+
+End-user jsmith is also receiving Kerberos errors when the application attempts
+to pass his credentials through the SQL Server to the linked server on SQLBACK01.
+
+setspn -Q MSSQLSvc/SQLBACK01* output:
+No such SPN found.
+
+============================================================

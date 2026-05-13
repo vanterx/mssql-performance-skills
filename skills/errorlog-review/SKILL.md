@@ -444,3 +444,6 @@ When a check cannot be evaluated (e.g., E18 with no backup log entries), state
   high resource consumers before and after the failure
 - `/sqlplan-deadlock` — if E22 (login failure burst) or connectivity errors coincide with error
   1205 in application logs, analyze the deadlock XML from the `system_health` XE session
+- `/spn-review` — when E22 (login failure burst) shows Kerberos-specific errors (17806, 17807,
+  error 0x8009030c) or "Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'", spn-review
+  identifies the missing or duplicate SPN and delegation misconfiguration as root cause

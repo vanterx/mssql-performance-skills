@@ -21,6 +21,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
 | [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 25 checks (L1–L25): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
 | [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
+| [`spn-review`](#spn-review) | `/spn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 30 checks (K1–K30): MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 
 ---
 
@@ -120,6 +121,34 @@ Capture two plans: one from before the regression (baseline) and one from after.
 ```
 
 Or paste both XML blocks labeled "Baseline" and "New".
+
+---
+
+### "Kerberos authentication fails — linked server falls back to NTLM or anonymous login — AG listener connections fail"
+
+**Use: `/spn-review`**
+
+Collect `setspn` output and AD delegation attributes, then paste them for analysis. The skill applies 30 checks to identify missing SPNs, duplicate SPNs, unconstrained delegation, misconfigured KCD/RBCD, and AD account sensitivity flags that block delegation.
+
+```powershell
+setspn -Q MSSQLSvc/*
+setspn -L DOMAIN\sqlsvc
+setspn -X
+Get-ADUser DOMAIN\sqlsvc -Properties TrustedForDelegation, TrustedToAuthForDelegation, msDS-AllowedToDelegateTo
+Get-ADComputer SQLNODE1 -Properties TrustedForDelegation, msDS-AllowedToActOnBehalfOfOtherIdentity
+```
+
+```
+/spn-review
+
+[paste output above]
+```
+
+Common root causes found by `/spn-review`:
+- K8 (duplicate SPN) — previous service account not cleaned up during account rotation
+- K19/K29 (unconstrained delegation) — legacy configuration that must be replaced with KCD
+- K21/K22 (KCD not configured or target SPN missing) — linked server double-hop fails
+- K27/K30 (Protected Users group) — service account or connecting user blocks all delegation
 
 ---
 
@@ -387,6 +416,7 @@ Step 6 — If the query causes deadlocks
 | `sys.query_store_*` DMV output | `/query-store-review` |
 | `collect.proc_stats` report query output (Q1–Q5 from `04_report_queries.sql`) | `/procstats-review` |
 | No artifacts — just a slow query description | `/sqlplan-review` (describe operators) or `/tsql-review` (describe the code) |
+| `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute data | `/spn-review` |
 
 ---
 
@@ -742,8 +772,9 @@ Each check has an ID you can use when discussing findings or searching the CHECK
 | `L1–L25` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals | 25 |
 | `H1–H22` | `hadr-health-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, and configuration | 22 |
 | `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
+| `K1–K30` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation config, AD account sensitivity | 30 |
 
-**Total: 377 checks across all skills.**
+**Total: 407 checks across all skills.**
 
 ---
 
