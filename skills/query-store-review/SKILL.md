@@ -363,6 +363,9 @@ Always end the report with this table. Order: (a) fixes that unblock others firs
 |------|--------|----------|
 | 1    | [concrete action] | C1, W4 |
 | 2    | [concrete action] | I1, W2 |
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 **Formatting rules:**

@@ -299,6 +299,9 @@ Structure your report as follows:
 
 ### Passed Checks
 T2 ✓ (no UPDATE/DELETE without WHERE), T8 ✓ (no scalar UDF in SELECT/WHERE) [list every check ID verified clean with a brief reason in parens — confirms the check was evaluated, not skipped]
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 ---

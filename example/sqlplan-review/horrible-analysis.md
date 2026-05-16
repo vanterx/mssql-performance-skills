@@ -207,3 +207,6 @@ CREATE NONCLUSTERED INDEX [IX_Payments_OrderId]
 | N40 — Forced Index/Seek/Scan Hint | PASS — no ForcedIndex attributes |
 | N44 — Many Joins (Greedy Threshold) | PASS — 2 join operators (threshold: 8) |
 | N45 — Non-Index Eager Spool | PASS — no Eager Spool operators |
+
+---
+*Analyzed by: Claude Sonnet 4.6 · 2026-05-17 08:30 NZST*

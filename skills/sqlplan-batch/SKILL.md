@@ -213,6 +213,9 @@ NodeId column: populate for operator-level findings (N-prefix check IDs) using t
 [One sentence at the bottom pointing to the full analysis: "Full analysis: `/sqlplan-review plan-name.sqlplan`"]
 
 [Plans with no findings beyond Info: one line — "Clean plan — no Critical or Warning findings."]
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 ---

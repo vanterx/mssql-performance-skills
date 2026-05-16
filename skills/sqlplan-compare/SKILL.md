@@ -157,6 +157,9 @@ grant → 3.2-second wait before execution begins."]
 ### Confirmed Stable (Unchanged)
 [List key operators, DOP, CE version, compile time that are the same in both plans.
 This gives confidence the comparison is valid.]
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 ---
