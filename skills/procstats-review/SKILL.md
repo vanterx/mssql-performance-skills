@@ -274,6 +274,9 @@ Format as a two-column table. Include every check explicitly evaluated and not t
 |-------|--------|
 | R1 — CPU Hotspot | PASS — no object > 50% of total CPU delta (top proc = 34%) |
 | R5 — Physical I/O | PASS — physical_reads_delta = 0 across all objects |
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 ---

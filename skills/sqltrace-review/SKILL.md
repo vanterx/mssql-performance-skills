@@ -224,6 +224,9 @@ Structure your report as follows:
 
 ### Passed Checks
 X5 ✓ (brief reason), X6 ✓ (brief reason) [list every check verified clean with a reason in parens — e.g., X2 ✓ (individual non-report CPU < 5,000 ms)]
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 ---

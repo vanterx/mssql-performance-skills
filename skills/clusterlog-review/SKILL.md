@@ -226,6 +226,9 @@ Structure the report as follows. The reference output in
 |-------|--------|
 | L6 — Quorum Loss | PASS — no quorum loss entries in log |
 | L7 — Node Eviction | PASS — no eviction events found |
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 **Labeling convention:** Output labels use `[C1]`, `[W1]`, `[I1]` — not raw check IDs.

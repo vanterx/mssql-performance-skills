@@ -248,6 +248,9 @@ Structure the report as follows:
 |-------|--------|
 | K1 — Missing Default-Instance SPN | PASS — MSSQLSvc/SQLNODE1:1433 and MSSQLSvc/SQLNODE1.domain.com:1433 both present on DOMAIN\sqlsvc |
 | K6 — Missing VNN SPN for FCI | SKIP — no FCI topology indicated in input |
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 Output labels use `[C1]`, `[W1]`, `[I1]` sequential numbering with check ID in parentheses.

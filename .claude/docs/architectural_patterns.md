@@ -160,6 +160,9 @@ All analysis skills share this base structure:
 ### Info              (labeled [I1], [I2], ...)
 ### [Skill-specific sections]
 ### Passed Checks     (what was explicitly verified clean)
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 **Convention:** Output labels use `[C1]`, `[W1]`, `[I1]` — never raw check IDs. Check IDs (`S12`, `N41`) appear in parentheses after the issue name. Each finding must state: **Observed** (what's in the input) → **Impact** (why it matters) → **Fix** (what to do). The Passed Checks section explicitly lists verified-clean check IDs to signal analysis confidence.

@@ -271,6 +271,9 @@ Structure your report as follows:
 
 ### Passed Checks
 I1 ✓ (brief reason), I3 ✓ (brief reason) [list every check verified clean with a reason in parens — e.g., I3 ✓ (no intentional full-table scan without comment)]
+
+---
+*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
 ```
 
 **Formatting rules:**
