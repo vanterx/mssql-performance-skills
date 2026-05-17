@@ -1,0 +1,51 @@
+{
+  "run_id": "20260517-0930-cpu-spike",
+  "generated_at": "2026-05-17T09:30:14+12:00",
+  "orchestrator_version": "v4-tier3",
+  "symptom": "CPU pegged at 95% on PROD-SQL01 since 09:00, no recent deploy",
+  "instance": "PROD-SQL01",
+  "hypotheses": [
+    {"rank": 1, "class": "runaway_query", "confidence_initial": "MEDIUM"},
+    {"rank": 2, "class": "parameter_sniffing", "confidence_initial": "MEDIUM"},
+    {"rank": 3, "class": "compile_pressure", "confidence_initial": "LOW"}
+  ],
+  "scripts": [
+    {
+      "filename": "01-wait-stats.sql",
+      "source": "skills/sqlwait-review/scripts/01_capture_wait_stats.sql",
+      "target_skill": "sqlwait-review",
+      "paste_section": "01-wait-stats",
+      "estimated_run_time_sec": 1,
+      "estimated_output_tokens": 800,
+      "purpose": "Confirm bottleneck class (CPU vs I/O vs lock vs memory vs compilation)",
+      "depends_on": null
+    },
+    {
+      "filename": "02-plan-from-cache.sql",
+      "source": "skills/sqlplan-review/scripts/01_capture_from_cache.sql",
+      "target_skill": "sqlplan-review",
+      "paste_section": "02-plan-from-cache",
+      "estimated_run_time_sec": 5,
+      "estimated_output_tokens": 8000,
+      "purpose": "Get execution plan for top CPU consumer identified by step 1",
+      "depends_on": "01-wait-stats"
+    },
+    {
+      "filename": "03-query-store-instability.sql",
+      "source": "skills/query-store-review/scripts/01_capture_queries.sql",
+      "target_skill": "query-store-review",
+      "paste_section": "03-query-store-instability",
+      "estimated_run_time_sec": 2,
+      "estimated_output_tokens": 2000,
+      "purpose": "Confirm whether the query has multiple plans (parameter sniffing signal)",
+      "depends_on": "01-wait-stats"
+    }
+  ],
+  "trust_notes": [
+    "Orchestrator does not contact the SQL Server.",
+    "All scripts are SELECT-only against system DMVs.",
+    "Output files contain query text and DMV data — review for sensitive content before sharing."
+  ],
+  "estimated_total_output_tokens": 10800,
+  "estimated_resume_cost_usd": 0.04
+}
