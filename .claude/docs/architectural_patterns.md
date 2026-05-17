@@ -9,12 +9,18 @@ Patterns that appear across multiple files in this repository. Follow these when
 All skills in this repo must follow the Anthropic skill-creator best practices:
 → [skill-creator-best-practices.md](skill-creator-best-practices.md)
 
-Key criteria enforced by `scripts/verify-docs.sh` (Checks 21–25):
-- SKILL.md > 900 lines → warn; > 1000 lines → fail
-- `description:` field ≥ 30 words
-- `description:` includes at least one trigger phrase ("Use this skill when…", "Trigger when…", "whenever a user…")
-- `triggers:` field present in frontmatter
-- No bare ALWAYS/NEVER/MUST in all-caps outside code blocks (warn — explain the why instead)
+Key criteria enforced by `scripts/verify-docs.sh` (Checks 21–31):
+- SKILL.md > 900 lines → warn; > 1000 lines → fail (Check 21)
+- `description:` field ≥ 30 words (Check 22)
+- `description:` includes at least one trigger phrase ("Use this skill when…", "Trigger when…", "whenever a user…") (Check 23)
+- `triggers:` field present in frontmatter (Check 24)
+- No bare ALWAYS/NEVER/MUST in all-caps outside code blocks (Check 25 — warn — explain the why instead)
+- Per-skill check count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance matches SKILL.md (Check 26)
+- `references/README.md` present per skill (Check 27)
+- `evals/evals.json` present per skill (Check 28)
+- TOC header in `references/check-explanations.md` when > 300 lines (Check 29)
+- `scripts/` directory non-empty per skill (Check 30 — `.gitkeep` is acceptable for dispatchers)
+- `Analyzed by:` attribution footer in every SKILL.md Output Format block (Check 31)
 
 ---
 
@@ -44,13 +50,18 @@ triggers:
 | `skills/sqlplan-compare/` | `/sqlplan-compare` | C |
 | `skills/sqlplan-index-advisor/` | `/sqlplan-index-advisor` | D |
 | `skills/sqlplan-deadlock/` | `/sqlplan-deadlock` | P |
-| `skills/sqlplan-batch/` | `/sqlplan-batch` | (aggregates S/N) |
+| `skills/sqlplan-batch/` | `/sqlplan-batch` | (dispatcher — aggregates S/N) |
 | `skills/tsql-review/` | `/tsql-review` | T |
 | `skills/sqlstats-review/` | `/sqlstats-review` | I, W |
 | `skills/sqltrace-review/` | `/sqltrace-review` | X |
 | `skills/sqlwait-review/` | `/sqlwait-review` | V |
 | `skills/query-store-review/` | `/query-store-review` | Q |
 | `skills/procstats-review/` | `/procstats-review` | R |
+| `skills/hadr-health-review/` | `/hadr-health-review` | H |
+| `skills/clusterlog-review/` | `/clusterlog-review` | L |
+| `skills/errorlog-review/` | `/errorlog-review` | E |
+| `skills/spn-review/` | `/spn-review` | K |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 15) |
 
 ---
 
@@ -70,7 +81,7 @@ Every skill accepts three input forms:
 
 ## 3. Check ID Namespacing
 
-**Where:** Check definitions in `SKILL.md` and corresponding `CHECKS_EXPLAINED.md`
+**Where:** Check definitions in `SKILL.md` and corresponding `references/check-explanations.md`
 
 Check IDs use a **single uppercase letter prefix + sequential number**. No prefix is reused across skills.
 
@@ -88,8 +99,49 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V40 |
 | `Q` | `query-store-review` | Query Store health and regression checks | Q1–Q25 |
 | `R` | `procstats-review` | Procedure/trigger/function runtime stats | R1–R20 |
+| `H` | `hadr-health-review` | Always On AG health checks | H1–H22 |
+| `L` | `clusterlog-review` | WSFC cluster log checks | L1–L25 |
+| `E` | `errorlog-review` | SQL Server ERRORLOG checks | E1–E28 |
+| `K` | `spn-review` | SPN and Kerberos delegation checks | K1–K30 |
+| (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to all 15 specialised skills | n/a |
 
-**Convention:** IDs are sequential and never reused within or across skills. When adding a check: assign the next available number, update the section header range (e.g., `N1–N66` → `N1–N67`), the frontmatter description count, and the Purpose section count. The same ID must appear in both `SKILL.md` and `CHECKS_EXPLAINED.md`.
+**Available prefixes for new skills:** A, B, F, G, J, M, O, U, Y, Z.
+
+---
+
+## 1.5. Skill Directory Layout
+
+**Where:** Every skill directory under `skills/`.
+
+The repository follows the Anthropic skill-creator anatomy adopted in the May-2026 restructure:
+
+```
+skills/<name>/
+├── SKILL.md                       # required — runtime-loaded by the skill loader
+├── references/                    # required — on-demand context, not auto-loaded
+│   ├── README.md                  # required — load-when guidance per reference file
+│   ├── check-explanations.md      # required — five-part check explanations + Quick Reference
+│   └── <topic>.md                 # optional — additional progressive-disclosure references
+├── evals/                         # required
+│   └── evals.json                 # required — ≥ 2 realistic test prompts
+├── scripts/                       # required — non-empty (.gitkeep acceptable for dispatchers)
+│   └── *.sql                      # optional — capture / collection scripts the user runs
+└── assets/                        # required — .gitkeep acceptable
+    └── <template>.md              # optional — emitted artifacts (e.g. bundle templates)
+```
+
+**Convention:**
+
+- Only `SKILL.md` is automatically loaded at runtime. `references/*.md` are progressive disclosure — Claude loads them when the situation matches the load-when guidance in `references/README.md`.
+- `scripts/` holds **read-only capture scripts the user runs themselves** (the SQL/PowerShell that populates input artifacts for the skill). Dispatchers have no own scripts and use `.gitkeep`.
+- `assets/` holds template files the skill emits as part of its output (e.g., the orchestrator's bundle README/paste-back templates). Use `.gitkeep` when no assets exist yet.
+- `evals/evals.json` is mandatory (`scripts/verify-docs.sh` Check 28).
+- This layout is enforced by Checks 3, 27, 28, 29, 30 in `verify-docs.sh`.
+
+History note: prior to the restructure, every skill had a flat `CHECKS_EXPLAINED.md` at its root and there was a separate top-level `sql/` directory containing capture scripts. The restructure moved `CHECKS_EXPLAINED.md` into `references/check-explanations.md` and migrated `sql/<category>/` into the consuming skill's `scripts/` directory.
+
+**Convention:** IDs are sequential and never reused within or across skills. When adding a check: assign the next available number, update the section header range (e.g., `N1–N66` → `N1–N67`), the frontmatter description count, and the Purpose section count. The same ID must appear in both `SKILL.md` and `references/check-explanations.md`.
 
 ---
 
@@ -110,9 +162,9 @@ Each check has exactly three components, in this order:
 
 ---
 
-## 5. Five-Part Check Structure (CHECKS_EXPLAINED.md)
+## 5. Five-Part Check Structure (references/check-explanations.md)
 
-**Where:** Every check entry in every `CHECKS_EXPLAINED.md`
+**Where:** Every check entry in every `skills/<name>/references/check-explanations.md`
 
 Each check expands the `SKILL.md` entry into five parts:
 
@@ -199,7 +251,7 @@ Skills compose into a pipeline ordered by diagnostic depth:
 
 ## 9. Progressive Disclosure Layering
 
-**Where:** Root-level `.md` files, `skills/*/SKILL.md`, `skills/*/CHECKS_EXPLAINED.md`, `CLAUDE.md`
+**Where:** Root-level `.md` files, `skills/*/SKILL.md`, `skills/*/references/check-explanations.md`, `CLAUDE.md`
 
 The repository uses layered documentation for distinct audiences:
 
@@ -209,11 +261,11 @@ The repository uses layered documentation for distinct audiences:
 | Decision | `PERFORMANCE_TUNING_GUIDE.md` | Users — scenario-based skill selection | Which skill for which problem |
 | Cost | `LLM_COST_ESTIMATION.md` | Users — token and dollar estimates | Skill sizes, worked examples |
 | Rules | `skills/*/SKILL.md` | Claude (the model) | Precise triggers, thresholds, fix steps |
-| Explanations | `skills/*/CHECKS_EXPLAINED.md` | Humans learning SQL Server | Conceptual, examples, alternatives |
+| Explanations | `skills/*/references/check-explanations.md` | Humans learning SQL Server | Conceptual, examples, alternatives |
 | Contributor | `CLAUDE.md` | Developers adding skills | File map, conventions, update steps |
 | Architecture | `.claude/docs/architectural_patterns.md` | Developers — this file | Cross-cutting patterns and conventions |
 
-**Convention:** Do not duplicate content across layers. `README.md` links to other files but never duplicates check definitions. `SKILL.md` is the authoritative source for check logic — if a threshold changes, update `SKILL.md` first, then `CHECKS_EXPLAINED.md`. `PERFORMANCE_TUNING_GUIDE.md` and `LLM_COST_ESTIMATION.md` are user-facing reference docs, not skill instructions.
+**Convention:** Do not duplicate content across layers. `README.md` links to other files but never duplicates check definitions. `SKILL.md` is the authoritative source for check logic — if a threshold changes, update `SKILL.md` first, then `references/check-explanations.md`. `PERFORMANCE_TUNING_GUIDE.md` and `LLM_COST_ESTIMATION.md` are user-facing reference docs, not skill instructions.
 
 ---
 
