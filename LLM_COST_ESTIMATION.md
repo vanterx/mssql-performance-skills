@@ -265,14 +265,14 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/query-store-review/SKILL.md` | ~12,800 | ~3,400 |
 | `skills/procstats-review/SKILL.md` | ~10,500 | ~2,800 |
 
-`CHECKS_EXPLAINED.md` files are reference material for humans — they are **not** loaded into the LLM context during skill execution. Only `SKILL.md` is loaded.
+`references/check-explanations.md` files are progressive-disclosure reference material — they are **not** loaded into the LLM context automatically. Only `SKILL.md` is loaded by the skill loader. Claude may load `references/check-explanations.md` on demand (e.g., when a user asks "explain check X" or wants deeper fix-option detail).
 
 | File | Characters | ~Tokens | Used at runtime? |
 |------|-----------|--------|-----------------|
-| `skills/sqlplan-review/CHECKS_EXPLAINED.md` | 136,730 | 35,981 | No |
-| `skills/tsql-review/CHECKS_EXPLAINED.md` | 67,148 | 17,670 | No |
-| `skills/sqlstats-review/CHECKS_EXPLAINED.md` | 34,134 | 8,982 | No |
-| `skills/sqlplan-deadlock/CHECKS_EXPLAINED.md` | 16,084 | 4,232 | No |
-| `skills/sqlplan-compare/CHECKS_EXPLAINED.md` | 12,950 | 3,407 | No |
-| `skills/sqlplan-batch/CHECKS_EXPLAINED.md` | 10,542 | 2,774 | No |
-| `skills/sqlplan-index-advisor/CHECKS_EXPLAINED.md` | 9,612 | 2,529 | No |
+| `skills/sqlplan-review/references/check-explanations.md` | 136,730 | 35,981 | No |
+| `skills/tsql-review/references/check-explanations.md` | 67,148 | 17,670 | No |
+| `skills/sqlstats-review/references/check-explanations.md` | 34,134 | 8,982 | No |
+| `skills/sqlplan-deadlock/references/check-explanations.md` | 16,084 | 4,232 | No |
+| `skills/sqlplan-compare/references/check-explanations.md` | 12,950 | 3,407 | No |
+| `skills/sqlplan-batch/references/check-explanations.md` | 10,542 | 2,774 | No |
+| `skills/sqlplan-index-advisor/references/check-explanations.md` | 9,612 | 2,529 | No |

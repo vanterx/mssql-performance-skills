@@ -79,7 +79,7 @@
 
 | Priority | Action | Resolves | Effort |
 |----------|--------|----------|--------|
-| 1 — Immediately | Capture current plan: `sql/sqlplan/01_capture_from_cache.sql` → run `/sqlplan-review` | C1, C2 | 15 min |
+| 1 — Immediately | Capture current plan: `skills/sqlplan-review/scripts/01_capture_from_cache.sql` → run `/sqlplan-review` | C1, C2 | 15 min |
 | 2 — Immediately | `UPDATE STATISTICS SalesDB.dbo.[tables] WITH FULLSCAN` | W1, W2, W3 | 10 min |
 | 3 — Today | Add `OPTION (RECOMPILE)` to dbo.usp_GetSalesReport as interim mitigation | W3 | 5 min |
 | 4 — Today | Run `/sqlplan-index-advisor` on captured plan | W2 | 30 min |

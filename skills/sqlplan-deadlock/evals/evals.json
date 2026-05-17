@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlplan-deadlock",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We got hit by error 1205 every 20 minutes in production today. I extracted the deadlock XML from system_health XE. What is the root cause and pattern?",
+      "expected_output": "Deadlock Summary table with victim/winner, isolation levels, lock resources. Pattern Match identifying which of P1-P8 patterns this is. Root cause section. Fix priority table ranked Low/Medium/High effort vs effectiveness.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I have 5 deadlock graphs from the last 24 hours. Are they the same root cause or different patterns?",
+      "expected_output": "Per-deadlock summaries plus cross-deadlock analysis noting whether they share common root cause (same tables, same lock order issue, same missing index).",
+      "files": []
+    }
+  ]
+}

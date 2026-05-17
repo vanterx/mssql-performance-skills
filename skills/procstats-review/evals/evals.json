@@ -1,0 +1,17 @@
+{
+  "skill_name": "procstats-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Output from sys.dm_exec_procedure_stats sorted by total CPU. Which procs are the worst, and which ones have high per-execution cost hiding behind low call frequency?",
+      "expected_output": "Top CPU consumers (R1), top reads (R5), per-execution efficiency analysis (R7-R12) flagging procs with high cost-per-call but low frequency. Pattern detection (R13-R15) for parameter sniffing signals. Output references /sqlplan-review for drill-down.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Trend data from 4 collection periods over the last week. Which procs are getting worse?",
+      "expected_output": "Trend analysis (R16-R20) showing CPU/IO/duration regression per proc. Highlights newly-appearing procs or those whose metrics doubled. Recommends Query Store review for plan-level cause.",
+      "files": []
+    }
+  ]
+}

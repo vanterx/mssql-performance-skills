@@ -56,7 +56,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Check 3: Every skill has SKILL.md and CHECKS_EXPLAINED.md
+# Check 3: Every skill has SKILL.md, references/check-explanations.md, and references/README.md
 # ---------------------------------------------------------------------------
 echo ""
 echo "[ 3 ] Required files per skill"
@@ -66,11 +66,14 @@ for skill_dir in skills/*/; do
     if [ ! -f "$skill_dir/SKILL.md" ]; then
         fail "$name is missing SKILL.md"; check3_ok=0
     fi
-    if [ ! -f "$skill_dir/CHECKS_EXPLAINED.md" ]; then
-        fail "$name is missing CHECKS_EXPLAINED.md"; check3_ok=0
+    if [ ! -f "$skill_dir/references/check-explanations.md" ]; then
+        fail "$name is missing references/check-explanations.md"; check3_ok=0
+    fi
+    if [ ! -f "$skill_dir/references/README.md" ]; then
+        fail "$name is missing references/README.md"; check3_ok=0
     fi
 done
-[ "$check3_ok" -eq 1 ] && pass "All skill directories have SKILL.md and CHECKS_EXPLAINED.md"
+[ "$check3_ok" -eq 1 ] && pass "All skill directories have SKILL.md, references/check-explanations.md, and references/README.md"
 
 # ---------------------------------------------------------------------------
 # Check 4: Every SKILL.md has a Companion Skills section
@@ -185,26 +188,26 @@ done
 [ "$check10_ok" -eq 1 ] && pass "All frontmatter name: fields match their directory names"
 
 # ---------------------------------------------------------------------------
-# Check 11: Check count in SKILL.md matches CHECKS_EXPLAINED.md per skill
+# Check 11: Check count in SKILL.md matches references/check-explanations.md per skill
 # ---------------------------------------------------------------------------
 echo ""
-echo "[11 ] SKILL.md vs CHECKS_EXPLAINED.md check count per skill"
+echo "[11 ] SKILL.md vs references/check-explanations.md check count per skill"
 check11_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
     skill_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
-    expl_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/CHECKS_EXPLAINED.md" 2>/dev/null || echo 0)
+    expl_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
     # sqlplan-batch: aggregates sqlplan-review checks, no checks of its own
     [ "$name" = "sqlplan-batch" ] && continue
-    # sqlplan-index-advisor: CHECKS_EXPLAINED.md explains the merge/ranking pipeline,
+    # sqlplan-index-advisor: check-explanations.md explains the merge/ranking pipeline,
     # not individual D-checks — structured differently by design
     [ "$name" = "sqlplan-index-advisor" ] && continue
     if [ "$skill_count" != "$expl_count" ]; then
-        fail "$name: SKILL.md has $skill_count checks but CHECKS_EXPLAINED.md has $expl_count — they must match"
+        fail "$name: SKILL.md has $skill_count checks but references/check-explanations.md has $expl_count — they must match"
         check11_ok=0
     fi
 done
-[ "$check11_ok" -eq 1 ] && pass "SKILL.md and CHECKS_EXPLAINED.md check counts match for all skills"
+[ "$check11_ok" -eq 1 ] && pass "SKILL.md and references/check-explanations.md check counts match for all skills"
 
 # ---------------------------------------------------------------------------
 # Check 12: Every skill appears in PERFORMANCE_TUNING_GUIDE.md
@@ -521,6 +524,88 @@ while IFS= read -r skill_file; do
     fi
 done < <(ls skills/*/SKILL.md 2>/dev/null)
 [ "$check26_ok" -eq 1 ] && pass "Per-skill check counts in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance match SKILL.md"
+
+# ---------------------------------------------------------------------------
+# Check 27: Every skill has references/README.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[27 ] references/README.md per skill"
+check27_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    if [ ! -f "$skill_dir/references/README.md" ]; then
+        fail "$name is missing references/README.md — add an index pointing readers at reference files"
+        check27_ok=0
+    fi
+done
+[ "$check27_ok" -eq 1 ] && pass "All skills have references/README.md"
+
+# ---------------------------------------------------------------------------
+# Check 28: Every skill has evals/evals.json
+# ---------------------------------------------------------------------------
+echo ""
+echo "[28 ] evals/evals.json per skill"
+check28_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    if [ ! -f "$skill_dir/evals/evals.json" ]; then
+        warn "$name is missing evals/evals.json — add at least 2 realistic test prompts"
+        check28_ok=0
+    fi
+done
+[ "$check28_ok" -eq 1 ] && pass "All skills have evals/evals.json"
+
+# ---------------------------------------------------------------------------
+# Check 29: TOC header in references/check-explanations.md where >300 lines
+# ---------------------------------------------------------------------------
+echo ""
+echo "[29 ] TOC header in references/check-explanations.md (where >300 lines)"
+check29_ok=1
+for f in skills/*/references/check-explanations.md; do
+    [ ! -f "$f" ] && continue
+    name=$(basename "$(dirname "$(dirname "$f")")")
+    lines=$(wc -l < "$f" | tr -d ' ')
+    [ "$lines" -le 300 ] && continue
+    if ! grep -q "^## Contents" "$f"; then
+        warn "$name/references/check-explanations.md is $lines lines but has no '## Contents' TOC section"
+        check29_ok=0
+    fi
+done
+[ "$check29_ok" -eq 1 ] && pass "All large check-explanations.md files have a Contents TOC"
+
+# ---------------------------------------------------------------------------
+# Check 30: scripts/ directory exists and is non-empty for every skill
+# ---------------------------------------------------------------------------
+echo ""
+echo "[30 ] scripts/ directory non-empty per skill"
+check30_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    if [ ! -d "$skill_dir/scripts" ]; then
+        fail "$name is missing scripts/ directory"
+        check30_ok=0
+    elif [ -z "$(ls -A "$skill_dir/scripts" 2>/dev/null)" ]; then
+        fail "$name/scripts/ is empty — add at least a .gitkeep or capture script"
+        check30_ok=0
+    fi
+done
+[ "$check30_ok" -eq 1 ] && pass "All skills have a non-empty scripts/ directory"
+
+# ---------------------------------------------------------------------------
+# Check 31: Model attribution footer present in each SKILL.md Output Format
+# ---------------------------------------------------------------------------
+echo ""
+echo "[31 ] Model attribution footer in Output Format"
+check31_ok=1
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+    if ! awk '/^## Output Format/{f=1} f && /^## (Notes|Companion)/{exit} f{print}' \
+        "$skill_file" | grep -q "Analyzed by:"; then
+        warn "$name/SKILL.md: Output Format is missing the 'Analyzed by:' attribution footer"
+        check31_ok=0
+    fi
+done
+[ "$check31_ok" -eq 1 ] && pass "All SKILL.md Output Format blocks contain the attribution footer"
 
 # ---------------------------------------------------------------------------
 # Summary
