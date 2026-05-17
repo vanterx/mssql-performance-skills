@@ -21,11 +21,31 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
 | [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 25 checks (L1–L25): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
 | [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
+| [`hadr-health-review`](#hadr-health-review) | `/hadr-health-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 22 checks (H1–H22): replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [`spn-review`](#spn-review) | `/spn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 30 checks (K1–K30): MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
+| [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
 
 ---
 
 ## Choose by Scenario
+
+### "I have a pile of mixed artifacts and don't know where to start"
+
+**Use: `/mssql-performance-review`**
+
+The orchestrator classifies every input (`.sqlplan`, `.sql`, stats output, wait stats, trace, Query Store, procstats, deadlock XML, ERRORLOG, CLUSTER.LOG, setspn output, hadr DMVs), forms 2-3 ranked hypotheses, dispatches the relevant specialised skills, runs an adversarial root-cause check, and emits one consolidated report. Strictly offline — never contacts SQL Server.
+
+```
+/mssql-performance-review ./incident-20260517/
+```
+
+Also accepts a symptom description ("CPU is high on prod since 09:00") and tells you which captures to run.
+
+```
+/sql-triage CPU pegged at 95% on PROD-SQL01 since 09:00, no recent deploy
+```
+
+---
 
 ### "I'm writing a new query or stored procedure"
 

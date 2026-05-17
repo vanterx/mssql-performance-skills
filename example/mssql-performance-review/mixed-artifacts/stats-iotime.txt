@@ -1,0 +1,25 @@
+-- STATISTICS IO, TIME output captured from production
+-- usp_GetOrdersByCustomer @CustomerId = 'CUST-00001'
+-- 2026-05-17 09:32 NZST
+
+SQL Server parse and compile time:
+   CPU time = 12 ms, elapsed time = 14 ms.
+
+(48,221 rows affected)
+Table 'Orders'. Scan count 1, logical reads 1842734, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'Customers'. Scan count 1, logical reads 4, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 4297 ms, elapsed time = 8221 ms.
+
+-- A subsequent execution with a low-cardinality customer (single matching row)
+-- usp_GetOrdersByCustomer @CustomerId = 'CUST-99999'
+
+(1 row affected)
+Table 'Orders'. Scan count 1, logical reads 1842734, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'Customers'. Scan count 1, logical reads 4, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 3892 ms, elapsed time = 7104 ms.
+
+-- Note: low-cardinality call still scans the same 1.8M pages — strong sniffing signal

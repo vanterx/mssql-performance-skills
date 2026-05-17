@@ -409,3 +409,5 @@ Include a **Prioritized Action Order** table after all findings:
   is generating excessive log volume, contributing to send queue buildup (H11, H14).
 - `/tsql-review` — Review T-SQL that runs on a readable secondary to identify implicit
   conversions or non-sargable predicates that add read load and compete with redo threads.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

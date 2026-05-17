@@ -1,0 +1,20 @@
+-- sys.dm_os_wait_stats snapshot diff over 15-minute window
+-- 2026-05-17 09:15-09:30 NZST on PROD-SQL01
+-- Filtered to exclude benign idle waits
+
+wait_type             waiting_tasks_count  wait_time_ms  signal_wait_time_ms  max_wait_time_ms
+SOS_SCHEDULER_YIELD   142,221              518,442       18,442               4
+CXPACKET              82,481               482,221       43,221               142
+PAGEIOLATCH_SH        4,432                184,521       12,331               142
+WRITELOG              9,281                42,118        2,442                21
+LCK_M_S               241                  18,442        221                  1,422
+RESOURCE_SEMAPHORE    18                   8,221         142                  892
+
+-- Capture context:
+--   Total wait_time_ms (actionable): 1,253,965
+--   Window duration: 900 seconds (15 min)
+--   Wait rate: 1,393 ms/sec — roughly 1.4 concurrent sessions waiting on average
+--   Signal wait ratio: (18,442 + 43,221 + 12,331 + 2,442 + 221 + 142) / 1,253,965 = 6.1%
+-- Interpretation: signal wait ratio LOW (< 15%) — CPU not saturated on signal queue.
+-- SOS_SCHEDULER_YIELD dominant — CPU-bound execution (consistent with parameter sniffing or runaway scan).
+-- PAGEIOLATCH_SH only 14.7% of total — not the primary bottleneck.

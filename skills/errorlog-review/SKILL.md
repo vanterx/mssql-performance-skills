@@ -450,3 +450,5 @@ When a check cannot be evaluated (e.g., E18 with no backup log entries), state
 - `/spn-review` — when E22 (login failure burst) shows Kerberos-specific errors (17806, 17807,
   error 0x8009030c) or "Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'", spn-review
   identifies the missing or duplicate SPN and delegation misconfiguration as root cause
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

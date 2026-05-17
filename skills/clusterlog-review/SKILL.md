@@ -250,3 +250,5 @@ flag L25. If the log covers less than 5 minutes, note the limited time window.
 - `/sqlwait-review` — correlate HADR_WORK_QUEUE, HADR_SYNC_COMMIT, and HADR_REPLICA_DDL_END waits with cluster log timestamps to connect the SQL-side wait signal to the WSFC-level event
 - `/query-store-review` — after an AG failover identified in CLUSTER.LOG, use Query Store to detect plan regressions on the new primary
 - `/sqlplan-review` — if scheduler starvation caused L1 or L2, analyze the long-running query that blocked the health check thread
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

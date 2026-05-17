@@ -1,0 +1,29 @@
+{
+  "skill_name": "mssql-performance-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a folder of mixed SQL Server artifacts from an incident at 09:30 this morning — one .sqlplan, one .sql source, a STATISTICS IO/TIME excerpt, and a wait stats snapshot. They are at example/mssql-performance-review/mixed-artifacts/. Please run a full review and tell me the root cause and what to fix first.",
+      "expected_output": "Unified Report with: Summary block (counts, primary bottleneck, highest-priority fix); Hypothesis Trace table with 2 or 3 ranked hypotheses; Adversarial Check section showing the disproof attempt and result; Findings section grouped by Critical/Warning/Info, each Critical citing >=3 specialised check IDs with source + observed value + threshold; Consolidated Fix Priority table with action + effort + window + risk + side effects + rollback + verification; Recommendation Conflicts section (even if 'None detected'); Skills Skipped table.",
+      "files": ["example/mssql-performance-review/mixed-artifacts/"]
+    },
+    {
+      "id": 2,
+      "prompt": "Symptom-only: CPU is pegged at 95% on PROD-SQL01 since 09:00, no recent deploy, users complaining about slowness. I have no artifacts captured yet. What should I capture and in what order, and what hypotheses are you considering?",
+      "expected_output": "Symptom-driven response listing 2 or 3 ranked hypotheses (likely: server-wide CPU bottleneck driven by parameter sniffing or a runaway query); a capture order matching the symptom-to-probe-sequence map (sqlwait-review first, then procstats-review, then sqlplan-review on top consumer); explicit note that the orchestrator will not contact the SQL Server and the user must run the captures themselves.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Run a review across these artifacts. I have signals that look like both parameter sniffing AND server-wide I/O bottleneck. Make sure both hypotheses are surfaced — don't just pick the loudest one.",
+      "expected_output": "Report surfaces both hypotheses in the Hypothesis Trace table. Adversarial Check section explicitly notes the contradicting signal: parameter sniffing would predict CPU-dominant waits, but PAGEIOLATCH_SH is dominant. Result = 'strong_contradiction_alternative_escalated' if I/O signal is strong, or 'weak_contradiction' with both hypotheses retained otherwise. Critical findings cite evidence from at least 2 distinct skills supporting each hypothesis.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "We deployed an index recommendation from your last review 24h ago. Re-run with --baseline=previous-report.json and tell me whether the issue resolved.",
+      "expected_output": "Report includes a 'Recommendation Status' section tagging each prior recommendation as verified-effective / partial / no-change / regressed-elsewhere. Evidence cites the difference between baseline metrics (cited in the prior report's evidence.json) and current observed values. If the recommended index is now in use AND the parameter-sniffing variance has dropped, tag verified-effective.",
+      "files": []
+    }
+  ]
+}

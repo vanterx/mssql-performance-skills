@@ -252,3 +252,5 @@ X5 ✓ (brief reason), X6 ✓ (brief reason) [list every check verified clean wi
 - **sqlplan-deadlock** — If deadlock events (class 59) appear in the trace, extract the deadlock XML and analyze with this companion skill.
 - **sqlplan-batch** — If the trace contains ShowPlan XML for many queries (X20), export those plans to `.sqlplan` files and batch-analyze with this skill.
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

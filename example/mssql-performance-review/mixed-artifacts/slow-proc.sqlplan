@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan" Version="1.7" Build="16.0.4135.4">
+  <BatchSequence>
+    <Batch>
+      <Statements>
+        <StmtSimple StatementCompId="1" StatementEstRows="50" StatementId="1" StatementOptmLevel="FULL" StatementSubTreeCost="124.3" StatementText="SELECT * FROM dbo.Orders WHERE CustomerId = @CustomerId AND OrderDate >= @StartDate AND DELETED_FLAG = 0 ORDER BY OrderDate DESC" StatementType="SELECT">
+          <QueryPlan CachedPlanSize="48" CompileCPU="12" CompileMemory="384" CompileTime="14" DegreeOfParallelism="8">
+            <MemoryGrantInfo SerialRequiredMemory="1024" SerialDesiredMemory="2048" RequiredMemory="2048" DesiredMemory="4096" RequestedMemory="4096" GrantWaitTime="0" GrantedMemory="4096" MaxUsedMemory="3072" MaxQueryMemory="32768"/>
+            <ParameterList>
+              <ColumnReference Column="@CustomerId" ParameterCompiledValue="N'CUST-00001'" ParameterRuntimeValue="N'CUST-99999'"/>
+              <ColumnReference Column="@StartDate" ParameterCompiledValue="'2026-04-17'" ParameterRuntimeValue="'2026-04-17'"/>
+            </ParameterList>
+            <RelOp NodeId="0" PhysicalOp="Sort" LogicalOp="Sort" EstimateRows="50" EstimatedTotalSubtreeCost="124.3" Parallel="true">
+              <RunTimeInformation>
+                <RunTimeCountersPerThread Thread="0" ActualRows="1842734" ActualEndOfScans="1" ActualExecutions="1"/>
+              </RunTimeInformation>
+              <RelOp NodeId="1" PhysicalOp="Clustered Index Scan" LogicalOp="Clustered Index Scan" EstimateRows="50" EstimatedTotalSubtreeCost="98.4" Parallel="true">
+                <RunTimeInformation>
+                  <RunTimeCountersPerThread Thread="0" ActualRows="1842734" ActualEndOfScans="1" ActualExecutions="1"/>
+                </RunTimeInformation>
+                <IndexScan Ordered="false">
+                  <DefinedValues/>
+                  <Object Database="[OrdersDB]" Schema="[dbo]" Table="[Orders]" Index="[PK_Orders]" IndexKind="Clustered" Storage="RowStore"/>
+                  <Predicate>
+                    <ScalarOperator ScalarString="[Orders].[CustomerId]=@CustomerId AND [Orders].[OrderDate]&gt;=@StartDate AND [Orders].[DELETED_FLAG]=0">
+                      <Compare CompareOp="EQ">
+                        <ScalarOperator>
+                          <Identifier><ColumnReference Database="[OrdersDB]" Schema="[dbo]" Table="[Orders]" Column="CustomerId"/></Identifier>
+                        </ScalarOperator>
+                        <ScalarOperator>
+                          <Identifier><ColumnReference Column="@CustomerId"/></Identifier>
+                        </ScalarOperator>
+                      </Compare>
+                    </ScalarOperator>
+                  </Predicate>
+                </IndexScan>
+              </RelOp>
+            </RelOp>
+            <MissingIndexes>
+              <MissingIndexGroup Impact="93.2">
+                <MissingIndex Database="[OrdersDB]" Schema="[dbo]" Table="[Orders]">
+                  <ColumnGroup Usage="EQUALITY">
+                    <Column Name="[CustomerId]" ColumnId="3"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INEQUALITY">
+                    <Column Name="[OrderDate]" ColumnId="5"/>
+                  </ColumnGroup>
+                  <ColumnGroup Usage="INCLUDE">
+                    <Column Name="[Status]" ColumnId="6"/>
+                    <Column Name="[TotalAmount]" ColumnId="7"/>
+                  </ColumnGroup>
+                </MissingIndex>
+              </MissingIndexGroup>
+            </MissingIndexes>
+          </QueryPlan>
+        </StmtSimple>
+      </Statements>
+    </Batch>
+  </BatchSequence>
+</ShowPlanXML>

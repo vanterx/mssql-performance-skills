@@ -308,3 +308,5 @@ Format as a two-column table. Include every check explicitly evaluated and not t
   plans, diff them to understand exactly what changed in the query plan.
 - **tsql-review** — Review the T-SQL source of flagged procedures for static anti-patterns
   (implicit conversions, non-sargable predicates, cursor loops) before capturing a plan.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides fifteen slash-command skills that Claude uses when asked to review T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, or SQL Server SPN and Kerberos delegation configuration. No application code — content is Markdown only.
+Provides sixteen slash-command skills — fifteen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, and SQL Server SPN and Kerberos delegation configuration. No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -33,6 +33,7 @@ Provides fifteen slash-command skills that Claude uses when asked to review T-SQ
 | [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 22 checks (H1–H22) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 28 checks (E1–E28) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
 | [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 30 checks (K1–K30) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -53,12 +54,13 @@ Provides fifteen slash-command skills that Claude uses when asked to review T-SQ
 | [skills/hadr-health-review/references/check-explanations.md](skills/hadr-health-review/references/check-explanations.md) | Plain-English explanation of all 22 H-checks with DMV examples, fix recipes, and Quick Reference table |
 | [skills/errorlog-review/references/check-explanations.md](skills/errorlog-review/references/check-explanations.md) | Plain-English explanation of all 28 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
 | [skills/spn-review/references/check-explanations.md](skills/spn-review/references/check-explanations.md) | Plain-English explanation of all 30 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
+| [skills/mssql-performance-review/references/check-explanations.md](skills/mssql-performance-review/references/check-explanations.md) | Methodology reference for the orchestrator: dispatch heuristics, symptom-to-probe-sequence map, hypothesis classes, recommendation conflict catalogue, and rationale for the standard analysis order |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 15 skills |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 16 skills |
 | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 231-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
@@ -95,7 +97,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 15 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 16 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -156,8 +158,9 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `L` | `clusterlog-review` |
 | `E` | `errorlog-review` |
 | `K` | `spn-review` |
+| (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
-New skills must choose an unused single uppercase letter.
+New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.
 
 ### references/check-explanations.md is not loaded at runtime by default
 Only `SKILL.md` is loaded automatically by the Claude Code skill loader. The `references/check-explanations.md` file is human reference and on-demand context — Claude may load it when a user asks "explain check X" or for deeper fix-option detail. Do not put trigger conditions or thresholds there that Claude needs to act on without prompting.

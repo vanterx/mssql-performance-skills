@@ -306,3 +306,5 @@ I1 ✓ (brief reason), I3 ✓ (brief reason) [list every check verified clean wi
 - **sqlplan-deadlock** — If high I/O correlates with long elapsed times and low CPU (W1), investigate deadlock or blocking as a root cause.
 - **sqlplan-batch** — If you have `.sqlplan` files for the same workload, batch-analyze them alongside this STATISTICS review.
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

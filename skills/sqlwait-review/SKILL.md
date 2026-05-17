@@ -736,3 +736,5 @@ Always end the single-snapshot section with this table. Order: (a) emergency/poi
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 - **clusterlog-review** — If HADR_WORK_QUEUE or HADR_SYNC_COMMIT waits are dominant (V3X range), correlate with WSFC CLUSTER.LOG to identify the cluster-level root cause (lease timeout, node eviction, network partition).
 - **hadr-health-review** — If AG-related waits appear, cross-reference with `sys.dm_hadr_*` DMV output to confirm replica sync state, redo queue depth, and secondary lag.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

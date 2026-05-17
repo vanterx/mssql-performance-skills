@@ -278,3 +278,5 @@ and the evidence for each PASS or SKIP.
   (L10, L17) may have missing VNN or listener SPNs as root cause
 - **/hadr-health-review** — AG listener replica disconnection (H1, H5) may be SPN-driven
   when the listener name has no registered SPN and clients fall back to NTLM or fail entirely
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

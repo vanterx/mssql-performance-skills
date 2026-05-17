@@ -401,3 +401,5 @@ Always end the report with this table. Order: (a) fixes that unblock others firs
 - **sqltrace-review** — If a Profiler/XE trace captured the same workload period, cross-reference event-level patterns with Query Store aggregates.
 - **sqlwait-review** — If Query Store shows widespread memory or I/O waits (Q19–Q21), run wait statistics analysis at the server level to confirm the bottleneck category.
 - **hadr-health-review** — After an AG failover, check `sys.dm_hadr_*` state to confirm the new primary is healthy before tuning regressed queries on a replica that may still be catching up.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.
