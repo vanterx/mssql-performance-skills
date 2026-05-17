@@ -36,3 +36,27 @@ Load a reference file when its situation applies. The orchestrator does not need
 **When to load:** Running the mandatory adversarial root cause check after a primary hypothesis is identified. This file holds the disproof template for each hypothesis class.
 
 **What it covers:** A template per hypothesis class (parameter sniffing, missing index, stats stale, deadlock pattern, AG failover root cause, etc.) describing what evidence would refute the primary hypothesis, where to look for it, and how to grade the strength of the contradiction (weak / strong).
+
+### model-routing.md
+
+**When to load:** Determining which model to assign to a phase or subagent. Also when the user asks about cost or passes `--model-tier` / `--no-adversarial`.
+
+**What it covers:** Full phase-to-model mapping for the three default tiers (economy / standard / maximum), the per-sub-skill default model assignments, cost profile worked example, quality safeguards (why adversarial always runs on at least Sonnet), and the per-phase cost breakdown format that appears in the Summary block.
+
+### skill-dag.md
+
+**When to load:** Constructing or walking the dependency DAG for a multi-artifact review. Also when a probe's findings might open a dynamic edge to a follow-up skill.
+
+**What it covers:** DAG construction rules (static edges from the dependency catalogue, dynamic edges from findings), the walk algorithm with parallelism, two worked examples (simple mixed input and symptom-only-with-bundle-return), and the full catalogue of dynamic edges (when finding X in skill A opens an edge to skill B).
+
+### domain-memory.md
+
+**When to load:** A facts file is present at `~/.mssql-perf-review/instances/<server>.json`, or the user invokes `/sql-triage --capture-instance-facts`, or a recommendation might conflict with documented instance configuration.
+
+**What it covers:** The facts.json schema, field-by-field validation rules, the rejection/escalation catalogue (which facts cause which recommendation adjustments), staleness handling (>90 days triggers warning), per-database fact handling, multi-instance reviews, and the catalogue of facts the orchestrator currently consumes.
+
+### followup-qa.md
+
+**When to load:** The user asks a follow-up question after the report. Use to classify the question type and decide whether to answer from context (free) or dispatch a new probe (cheap).
+
+**What it covers:** The five-category question taxonomy, when-to-probe vs answer-from-context rules, refusal patterns (live SQL, out of scope), the structured answer format with evidence citation, session memory rules, cost-guard warnings, and a catalogue of common question patterns ("why is X recommended?", "show me only Critical findings", "re-rank by effort") with the orchestrator's expected response shape.
