@@ -1198,48 +1198,115 @@ EXECUTE collect.usp_CollectProcStats;
 
 ## mssql-performance-review
 
-Agentic offline orchestrator. Routes mixed SQL Server artifacts to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with explicit evidence chain, risk-rated fixes, and rollback steps for every recommendation.
+Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with explicit evidence chain, risk-rated fixes, and rollback steps for every recommendation.
 
 **Strictly offline.** The orchestrator never contacts a SQL Server. It only reads files you provide and emits scripts you run yourself. Air-gap compatible; no connection strings; no consent prompts.
 
+> **New user?** Read [`skills/mssql-performance-review/HOW_TO_USE.md`](skills/mssql-performance-review/HOW_TO_USE.md) — a 989-line guide covering installation, every input mode, every flag, three worked end-to-end examples, output interpretation, follow-up Q&A patterns, cost management, domain memory setup, the capture-bundle workflow, the baseline-diff verification loop, troubleshooting, and the offline trust model.
+
 **Triggers:** `/mssql-performance-review`, `/mssql-perf-review`, `/mssql-full-review`, `/sql-triage`
 
-**Input:**
+**Input modes:**
 
-- A directory containing mixed artifacts (`.sqlplan`, `.sql`, statistics output, wait stats, trace, Query Store, procstats, deadlock XML, ERRORLOG, CLUSTER.LOG, setspn output, hadr DMVs)
-- A list of file paths
-- Inline pasted content blocks with type hints
-- A natural-language symptom description ("CPU is high on prod since 09:00")
+| Mode | Example |
+|------|---------|
+| Directory | `/mssql-performance-review ./incident-20260517/` |
+| File list | `/mssql-performance-review ./slow-proc.sqlplan ./wait-stats.txt` |
+| Inline paste | paste content blocks directly into chat |
+| Symptom-only | `/sql-triage CPU pegged at 95% on PROD-SQL01 since 09:00` |
+| Resume from bundle | `/mssql-performance-review --resume ./captures/<run-id>/` |
+| Verification (baseline-diff) | `/mssql-performance-review --baseline ./state/<prior>/state.json ./new-captures/` |
 
-**Usage:**
+**Eleven cross-cutting primitives** (the full agentic stack):
+
+| Primitive | What it does |
+|-----------|--------------|
+| Evidence chain | Every Critical finding cites ≥3 check IDs from ≥2 skills with source artifact + observed value + threshold |
+| Risk-aware recommendations | Every fix has action + effort + window + risk class + side effects + rollback + verification + confidence |
+| Adversarial root-cause check | Mandatory pass that tries to disprove the primary hypothesis before declaring a root cause |
+| Confidence-driven early termination | Stop probing when 3+ skills converge HIGH with no contradiction |
+| Multi-model cost routing | Haiku for triage, Sonnet for synthesis, Opus for the adversarial pass — ~40% cheaper than all-Sonnet |
+| Skill-graph DAG | Dynamic dispatch graph — probes that depend on each other sequence correctly; everything else runs in parallel |
+| Domain memory | Per-instance facts (MAXDOP, AG topology, partitioning) inform every recommendation |
+| Follow-up Q&A | After the report, ask "why?" — most answers are free from the in-context evidence chain |
+| Capture bundle generator | When artifacts are missing, emit read-only `.sql` scripts for you to run |
+| Verification checklist | Every recommendation specifies which capture to re-run and expected metric change |
+| Baseline-diff feedback loop | After deploy, `--baseline` tags each prior recommendation as verified-effective / partial / no-change / regressed-elsewhere |
+
+**Command flags:**
+
+| Flag | Effect |
+|------|--------|
+| `--model-tier {economy\|standard\|maximum}` | Cost tier (economy ~USD 0.06, standard ~USD 0.21, maximum ~USD 0.50) |
+| `--no-adversarial` | Skip the Opus adversarial pass (saves ~6k tokens) |
+| `--exhaustive` | Run every applicable skill even after 3+ converge |
+| `--phases` | Fixed five-phase dispatch instead of dynamic DAG |
+| `--baseline <state.json>` | Tag prior recommendations after deploy |
+| `--resume <bundle-dir>` | Continue from a capture-bundle paste-back |
+| `--instance <name>` | Load `~/.mssql-perf-review/instances/<name>.json` domain memory |
+| `--capture-instance-facts` | Emit DMV survey bundle for populating `facts.json` |
+| `--save-session` | Persist session state for later `--baseline` |
+
+**Workflow at a glance:**
 
 ```
-# Artifact-driven (you have files)
-/mssql-performance-review ./artifacts/
-
-# Symptom-driven (you have only a description)
-/sql-triage CPU pegged at 95% on PROD-SQL01 since 09:00 today
+artifacts ──► /mssql-performance-review ──► consolidated report
+                                              │
+symptom ──► /sql-triage ──► capture bundle ◄──┘ (if artifacts missing)
+                                │
+                                ▼
+                        you run scripts in SSMS
+                                │
+                                ▼
+                   paste outputs into bundle
+                                │
+                                ▼
+                 /mssql-performance-review --resume ──► consolidated report
+                                                                │
+                                                                ▼
+                                                          deploy fixes
+                                                                │
+                                                                ▼
+                                                    re-capture (24h later)
+                                                                │
+                                                                ▼
+                                  /mssql-performance-review --baseline ──► verification report
+                                                                              │
+                                                                              ▼
+                                                                 feedback.jsonl appends
+                                                                 (future hypothesis learning)
 ```
 
-**What it does:**
+**Sample outputs:**
 
-1. Classifies every input against the 15 specialised skills' input patterns.
-2. Generates 2-3 ranked hypotheses (parameter sniffing, missing index, server-wide I/O, AG failover, deadlock, etc.).
-3. Dispatches the specialised skills in the optimal order (cheap source/breadth first, then deep dive).
-4. Builds an evidence chain for every consolidated finding — each Critical finding cites at least 3 check IDs from 2+ skills, with source artifact, observed value, and threshold.
-5. Runs an **adversarial check** that deliberately tries to disprove the primary root cause — surfaces contradicting evidence rather than suppressing it.
-6. Produces ranked fix recommendations with action, effort, blocking window, risk class, side effects, exact rollback step, and post-deployment verification capture.
-7. Detects recommendation conflicts (e.g., one skill says add index X, another says X is unused).
-8. Tier 3 emits a capture bundle for missing artifacts — scripts you run yourself.
+- [`example/mssql-performance-review/mixed-artifacts-analysis.md`](example/mssql-performance-review/mixed-artifacts-analysis.md) — artifact-driven review with full report
+- [`example/mssql-performance-review/symptom-first-analysis.md`](example/mssql-performance-review/symptom-first-analysis.md) — symptom-only triage with capture-bundle response
+- [`example/mssql-performance-review/capture-bundle-example/`](example/mssql-performance-review/capture-bundle-example/) — sample bundle (README, scripts, paste-back template, manifest.json)
+- [`example/mssql-performance-review/baseline-diff-analysis.md`](example/mssql-performance-review/baseline-diff-analysis.md) — verification report 24h after deploy with recommendation tags
 
-**Sample output:** See [`example/mssql-performance-review/mixed-artifacts-analysis.md`](example/mssql-performance-review/mixed-artifacts-analysis.md) for an artifact-first walkthrough; [`example/mssql-performance-review/symptom-first-analysis.md`](example/mssql-performance-review/symptom-first-analysis.md) for the symptom-only triage flow.
+**When to use this vs a specialised skill directly:**
 
-**When to use this vs the specialised skill directly:**
+- Use **this** when you have multiple artifact types together, only a symptom, or want cross-skill validation and an adversarial check.
+- Use the **specialised skill** when you have one artifact and know which skill it needs (e.g., one `.sqlplan` → `/sqlplan-review`).
 
-- Use this when you have several artifact types or a symptom and are not sure which skill to run.
-- Use the specialised skill directly when you have one artifact and know which skill it needs (e.g., one `.sqlplan` → `/sqlplan-review`).
+The orchestrator does not duplicate the specialised skills — it composes them.
 
-The orchestrator does not duplicate the specialised skills — it composes them. The full methodology, hypothesis classes, conflict catalogue, and risk rubric are in [`skills/mssql-performance-review/references/`](skills/mssql-performance-review/references/).
+**Cost:** ~USD 0.06–0.50 per review depending on tier and artifact volume. Typical mixed-artifact review on `--model-tier standard`: ~USD 0.21. Follow-up Q&A is usually free (reads from in-context evidence). Full breakdown in [`skills/mssql-performance-review/references/model-routing.md`](skills/mssql-performance-review/references/model-routing.md).
+
+**Deep references** (loaded on demand by the orchestrator):
+
+| File | Topic |
+|------|-------|
+| [`references/check-explanations.md`](skills/mssql-performance-review/references/check-explanations.md) | Methodology, dispatch heuristics, hypothesis classes, conflict catalogue |
+| [`references/evidence-schema.md`](skills/mssql-performance-review/references/evidence-schema.md) | `evidence.json` schema, validation rules, human rendering |
+| [`references/risk-rubric.md`](skills/mssql-performance-review/references/risk-rubric.md) | Risk-class definitions, environmental escalators, rollback rules |
+| [`references/adversarial-prompts.md`](skills/mssql-performance-review/references/adversarial-prompts.md) | Disproof templates per hypothesis class |
+| [`references/model-routing.md`](skills/mssql-performance-review/references/model-routing.md) | Multi-model routing tiers, override flags, cost profile |
+| [`references/skill-dag.md`](skills/mssql-performance-review/references/skill-dag.md) | DAG construction, static + dynamic edge catalogue |
+| [`references/domain-memory.md`](skills/mssql-performance-review/references/domain-memory.md) | `facts.json` schema, rejection/escalation catalogue |
+| [`references/followup-qa.md`](skills/mssql-performance-review/references/followup-qa.md) | Question taxonomy, when-to-probe rules |
+| [`references/capture-bundle-spec.md`](skills/mssql-performance-review/references/capture-bundle-spec.md) | Bundle layout, manifest schema, resume flow |
+| [`references/verification-checklist.md`](skills/mssql-performance-review/references/verification-checklist.md) | Tagging rules, timing guidance, feedback.jsonl schema |
 
 ---
 
