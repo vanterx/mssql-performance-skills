@@ -14,13 +14,13 @@ A `.claude/settings.json` PostToolUse hook auto-runs this after every Write/Edit
 
 **Dollar signs in SKILL.md break at runtime.** The Claude skill loader does shell variable expansion on SKILL.md content. Never write `$0.012` or `$[expr]` — use `USD 0.012`. verify-docs.sh check 5 catches this.
 
-**CHECKS_EXPLAINED.md is NOT loaded at runtime.** Only SKILL.md is read by the skill loader. All thresholds and triggers must live in SKILL.md. CHECKS_EXPLAINED.md is human reference only.
+**references/check-explanations.md is NOT loaded at runtime by default.** Only SKILL.md is read automatically by the skill loader. All thresholds and triggers must live in SKILL.md. The reference file is on-demand context — Claude may load it when a user asks "explain check X" or for deeper fix-option detail.
 
-**sqlplan-batch and sqlplan-index-advisor are exempt from check count matching** (verify-docs.sh check 11). Their CHECKS_EXPLAINED.md files don't mirror per-check entries by design.
+**sqlplan-batch and sqlplan-index-advisor are exempt from check count matching** (verify-docs.sh check 11). Their references/check-explanations.md files don't mirror per-check entries by design.
 
 ## Adding a check → update 6 locations
 `skills/<skill>/SKILL.md` (check + section header + frontmatter count + Purpose count),
-`skills/<skill>/CHECKS_EXPLAINED.md` (explanation + header + Quick Reference table),
+`skills/<skill>/references/check-explanations.md` (explanation + header + Quick Reference table),
 `PERFORMANCE_TUNING_GUIDE.md` (Check ID Reference total),
 `LLM_COST_ESTIMATION.md` (total checks line).
 

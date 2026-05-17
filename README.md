@@ -142,7 +142,7 @@ alwaysApply: false
 
 ### Tips for Non-Claude LLMs
 
-- **Smaller context windows:** Use `SKILL.md` alone (not `CHECKS_EXPLAINED.md`) — it contains all triggers and thresholds in a compact form
+- **Smaller context windows:** Use `SKILL.md` alone (not `references/check-explanations.md`) — it contains all triggers and thresholds in a compact form
 - **Reasoning depth:** Claude Code applies checks iteratively. Other LLMs may need an explicit prompt like *"Walk each check one at a time and report every finding"*
 - **Large inputs:** Some LLMs struggle with large `.sqlplan` XML or long trace outputs. Paste the input first, ask the LLM to extract key fields, then run the skill
 - **Batch analysis:** The `sqlplan-batch` skill requires multi-file orchestration — this works best in agent-mode IDEs (Cursor, Windsurf, Cline) that can read directories
@@ -1093,26 +1093,26 @@ Service account is CONTOSO\sqlsvc. SQL Server is the default instance.
 
 ## Collection Framework
 
-The `sql/` directory contains T-SQL and PowerShell scripts that collect SQL Server DMV data
-into a persistent monitoring database and produce report output for the skills above.
+Each skill's `scripts/` directory contains T-SQL and PowerShell capture scripts that collect
+SQL Server DMV data and produce report output for that skill.
 
 ### Folder map
 
 | Folder | Purpose | Feeds skill |
 |--------|---------|-------------|
-| `sql/collection/` | Persistent collectors — schema, tables, SPs, Agent job, PowerShell deployment | `/procstats-review`, `/sqlwait-review` |
-| `sql/wait-stats/` | Ad-hoc `sys.dm_os_wait_stats` capture (single snapshot + differential) | `/sqlwait-review` |
-| `sql/sqltrace/` | Extended Events session setup + ring buffer / file / `.trc` readers | `/sqltrace-review` |
-| `sql/deadlock/` | system_health reader + dedicated XE session for deadlock capture | `/sqlplan-deadlock` |
-| `sql/query-store/` | Queries A–D for Query Store analysis | `/query-store-review` |
-| `sql/sqlplan/` | Plan cache, running query, and Query Store plan extraction | `/sqlplan-review`, `/sqlplan-compare` |
-| `sql/sqlstats/` | `SET STATISTICS IO, TIME ON` capture template | `/sqlstats-review` |
+| `skills/procstats-review/scripts/collection/` | Persistent collectors — schema, tables, SPs, Agent job, PowerShell deployment | `/procstats-review`, `/sqlwait-review` |
+| `skills/sqlwait-review/scripts/` | Ad-hoc `sys.dm_os_wait_stats` capture (single snapshot + differential) | `/sqlwait-review` |
+| `skills/sqltrace-review/scripts/` | Extended Events session setup + ring buffer / file / `.trc` readers | `/sqltrace-review` |
+| `skills/sqlplan-deadlock/scripts/` | system_health reader + dedicated XE session for deadlock capture | `/sqlplan-deadlock` |
+| `skills/query-store-review/scripts/` | Queries A–D for Query Store analysis | `/query-store-review` |
+| `skills/sqlplan-review/scripts/` | Plan cache, running query, and Query Store plan extraction | `/sqlplan-review`, `/sqlplan-compare` |
+| `skills/sqlstats-review/scripts/` | `SET STATISTICS IO, TIME ON` capture template | `/sqlstats-review` |
 
 ### Quick deploy (full collection framework)
 
 ```powershell
 # Deploy all collectors to a new monitoring database
-.\sql\collection\Deploy-DmvCollection.ps1 `
+.\skills\procstats-review\scripts\collection\Deploy-DmvCollection.ps1 `
     -ServerInstance 'SQL01\PROD' `
     -Database       'DBAMonitor' `
     -Collectors     All `
@@ -1120,12 +1120,12 @@ into a persistent monitoring database and produce report output for the skills a
     -TrustServerCertificate
 
 # Deploy only wait stats collector
-.\sql\collection\Deploy-DmvCollection.ps1 `
+.\skills\procstats-review\scripts\collection\Deploy-DmvCollection.ps1 `
     -ServerInstance 'SQL01' `
     -Collectors     WaitStats
 
 # Preview without executing
-.\sql\collection\Deploy-DmvCollection.ps1 `
+.\skills\procstats-review\scripts\collection\Deploy-DmvCollection.ps1 `
     -ServerInstance 'SQL01' `
     -Collectors     All `
     -WhatIf
@@ -1140,8 +1140,8 @@ into a persistent monitoring database and produce report output for the skills a
 EXECUTE collect.usp_CollectAll @debug = 1;
 
 -- View results (paste into /procstats-review)
--- See sql/collection/04_report_queries.sql  — proc/trigger/function stats (Q1-Q5)
--- See sql/collection/12_report_all_collections.sql — all collectors + health log
+-- See skills/procstats-review/scripts/collection/04_report_queries.sql  — proc/trigger/function stats (Q1-Q5)
+-- See skills/procstats-review/scripts/collection/12_report_all_collections.sql — all collectors + health log
 
 -- Verify all collectors are succeeding
 SELECT collector_name, MAX(collection_time) AS last_run, MAX(status) AS last_status
@@ -1156,11 +1156,11 @@ ORDER BY collector_name;
 
 Analyzes runtime statistics collected from `sys.dm_exec_procedure_stats`,
 `sys.dm_exec_trigger_stats`, and `sys.dm_exec_function_stats` via the collection framework
-in `sql/collection/`. Applies 20 checks (R1–R20) across four categories.
+in `skills/procstats-review/scripts/collection/`. Applies 20 checks (R1–R20) across four categories.
 
 **Triggers:** `/procstats-review`, `/proc-stats`
 
-**Input:** Paste output from any of the 5 reporting queries in `sql/collection/04_report_queries.sql`.
+**Input:** Paste output from any of the 5 reporting queries in `skills/procstats-review/scripts/collection/04_report_queries.sql`.
 
 **Checks:** 20 total — R1–R5 (top consumers), R6–R10 (per-execution efficiency),
 R11–R15 (pattern detection), R16–R20 (trend analysis, requires ≥ 3 snapshots).
@@ -1181,11 +1181,11 @@ R11–R15 (pattern detection), R16–R20 (trend analysis, requires ≥ 3 snapsho
 
 ```sql
 -- Run in order against your DBA/monitoring database:
--- sql/collection/01_create_tables.sql
--- sql/collection/02_usp_collect_procstats.sql
--- sql/collection/03_usp_calculate_deltas.sql
--- sql/collection/04_report_queries.sql   (reporting queries — paste output into /procstats-review)
--- sql/collection/05_create_agent_job.sql (optional Agent job)
+-- skills/procstats-review/scripts/collection/01_create_tables.sql
+-- skills/procstats-review/scripts/collection/02_usp_collect_procstats.sql
+-- skills/procstats-review/scripts/collection/03_usp_calculate_deltas.sql
+-- skills/procstats-review/scripts/collection/04_report_queries.sql   (reporting queries — paste output into /procstats-review)
+-- skills/procstats-review/scripts/collection/05_create_agent_job.sql (optional Agent job)
 
 -- Collect manually:
 EXECUTE collect.usp_CollectProcStats;

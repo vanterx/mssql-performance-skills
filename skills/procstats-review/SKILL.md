@@ -1,6 +1,6 @@
 ---
 name: procstats-review
-description: Analyze SQL Server procedure/trigger/function runtime stats collected from sys.dm_exec_procedure_stats into collect.proc_stats. Applies 20 checks (R1–R20) across four categories — top consumers, per-execution efficiency, pattern detection, and trend analysis. Use when pasting output from the report queries in sql/collection/04_report_queries.sql.
+description: Analyze SQL Server procedure/trigger/function runtime stats collected from sys.dm_exec_procedure_stats into collect.proc_stats. Applies 20 checks (R1–R20) across four categories — top consumers, per-execution efficiency, pattern detection, and trend analysis. Use when pasting output from the report queries in scripts/collection/04_report_queries.sql.
 triggers:
   - /procstats-review
   - /proc-stats
@@ -35,7 +35,7 @@ Accept any of:
 - **Combined paste** — paste two or more query outputs together; apply all applicable checks
 - **Natural language description** — describe the metrics you see ("usp_GetOrders uses 80% of CPU")
 - **Statement-level stats** — paste output from `collect.query_stats` using the report query in
-  `sql/collection/12_report_all_collections.sql` Section 2; all R-checks apply equally to
+  `scripts/collection/12_report_all_collections.sql` Section 2; all R-checks apply equally to
   statement-level data — just note the object_name may be NULL for ad-hoc SQL
 
 For trend checks (R16–R20), Q5 output with ≥ 3 rows per object is required. State

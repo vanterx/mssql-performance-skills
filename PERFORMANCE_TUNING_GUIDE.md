@@ -748,7 +748,7 @@ Copy the XML from the `deadlock_graph` column.
 
 ## Check ID Reference
 
-Each check has an ID you can use when discussing findings or searching the CHECKS_EXPLAINED.md files.
+Each check has an ID you can use when discussing findings or searching the `references/check-explanations.md` files inside each skill directory.
 
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|

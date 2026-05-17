@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlplan-compare",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We deployed a code change last Tuesday and now this query is 20x slower. I have the baseline plan from before deploy and the current regression plan. Diff them.",
+      "expected_output": "Root Cause Summary identifying primary regression (join algorithm change, DOP change, CE version change). Confirmed Stable section showing what did not change. Specific check IDs from C1-C10.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Diff these two plans. One runs in 100ms, one runs in 15 seconds. They look identical.",
+      "expected_output": "Identifies subtle differences: memory grant variance, row estimate divergence, parameter values, compile time. Highlights the specific operator where cost diverged.",
+      "files": []
+    }
+  ]
+}

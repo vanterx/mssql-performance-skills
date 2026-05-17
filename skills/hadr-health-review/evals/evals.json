@@ -1,0 +1,17 @@
+{
+  "skill_name": "hadr-health-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Current AG state from sys.dm_hadr_database_replica_states and sys.dm_hadr_availability_replica_states. 3-replica AG. Tell me data loss risk and recovery time right now.",
+      "expected_output": "Per-replica state summary. Estimated data loss seconds (H7), estimated recovery time (H8). Redo queue (H11), send queue (H14). Disconnected replicas (H1, H5). Configuration review (H17-H22). Prioritized Action Order.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Secondary is showing 620MB redo queue and 85 second lag. Is this an emergency?",
+      "expected_output": "H11 redo queue evaluation against thresholds. H9 secondary lag classification. Whether this is transient catch-up or persistent under-provisioning. Recommends investigating the workload generating excess log volume.",
+      "files": []
+    }
+  ]
+}

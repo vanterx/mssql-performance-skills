@@ -1,0 +1,17 @@
+{
+  "skill_name": "tsql-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Can you check the T-SQL in this stored procedure before I deploy it? It runs slow on a 50M-row Orders table.\n\nCREATE PROCEDURE dbo.GetOrdersByCustomer\n    @CustomerId NVARCHAR(50)\nAS\nBEGIN\n    SELECT * FROM Orders WHERE CustomerId = @CustomerId AND DELETED_FLAG = 0\n    ORDER BY OrderDate DESC\nEND",
+      "expected_output": "Findings for implicit conversion (T5), SELECT * (T7), missing schema-qualified table reference, and non-sargable predicate if applicable. Output follows the skill's structured format with Critical/Warning/Info sections and a Passed Checks table.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Run tsql-review on this migration script and flag what's risky.\n\nUPDATE Customer SET Email = LOWER(Email);\nDELETE FROM AuditLog;\nEXEC sp_executesql @sql;\nSELECT * FROM Orders WHERE OrderId = NULL;",
+      "expected_output": "Critical findings: UPDATE without WHERE (T2), DELETE without WHERE (T2), dynamic SQL injection risk (T29/T30), = NULL always-false comparison (T20). Each with severity and concrete fix.",
+      "files": []
+    }
+  ]
+}
