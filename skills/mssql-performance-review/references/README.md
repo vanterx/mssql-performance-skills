@@ -41,7 +41,7 @@ Load a reference file when its situation applies. The orchestrator does not need
 
 **When to load:** Determining which model to assign to a phase or subagent. Also when the user asks about cost or passes `--model-tier` / `--no-adversarial`.
 
-**What it covers:** Full phase-to-model mapping for the three default tiers (economy / standard / maximum), the per-sub-skill default model assignments, cost profile worked example, quality safeguards (why adversarial always runs on at least Sonnet), and the per-phase cost breakdown format that appears in the Summary block.
+**What it covers:** Full phase-to-model mapping for the three default tiers (economy / standard / maximum), the per-sub-skill default model assignments, cost profile worked example, quality safeguards (why adversarial always runs on Opus and cannot be downgraded), and the per-phase cost breakdown format that appears in the Summary block.
 
 ### skill-dag.md
 
