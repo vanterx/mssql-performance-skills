@@ -17,7 +17,7 @@
 
 A senior DBA presented with mixed SQL Server artifacts (`.sqlplan` files, statistics output, wait stats, a trace excerpt, an ERRORLOG fragment) does not run every diagnostic in sequence. They form two or three hypotheses based on what they see, then probe the cheapest signal that would confirm or refute each. They re-route as evidence accumulates. They look for contradictions before declaring a root cause.
 
-This skill encodes that workflow so a less-experienced operator gets the same outcome. The 14 specialised review skills (tsql-review, sqlplan-review, sqlwait-review, etc.) already exist; this skill chooses which ones to run, in what order, and how to merge their findings.
+This skill encodes that workflow so a less-experienced operator gets the same outcome. The 15 specialised review skills (tsql-review, sqlplan-review, sqlwait-review, etc.) already exist; this skill chooses which ones to run, in what order, and how to merge their findings.
 
 It is intentionally a thin orchestration layer — it does not redefine any checks. Every finding still comes from one of the specialised skills.
 
