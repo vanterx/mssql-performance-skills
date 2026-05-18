@@ -49,6 +49,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `hadr-health-review` | ~2,900 |
 | `errorlog-review` | ~3,100 |
 | `spn-review` | ~3,800 |
+| `mssql-performance-review` | ~7,500 |
 
 ### Your input artifact
 

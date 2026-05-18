@@ -676,3 +676,5 @@ A thorough PASS table signals that the full ruleset was applied — completeness
 - **sqlplan-deadlock** — Analyze SQL Server deadlock XML to identify root cause (lock order, missing index, isolation level) and produce a remediation plan.
 - **sqlplan-batch** — Batch-analyze a folder of `.sqlplan` files and produce a summary dashboard of top issues, most common violations, and deduplicated missing indexes across all plans.
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

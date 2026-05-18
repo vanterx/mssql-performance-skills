@@ -238,3 +238,5 @@ SPID Y → holds [mode on object.index] → waits for [mode on object.index]
 - **tsql-review** — Review the T-SQL source of the deadlocked procedures for lock-order inconsistencies and missing TRY/CATCH (T19, T20).
 - **sqltrace-review** — If the trace includes Lock:Timeout (X6) or repeated deadlock events, use sqltrace-review to quantify frequency and identify peak periods.
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+
+- **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

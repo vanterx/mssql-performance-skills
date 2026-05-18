@@ -1,0 +1,38 @@
+# mssql-performance-review — Reference Index
+
+## When to consult these references
+
+The main `SKILL.md` contains the dispatch logic, hypothesis generation, evidence chain shape, output format, and confidence model that drive every review. These reference files provide deeper context when:
+
+- You are emitting the `evidence.json` block and need the exact field schema
+- You are grading a recommendation's risk class and need the rubric
+- You are running the adversarial root cause check and need the disproof template for the active hypothesis class
+- You are explaining the methodology to a user ("why does the orchestrator route in this order?")
+
+Load a reference file when its situation applies. The orchestrator does not need any of them loaded by default — they are progressive disclosure.
+
+## Reference files
+
+### check-explanations.md
+
+**When to load:** A user asks about methodology — "how does the dispatcher decide order?", "why is the adversarial pass mandatory?", "what counts as a conflict between recommendations?". Also when a recipient of a report asks how a finding was derived from the underlying skills.
+
+**What it covers:** Dispatch heuristics in detail, the symptom → probe-sequence map, hypothesis class definitions, the conflict-detection catalogue between skill outputs, and the rationale for the standard analysis order.
+
+### evidence-schema.md
+
+**When to load:** Building or validating the evidence record that backs every consolidated finding. The orchestrator emits an `evidence.json` alongside the human-readable report so downstream tools (change tickets, post-mortem docs) can re-derive findings from the raw inputs.
+
+**What it covers:** The full JSON schema for the evidence record, field-by-field validation rules, the human-readable rendering convention, and reproducibility guarantees (a recipient must be able to re-derive each finding by inspecting the cited artifact at the cited location).
+
+### risk-rubric.md
+
+**When to load:** Grading a recommended fix as Low / Medium / High risk. Each fix carries a risk class — this file is the source of truth for how to grade.
+
+**What it covers:** Risk-class definitions, the catalogue of common recommendation types (add index, drop index, change MAXDOP, enable RCSI, add OPTION RECOMPILE, etc.) with their default risk class, the side-effect checklist per recommendation type, and the rules for when to escalate risk based on environmental signals (production, AG primary, large table, OLTP hot path).
+
+### adversarial-prompts.md
+
+**When to load:** Running the mandatory adversarial root cause check after a primary hypothesis is identified. This file holds the disproof template for each hypothesis class.
+
+**What it covers:** A template per hypothesis class (parameter sniffing, missing index, stats stale, deadlock pattern, AG failover root cause, etc.) describing what evidence would refute the primary hypothesis, where to look for it, and how to grade the strength of the contradiction (weak / strong).

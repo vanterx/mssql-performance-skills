@@ -29,6 +29,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [hadr-health-review](#hadr-health-review) | Analyze Always On AG health from `sys.dm_hadr_*` DMVs — 22 checks (H1–H22): replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [errorlog-review](#errorlog-review) | Analyze SQL Server ERRORLOG for operational issues — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown |
 | [spn-review](#spn-review) | Analyze SQL Server SPN configuration and Kerberos delegation settings — 30 checks (K1–K30): SPN presence, service account binding, AG listener and alias, permissions, delegation, AD account sensitivity |
+| [mssql-performance-review](#mssql-performance-review) | Agentic offline orchestrator — routes mixed artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or are not sure which skill to run. |
 
 ---
 
@@ -1192,6 +1193,53 @@ EXECUTE collect.usp_CollectProcStats;
 ```
 
 **Sample output:** See [`example/procstats-review/proc_stats_output-analysis.md`](example/procstats-review/proc_stats_output-analysis.md).
+
+---
+
+## mssql-performance-review
+
+Agentic offline orchestrator. Routes mixed SQL Server artifacts to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with explicit evidence chain, risk-rated fixes, and rollback steps for every recommendation.
+
+**Strictly offline.** The orchestrator never contacts a SQL Server. It only reads files you provide and emits scripts you run yourself. Air-gap compatible; no connection strings; no consent prompts.
+
+**Triggers:** `/mssql-performance-review`, `/mssql-perf-review`, `/mssql-full-review`, `/sql-triage`
+
+**Input:**
+
+- A directory containing mixed artifacts (`.sqlplan`, `.sql`, statistics output, wait stats, trace, Query Store, procstats, deadlock XML, ERRORLOG, CLUSTER.LOG, setspn output, hadr DMVs)
+- A list of file paths
+- Inline pasted content blocks with type hints
+- A natural-language symptom description ("CPU is high on prod since 09:00")
+
+**Usage:**
+
+```
+# Artifact-driven (you have files)
+/mssql-performance-review ./artifacts/
+
+# Symptom-driven (you have only a description)
+/sql-triage CPU pegged at 95% on PROD-SQL01 since 09:00 today
+```
+
+**What it does:**
+
+1. Classifies every input against the 15 specialised skills' input patterns.
+2. Generates 2-3 ranked hypotheses (parameter sniffing, missing index, server-wide I/O, AG failover, deadlock, etc.).
+3. Dispatches the specialised skills in the optimal order (cheap source/breadth first, then deep dive).
+4. Builds an evidence chain for every consolidated finding — each Critical finding cites at least 3 check IDs from 2+ skills, with source artifact, observed value, and threshold.
+5. Runs an **adversarial check** that deliberately tries to disprove the primary root cause — surfaces contradicting evidence rather than suppressing it.
+6. Produces ranked fix recommendations with action, effort, blocking window, risk class, side effects, exact rollback step, and post-deployment verification capture.
+7. Detects recommendation conflicts (e.g., one skill says add index X, another says X is unused).
+8. Tier 3 emits a capture bundle for missing artifacts — scripts you run yourself.
+
+**Sample output:** See [`example/mssql-performance-review/mixed-artifacts-analysis.md`](example/mssql-performance-review/mixed-artifacts-analysis.md) for an artifact-first walkthrough; [`example/mssql-performance-review/symptom-first-analysis.md`](example/mssql-performance-review/symptom-first-analysis.md) for the symptom-only triage flow.
+
+**When to use this vs the specialised skill directly:**
+
+- Use this when you have several artifact types or a symptom and are not sure which skill to run.
+- Use the specialised skill directly when you have one artifact and know which skill it needs (e.g., one `.sqlplan` → `/sqlplan-review`).
+
+The orchestrator does not duplicate the specialised skills — it composes them. The full methodology, hypothesis classes, conflict catalogue, and risk rubric are in [`skills/mssql-performance-review/references/`](skills/mssql-performance-review/references/).
 
 ---
 
