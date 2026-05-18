@@ -149,7 +149,7 @@ This is a fresh review with the new artifacts (plus the prior context as baselin
 
 ### "What would refute your primary hypothesis?"
 
-Cite the adversarial check section. If the user wants more, dispatch a targeted adversarial probe with `--model-tier maximum --no-adversarial=false`. Always show the disproof template that was applied.
+Cite the adversarial check section. If the user wants more, dispatch a targeted adversarial probe with `--model-tier maximum` (adversarial is on by default). Always show the disproof template that was applied.
 
 ## Cost profile
 
