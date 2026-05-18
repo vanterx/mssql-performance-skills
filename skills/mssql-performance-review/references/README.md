@@ -60,3 +60,15 @@ Load a reference file when its situation applies. The orchestrator does not need
 **When to load:** The user asks a follow-up question after the report. Use to classify the question type and decide whether to answer from context (free) or dispatch a new probe (cheap).
 
 **What it covers:** The five-category question taxonomy, when-to-probe vs answer-from-context rules, refusal patterns (live SQL, out of scope), the structured answer format with evidence citation, session memory rules, cost-guard warnings, and a catalogue of common question patterns ("why is X recommended?", "show me only Critical findings", "re-rank by effort") with the orchestrator's expected response shape.
+
+### capture-bundle-spec.md
+
+**When to load:** Artifacts are missing and the orchestrator needs to emit a capture bundle to `./captures/<run-id>/`. Also when the user passes `--resume <bundle-dir>` and the orchestrator needs to parse the paste-back.
+
+**What it covers:** Bundle directory layout, curation rules per hypothesis class, README and PASTE-RESULTS-HERE.md templates, the manifest.json schema with all field rules, the resume flow (validate, parse paste-back, route to sub-skills), capture-instance-facts variant for V9 domain memory population, bundle history and re-bundling rules, and the design decisions behind self-contained bundles.
+
+### verification-checklist.md
+
+**When to load:** Generating the Verification — After Deploying Fixes section of the report, or running the baseline-diff feedback loop when the user passes `--baseline`. Also when a recommendation needs a re-capture instruction or tagging logic.
+
+**What it covers:** The Verification output structure, suggested timing rules per recommendation type (24h for indexes, 1h for stats, etc.), the five-tag baseline-diff catalogue with conditions (verified-effective / partial / no-change / regressed-elsewhere / cannot-evaluate), the feedback.jsonl schema (append-only), edge cases (rollbacks, multi-recommendation findings, artifact drift), the verification quality metric, and the user-local-by-default learning loop with optional team-shared `--feedback-file` override.

@@ -16,7 +16,7 @@ A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom d
 
 The orchestrator is **strictly offline**: it reads files the user provides, generates capture-script bundles when artifacts are missing, and emits analysis reports. It never opens a connection to a SQL Server. All execution against the database is the user's action.
 
-This skill applies eight cross-cutting primitives that distinguish it from a naive dispatcher:
+This skill applies eleven cross-cutting primitives that distinguish it from a naive dispatcher:
 
 **Tier 1 — agentic core:**
 
@@ -32,7 +32,11 @@ This skill applies eight cross-cutting primitives that distinguish it from a nai
 - **Domain memory** — per-instance facts (MAXDOP, cores, AG topology, partitioning, RCSI status) loaded from a user-managed JSON file inform every recommendation: redundant recommendations rejected, environment-aware escalators applied. See `references/domain-memory.md`.
 - **Follow-up Q&A** — after the report, the orchestrator stays in the session and answers questions ("why this index ordering?", "why was MAXDOP not recommended?") from the in-context evidence chain. Most follow-ups cost nothing. See `references/followup-qa.md`.
 
-The capture-bundle generator and verification checklist arrive in tier 3 (see `backlog/orchestrator-tier3-knowledge-base.md`).
+**Tier 3 — offline loop closure:**
+
+- **Capture bundle generator** — when artifacts are missing, emit a self-contained bundle of read-only `.sql` scripts + README + paste-back template + manifest to `./captures/<run-id>/`. The user runs the scripts; paste-back into the template; `--resume` continues the analysis. The orchestrator never contacts SQL Server. See `references/capture-bundle-spec.md`.
+- **Verification checklist** — every recommendation gets a dedicated re-capture suggestion + expected metric movement + timing rule. Promoted to a Verification — After Deploying Fixes section in the report. See `references/verification-checklist.md`.
+- **Baseline-diff feedback loop** — when the user returns with `--baseline ./state/<prior>/state.json` and new artifacts, the orchestrator tags each prior recommendation as `verified-effective` / `partial` / `no-change` / `regressed-elsewhere` / `cannot-evaluate`. Tags append to `evals/feedback.jsonl` (gitignored) so future hypothesis selection improves from real-world outcomes. See `references/verification-checklist.md`.
 
 ## Input
 
@@ -155,6 +159,39 @@ After the report is delivered, stay in the session to answer follow-up questions
 - The user provides new artifacts and asks "did the fix work?"
 
 Refuse only when the question requires live SQL execution (the orchestrator is strictly offline) or is genuinely out of scope (e.g., upgrade strategy, license cost). Refusal is explicit and brief.
+
+## Capture Bundle Generator
+
+When artifacts are missing (symptom-only input, or partial artifacts that leave hypotheses unconfirmed), emit a self-contained capture bundle to `./captures/<run-id>/`. The bundle contains read-only `.sql` scripts curated for the active hypotheses, a README explaining run order and security, a PASTE-RESULTS-HERE.md template, and a manifest.json mapping scripts to target sub-skills.
+
+The orchestrator does not run the scripts. The user runs them and pastes results back. `--resume ./captures/<run-id>/` continues the analysis from the paste-back.
+
+Full bundle layout, curation rules per hypothesis class, manifest schema, and resume flow are in `references/capture-bundle-spec.md`. Load that reference when:
+
+- The input has missing artifacts and the hypotheses cannot be confirmed without more data
+- The user invokes `/sql-triage` with a symptom but no files
+- The user passes `--resume` and the orchestrator needs to parse a prior bundle's paste-back
+
+Bundle README and PASTE-RESULTS-HERE.md are filled in from templates at `assets/bundle-readme-template.md` and `assets/paste-results-template.md`. Always include the trust note: "The orchestrator will not contact your SQL Server."
+
+## Verification Checklist and Baseline-Diff Feedback
+
+Every report ends with a Verification — After Deploying Fixes section that turns the per-recommendation `verification` field into an actionable post-deploy checklist. The user re-captures after deploying fixes and returns with `--baseline ./state/<this-run>/state.json` to compare.
+
+When `--baseline` is present:
+
+1. Load prior `state.json` (evidence chain + recommendations).
+2. Run normal tier-1/tier-2 dispatch on the new artifacts.
+3. For each prior recommendation, find the corresponding finding in the new review's evidence chain.
+4. Tag each prior recommendation as `verified-effective` / `partial` / `no-change` / `regressed-elsewhere` / `cannot-evaluate`.
+5. Output a Recommendation Status section in the new report; append the tags to `evals/feedback.jsonl` (gitignored).
+
+Full tagging rules, timing guidance per recommendation type, feedback file schema, edge cases (rollbacks, multi-recommendation findings, artifact-set drift), and the verification quality metric are in `references/verification-checklist.md`. Load that reference when:
+
+- Generating the Verification section in the report
+- The user invokes `--baseline`
+- A recommendation needs a specific re-capture instruction
+- The feedback.jsonl tagging logic needs to decide between `partial` and `regressed-elsewhere`
 
 ## Evidence Chain (E-tags)
 
@@ -328,6 +365,21 @@ Each conflict explicit with both sides cited. Empty section if no conflicts dete
 | sqlplan-deadlock | No deadlock XML in input |
 | clusterlog-review | No CLUSTER.LOG in input |
 | ... | ... |
+
+### Verification — After Deploying Fixes
+Per-recommendation re-capture instructions with suggested timing and expected metric movement.
+See `references/verification-checklist.md` for the full structure and timing rules.
+
+| Rec # | Source recommendation | Re-capture script | Expected metric movement |
+|-------|----------------------|-------------------|--------------------------|
+| 1 | [recommendation name] | `skills/<name>/scripts/...sql` | [metric change after fix] |
+
+Resume command: `/mssql-performance-review --baseline ./state/<this-run>/state.json ./<new-captures>/`
+
+### Recommendation Status (vs baseline <prior-run-id>) — emitted only when `--baseline` is provided
+| Prior rec | Tag | Evidence delta |
+|-----------|-----|----------------|
+| 1 | verified-effective / partial / no-change / regressed-elsewhere / cannot-evaluate | [metric before → metric after] |
 
 ---
 *Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-17 09:30 NZST"]*
