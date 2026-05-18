@@ -54,7 +54,7 @@ Even when a recommendation's default class is Low or Medium, escalate one step (
 | Standard edition (no online rebuild for tables with LOB; limited parallelism) | +1 step where relevant |
 | Domain memory facts.json shows the proposed change conflicts with a documented setting | +1 step (or reject) |
 
-Domain memory escalators are checked once tier-2 introduces facts.json (see backlog plan v4). In tier 1, assume defaults from this table apply.
+Domain memory escalators are checked against `references/domain-memory.md` when a facts file is loaded for the target instance (`~/.mssql-perf-review/instances/<server>.json`). When no facts file is present, the defaults in this table apply.
 
 ## Side-effects checklist (per recommendation)
 

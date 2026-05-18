@@ -12,18 +12,27 @@ triggers:
 
 ## Purpose
 
-A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 14 specialised review skills, then synthesises their findings into one consolidated report.
+A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 15 specialised review skills, then synthesises their findings into one consolidated report.
 
 The orchestrator is **strictly offline**: it reads files the user provides, generates capture-script bundles when artifacts are missing, and emits analysis reports. It never opens a connection to a SQL Server. All execution against the database is the user's action.
 
-This skill applies four cross-cutting primitives that distinguish it from a naive dispatcher:
+This skill applies eight cross-cutting primitives that distinguish it from a naive dispatcher:
+
+**Tier 1 — agentic core:**
 
 - **Evidence chain** (E-tags) — every finding cites the source artifact, the specialised check ID, the observed value, and the threshold violated, so any recommendation is reproducible from the input set
 - **Risk-aware recommendations** — every recommended fix carries action, effort, blocking window, risk class, side effects, explicit rollback, and post-deployment verification
 - **Adversarial root cause check** — after the primary hypothesis is identified, a deliberate pass tries to disprove it; contradicting evidence escalates an alternative hypothesis instead of being suppressed
 - **Confidence-driven early termination** — once three or more specialised skills converge on the same root cause with HIGH confidence and no active contradiction, additional probes are skipped to control token cost
 
-These primitives are tier-1 features. Multi-model cost routing, skill-graph DAG, domain memory, follow-up Q&A, the capture-bundle generator, and the verification checklist arrive in tier 2 and tier 3 (see `backlog/performance-review-orchestrator-plan-v4.md`).
+**Tier 2 — cost and intelligence:**
+
+- **Multi-model cost routing** — each phase runs on the right model (Haiku for classification and triage, Sonnet for synthesis and deep dive, Opus for the adversarial pass). Cuts cost ~40% vs all-Sonnet at no quality loss. See `references/model-routing.md`.
+- **Skill-graph DAG** — replaces fixed phase ordering with a dynamic dependency DAG built from artifact types and probe findings. Probes that depend on each other sequence correctly; everything else runs in parallel. See `references/skill-dag.md`.
+- **Domain memory** — per-instance facts (MAXDOP, cores, AG topology, partitioning, RCSI status) loaded from a user-managed JSON file inform every recommendation: redundant recommendations rejected, environment-aware escalators applied. See `references/domain-memory.md`.
+- **Follow-up Q&A** — after the report, the orchestrator stays in the session and answers questions ("why this index ordering?", "why was MAXDOP not recommended?") from the in-context evidence chain. Most follow-ups cost nothing. See `references/followup-qa.md`.
+
+The capture-bundle generator and verification checklist arrive in tier 3 (see `backlog/orchestrator-tier3-knowledge-base.md`).
 
 ## Input
 
@@ -74,28 +83,78 @@ Example hypotheses:
 
 Record hypotheses with initial confidence (HIGH / MEDIUM / LOW). Confidence updates as probes complete.
 
-## Dispatch Order
+## Dispatch — DAG-Driven
 
-The dispatcher prefers the cheapest informative skill first, then deeper analyses only as needed.
+Tier 1 used a fixed five-phase order. Tier 2 replaces fixed phases with a dynamic skill-graph DAG built from artifact types and probe findings. The DAG walks with maximal parallelism, follows edges that become available as findings accumulate, and stops on early termination.
 
-1. tsql-review on any `.sql` files (no execution needed; finds static defects up front)
-2. Triage breadth pass — parallel where independent:
-   - sqlwait-review on wait stats
-   - sqltrace-review on trace data
-   - sqlstats-review on STATISTICS output
-   - query-store-review on Query Store data
-   - procstats-review on procedure stats
-3. Deep dive on plans:
-   - sqlplan-review per `.sqlplan` (or sqlplan-batch on a folder)
-   - sqlplan-index-advisor consolidated across plans
-4. Targeted analyses:
-   - sqlplan-compare for plan pairs
-   - sqlplan-deadlock for deadlock XML
-5. Availability and platform context (only when matching artifacts present):
-   - errorlog-review → clusterlog-review → hadr-health-review for AG / failover questions
-   - spn-review for Kerberos / login issues
+The full DAG construction rules and the catalogue of static + dynamic edges are in `references/skill-dag.md`. Load that reference when:
 
-Each skill is invoked via the existing skill loader. Findings are captured under a uniform structure (see Output Format) regardless of which specialised skill produced them.
+- An input has more than one artifact type and you need to determine the dispatch graph
+- A probe's finding might open a follow-up edge to another skill
+- You need to know which skills can run in parallel
+
+The default DAG starts with these static edges (loaded into context here for the common case):
+
+- `tsql-review` first on any `.sql` files (no execution data needed)
+- `sqlwait-review`, `sqltrace-review`, `sqlstats-review`, `query-store-review`, `procstats-review` in parallel (triage breadth)
+- `sqlplan-review` per `.sqlplan` (or `sqlplan-batch` for folders), feeding `sqlplan-index-advisor`
+- `sqlplan-compare` for plan pairs; `sqlplan-deadlock` for deadlock XML
+- `errorlog-review` → `clusterlog-review` → `hadr-health-review` for AG / failover questions
+- `spn-review` for Kerberos / login signals
+
+Dynamic edges open during the walk — e.g., `sqlplan-review` firing S9 opens an edge to `query-store-review` for plan-instability confirmation even when Query Store is not in the initial DAG (resulting in a Missing Artifact entry if no Query Store output is in the input).
+
+`--phases` flag forces tier-1 fixed-phase behavior for environments where DAG variability is undesirable.
+
+## Multi-Model Cost Routing
+
+Each phase runs on a specific model tier. The default routing minimises cost without sacrificing quality on high-stakes phases. The full phase-to-model table and override rules are in `references/model-routing.md`. Load it when:
+
+- The user asks about cost
+- The user passes `--model-tier {economy|standard|maximum}` or `--no-adversarial`
+- You need to set the `model` parameter on an Agent subagent dispatch
+
+Default model assignments (the common case):
+
+- Classification, hypothesis generation, cost summary, follow-up Q&A: **Haiku 4.5**
+- Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlplan-index-advisor, sqlplan-deadlock, clusterlog-review)
+- Synthesis, conflict detection, deep-dive analysis: **Sonnet 4.6**
+- Adversarial root-cause pass: **Opus 4.7** (cannot be downgraded even on `--model-tier economy` — quality-critical)
+
+Report the per-phase cost breakdown in the Summary block:
+
+```
+Cost: ~USD 0.21 (Haiku 23k tokens, Sonnet 31k tokens, Opus 6k tokens).
+```
+
+## Domain Memory
+
+If `~/.mssql-perf-review/instances/<server-name>.json` exists, load the facts and validate every recommendation against them. The file schema, rejection/escalation catalogue, and staleness rules are in `references/domain-memory.md`. Load that reference when:
+
+- A facts file is present for the target instance
+- A recommendation might be redundant (MAXDOP already set, RCSI already enabled, IFI already on)
+- A recommendation affects partitioned tables, AG topology, or compatibility level
+
+The orchestrator reads facts.json — it never writes silently. If facts are absent, recommendations are generic and the report notes this. If facts are older than 90 days, the orchestrator warns and downgrades rejection/escalation to "review and confirm".
+
+When facts.json drives a rejection or escalation, the recommendation explicitly cites the file:
+
+```
+Rank 1 — REJECTED: facts.json says maxdop already = 8
+- Cite: ~/.mssql-perf-review/instances/PROD-SQL01.json
+- Replacement recommendation: [next-best, or "no MAXDOP action needed"]
+```
+
+## Follow-Up Q&A
+
+After the report is delivered, stay in the session to answer follow-up questions. Most are free — they read from the in-context evidence chain without new tool calls. The question taxonomy (5 categories), when-to-probe rules, refusal patterns, and answer format are in `references/followup-qa.md`. Load that reference when:
+
+- The user asks "why" or "why not" about a finding or recommendation
+- The user asks for a detail from a specialised skill's raw output
+- The user asks for the report re-filtered or re-ranked
+- The user provides new artifacts and asks "did the fix work?"
+
+Refuse only when the question requires live SQL execution (the orchestrator is strictly offline) or is genuinely out of scope (e.g., upgrade strategy, license cost). Refusal is explicit and brief.
 
 ## Evidence Chain (E-tags)
 
@@ -194,7 +253,7 @@ The reference files are progressive disclosure — keep SKILL.md compact; load d
 
 ### Summary
 - Files analyzed: N
-- Skills applied: M (of 14 available)
+- Skills applied: M (of 15 available)
 - Hypotheses considered: H (primary + adversarial alternatives)
 - Findings: X Critical, Y Warnings, Z Info
 - Primary bottleneck: [single sentence stating the root cause]
