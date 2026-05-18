@@ -978,7 +978,7 @@ FLAGS
 
 WHAT YOU GET
   Summary → Hypothesis Trace → Adversarial Check → Findings (C/W/I)
-  → Per-Skill raw → Cross-Cutting → Conflicts → Fix Priority (8 fields)
+  → Per-Skill raw → Cross-Cutting → Conflicts → Fix Priority table
   → Verification → Missing Artifacts → Passed Checks → Skills Skipped
 
 TRUST MODEL

@@ -366,6 +366,21 @@ Each conflict explicit with both sides cited. Empty section if no conflicts dete
 | clusterlog-review | No CLUSTER.LOG in input |
 | ... | ... |
 
+### Verification — After Deploying Fixes
+Per-recommendation re-capture instructions with suggested timing and expected metric movement.
+See `references/verification-checklist.md` for the full structure and timing rules.
+
+| Rec # | Source recommendation | Re-capture script | Expected metric movement |
+|-------|----------------------|-------------------|--------------------------|
+| 1 | [recommendation name] | `skills/<name>/scripts/...sql` | [metric change after fix] |
+
+Resume command: `/mssql-performance-review --baseline ./state/<this-run>/state.json ./<new-captures>/`
+
+### Recommendation Status (vs baseline <prior-run-id>) — emitted only when `--baseline` is provided
+| Prior rec | Tag | Evidence delta |
+|-----------|-----|----------------|
+| 1 | verified-effective / partial / no-change / regressed-elsewhere / cannot-evaluate | [metric before → metric after] |
+
 ---
 *Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-17 09:30 NZST"]*
 ```
