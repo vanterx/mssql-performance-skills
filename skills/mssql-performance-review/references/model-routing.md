@@ -50,7 +50,7 @@ Comparable all-Sonnet run: ~USD 0.20 in + ~USD 0.10 out = USD 0.30+. Standard ti
 | Production incident review with confidence-critical recommendations | standard or maximum |
 | Compliance / audit review where the recommendation set will drive a change ticket | maximum + `--exhaustive` |
 | Cost-sensitive scheduled review (daily batch across many servers) | economy |
-| User reports "previous review missed the obvious problem" | maximum (escalates the adversarial pass to Opus from Opus, plus all reasoning to Opus) |
+| User reports "previous review missed the obvious problem" | maximum (adversarial already runs Opus on standard; this also escalates synthesis and deep dive to Opus) |
 
 ## How routing is enforced in subagent dispatch
 
