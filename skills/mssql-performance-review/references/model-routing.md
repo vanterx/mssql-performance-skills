@@ -77,7 +77,7 @@ When the orchestrator dispatches a sub-skill via the Agent tool, it explicitly s
 Override rules:
 - `--model-tier economy` forces all sub-skills to Haiku
 - `--model-tier maximum` forces all sub-skills to Sonnet, with adversarial and synthesis on Opus
-- Adversarial pass is always at least Sonnet (Haiku misses counterfactuals reliably); Opus is the default
+- Adversarial pass is always Opus (Haiku and Sonnet miss counterfactuals reliably); cannot be downgraded by any tier flag — this is the most important quality guarantee
 
 ## Cost reporting in the output
 
