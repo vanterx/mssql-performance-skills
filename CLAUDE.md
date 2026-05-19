@@ -18,6 +18,7 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 
 | File | Purpose |
 |------|---------|
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 50 checks (T1–T50) — structural, correctness, security, deprecated syntax, performance smells |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 22 checks (I1–I15 IO, W1–W7 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 20 checks (X1–X12 event-level, X13–X20 workload aggregate), top-consumer tables |
@@ -33,12 +34,12 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 22 checks (H1–H22) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 28 checks (E1–E28) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
 | [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 30 checks (K1–K30) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
-| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
 | File | Purpose |
 |------|---------|
+| [skills/mssql-performance-review/references/check-explanations.md](skills/mssql-performance-review/references/check-explanations.md) | Methodology reference for the orchestrator: dispatch heuristics, symptom-to-probe-sequence map, hypothesis classes, recommendation conflict catalogue, and rationale for the standard analysis order |
 | [skills/tsql-review/references/check-explanations.md](skills/tsql-review/references/check-explanations.md) | Plain-English explanation of all 50 T-checks with SQL examples, fix recipes, and Quick Reference table |
 | [skills/sqlstats-review/references/check-explanations.md](skills/sqlstats-review/references/check-explanations.md) | Plain-English explanation of all 22 I/W checks with IO output examples and fix recipes |
 | [skills/sqltrace-review/references/check-explanations.md](skills/sqltrace-review/references/check-explanations.md) | Plain-English explanation of all 20 X-checks with trace output examples, capture how-tos, and quick reference |
@@ -54,7 +55,6 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [skills/hadr-health-review/references/check-explanations.md](skills/hadr-health-review/references/check-explanations.md) | Plain-English explanation of all 22 H-checks with DMV examples, fix recipes, and Quick Reference table |
 | [skills/errorlog-review/references/check-explanations.md](skills/errorlog-review/references/check-explanations.md) | Plain-English explanation of all 28 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
 | [skills/spn-review/references/check-explanations.md](skills/spn-review/references/check-explanations.md) | Plain-English explanation of all 30 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
-| [skills/mssql-performance-review/references/check-explanations.md](skills/mssql-performance-review/references/check-explanations.md) | Methodology reference for the orchestrator: dispatch heuristics, symptom-to-probe-sequence map, hypothesis classes, recommendation conflict catalogue, and rationale for the standard analysis order |
 
 ### Root Documentation
 

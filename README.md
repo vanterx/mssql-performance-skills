@@ -14,6 +14,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 
 | Skill | Purpose |
 |-------|---------|
+| [mssql-performance-review](#mssql-performance-review) | Agentic offline orchestrator — routes mixed artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or are not sure which skill to run. |
 | [tsql-review](#tsql-review) | Analyze raw T-SQL source code — 50 static checks (structural, security, correctness, performance) |
 | [sqlstats-review](#sqlstats-review) | Parse and analyze `SET STATISTICS IO, TIME ON` output — 22 checks (I1–I15 IO, W1–W7 time) |
 | [sqltrace-review](#sqltrace-review) | Analyze Profiler trace / Extended Events output — 20 checks (X1–X12 event-level, X13–X20 workload aggregate) |
@@ -29,7 +30,6 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 | [hadr-health-review](#hadr-health-review) | Analyze Always On AG health from `sys.dm_hadr_*` DMVs — 22 checks (H1–H22): replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [errorlog-review](#errorlog-review) | Analyze SQL Server ERRORLOG for operational issues — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown |
 | [spn-review](#spn-review) | Analyze SQL Server SPN configuration and Kerberos delegation settings — 30 checks (K1–K30): SPN presence, service account binding, AG listener and alias, permissions, delegation, AD account sensitivity |
-| [mssql-performance-review](#mssql-performance-review) | Agentic offline orchestrator — routes mixed artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or are not sure which skill to run. |
 
 ---
 

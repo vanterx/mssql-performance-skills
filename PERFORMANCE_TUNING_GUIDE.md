@@ -8,6 +8,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 
 | Skill | Trigger | Input | What it does |
 |-------|---------|-------|-------------|
+| [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
 | [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 50 checks for anti-patterns, security, logic bugs |
 | [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
@@ -23,7 +24,6 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 28 checks (E1–E28): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
 | [`hadr-health-review`](#hadr-health-review) | `/hadr-health-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 22 checks (H1–H22): replica connectivity, data loss risk, recovery time, throughput, and configuration |
 | [`spn-review`](#spn-review) | `/spn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 30 checks (K1–K30): MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
-| [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
 
 ---
 

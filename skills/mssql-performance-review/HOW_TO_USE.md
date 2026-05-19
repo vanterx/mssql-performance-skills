@@ -51,6 +51,8 @@ Eleven cross-cutting primitives distinguish this from a naive dispatcher:
 | Verification checklist | Every recommendation specifies which capture to re-run and the expected metric change |
 | Baseline-diff feedback loop | After deploy, `--baseline` tags each prior recommendation as verified-effective / partial / no-change / regressed-elsewhere |
 
+> **What is a DAG?** A Directed Acyclic Graph is a set of nodes connected by one-way edges with no cycles — you can never follow edges back to where you started. Here the nodes are the 15 sub-skills and the edges are dependencies or findings-triggered follow-ups. *Directed* means `sqlwait-review` finding a missing-index signal can open an edge *to* `sqlplan-index-advisor` — not the other way around. *Acyclic* means the analysis always terminates. The orchestrator walks this graph in dependency order and runs independent nodes in parallel, so a simple input might dispatch 2–3 sub-skills while a complex mixed-artifact input dispatches 8–10.
+
 ---
 
 ## 2. When to use it vs when not to
