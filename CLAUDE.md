@@ -19,7 +19,7 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | File | Purpose |
 |------|---------|
 | [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
-| [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 50 checks (T1–T50) — structural, correctness, security, deprecated syntax, performance smells |
+| [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 78 checks (T1–T78) — structural, correctness, security, deprecated syntax, performance smells |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 22 checks (I1–I15 IO, W1–W7 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 20 checks (X1–X12 event-level, X13–X20 workload aggregate), top-consumer tables |
 | [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 40 checks (V1–V40) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency |
@@ -40,7 +40,7 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | File | Purpose |
 |------|---------|
 | [skills/mssql-performance-review/references/check-explanations.md](skills/mssql-performance-review/references/check-explanations.md) | Methodology reference for the orchestrator: dispatch heuristics, symptom-to-probe-sequence map, hypothesis classes, recommendation conflict catalogue, and rationale for the standard analysis order |
-| [skills/tsql-review/references/check-explanations.md](skills/tsql-review/references/check-explanations.md) | Plain-English explanation of all 50 T-checks with SQL examples, fix recipes, and Quick Reference table |
+| [skills/tsql-review/references/check-explanations.md](skills/tsql-review/references/check-explanations.md) | Plain-English explanation of all 78 T-checks with SQL examples, fix recipes, and Quick Reference table |
 | [skills/sqlstats-review/references/check-explanations.md](skills/sqlstats-review/references/check-explanations.md) | Plain-English explanation of all 22 I/W checks with IO output examples and fix recipes |
 | [skills/sqltrace-review/references/check-explanations.md](skills/sqltrace-review/references/check-explanations.md) | Plain-English explanation of all 20 X-checks with trace output examples, capture how-tos, and quick reference |
 | [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 29 V-checks with wait type descriptions, capture queries, and category quick reference |

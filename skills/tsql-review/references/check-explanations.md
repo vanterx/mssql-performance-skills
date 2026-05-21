@@ -3,11 +3,11 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [Structural Anti-Patterns (T1–T15)](#structural-anti-patterns-t1t15)
-- [Correctness and Logic (T16–T28)](#correctness-and-logic-t16t28)
-- [Security and Dynamic SQL (T29–T38)](#security-and-dynamic-sql-t29t38)
-- [Deprecated and Non-Idiomatic Syntax (T39–T45)](#deprecated-and-non-idiomatic-syntax-t39t45)
-- [Performance Smells (T46–T50)](#performance-smells-t46t50)
+- [Structural Anti-Patterns (T1–T15, T51–T55)](#structural-anti-patterns-t1t15-t51t55)
+- [Correctness and Logic (T16–T28, T56–T64)](#correctness-and-logic-t16t28-t56t64)
+- [Security and Dynamic SQL (T29–T38, T65–T67)](#security-and-dynamic-sql-t29t38-t65t67)
+- [Deprecated and Non-Idiomatic Syntax (T39–T45, T68–T73)](#deprecated-and-non-idiomatic-syntax-t39t45-t68t73)
+- [Performance Smells (T46–T50, T74–T78)](#performance-smells-t46t50-t74t78)
 - [Quick Reference: Checks by Severity](#quick-reference-checks-by-severity)
 
 ---
@@ -47,7 +47,7 @@ The two analyses are complementary. Run `tsql-review` during code review. Run `s
 
 ---
 
-## Structural Anti-Patterns (T1–T15)
+## Structural Anti-Patterns (T1–T15, T51–T55)
 
 These checks fire on patterns that prevent index usage, expand data volumes unnecessarily, or replace set-based logic with row-by-row processing.
 
@@ -721,7 +721,7 @@ WHERE EXISTS (SELECT 1 FROM dbo.Orders o WHERE o.CustomerId = c.CustomerId);
 
 ---
 
-## Correctness and Logic (T16–T28)
+## Correctness and Logic (T16–T28, T56–T64)
 
 ---
 
@@ -1175,7 +1175,7 @@ OPTION (RECOMPILE);
 
 ---
 
-## Security and Dynamic SQL (T29–T38)
+## Security and Dynamic SQL (T29–T38, T65–T67)
 
 ---
 
@@ -1472,7 +1472,7 @@ EXEC dbo.GetOrderStatus @id;
 
 ---
 
-## Deprecated and Non-Idiomatic Syntax (T39–T45)
+## Deprecated and Non-Idiomatic Syntax (T39–T45, T68–T73)
 
 ---
 
@@ -1647,7 +1647,7 @@ SELECT OrderId, CustomerId, Status FROM dbo.Orders WHERE Status = 'Open';
 
 ---
 
-## Performance Smells (T46–T50)
+## Performance Smells (T46–T50, T74–T78)
 
 ---
 
@@ -1818,6 +1818,1013 @@ ALTER TABLE dbo.Contacts ALTER COLUMN Email NVARCHAR(255) COLLATE SQL_Latin1_Gen
 
 ---
 
+### T51 — NOT IN With Nullable Subquery
+
+**What it means**
+Three-valued logic. If the subquery `SELECT col FROM T` returns even one NULL row, then every comparison `outer.col NOT IN (subquery)` evaluates to UNKNOWN — not FALSE — causing the entire `NOT IN` predicate to return zero rows with no error.
+
+**Why it matters**
+This is a completely silent data correctness bug. A query like `SELECT ... FROM Orders WHERE CustomerId NOT IN (SELECT CustomerId FROM Exceptions)` returns no rows the moment a single row in Exceptions has a NULL CustomerId, regardless of how many Orders exist.
+
+**How to spot it**
+```sql
+-- Triggers T51 — CustomerId in Exceptions is nullable
+SELECT OrderId FROM dbo.Orders
+WHERE CustomerId NOT IN (SELECT CustomerId FROM dbo.Exceptions);
+-- Returns zero rows if ANY Exceptions.CustomerId is NULL
+```
+
+**Example — fix**
+```sql
+-- Safe: NOT EXISTS handles NULLs correctly
+SELECT OrderId FROM dbo.Orders o
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.Exceptions e WHERE e.CustomerId = o.CustomerId
+);
+
+-- Also safe: filter NULLs inside the subquery
+SELECT OrderId FROM dbo.Orders
+WHERE CustomerId NOT IN (
+    SELECT CustomerId FROM dbo.Exceptions WHERE CustomerId IS NOT NULL
+);
+```
+
+**Fix options**
+1. Replace `NOT IN (subquery)` with `NOT EXISTS (SELECT 1 FROM T WHERE T.col = outer.col)`.
+2. Add `WHERE col IS NOT NULL` inside the subquery if `NOT IN` must be kept.
+3. If the column is defined NOT NULL in the schema, document it and note that T51 does not apply.
+
+**Related checks:** T16 (NULL comparison using = NULL), T17 (LEFT JOIN nullified by WHERE)
+
+---
+
+### T52 — Division by Zero Without NULLIF Guard
+
+**What it means**
+A division expression where the denominator could be zero. SQL Server raises error 8134 ("Divide by zero error encountered") and aborts the batch.
+
+**Why it matters**
+Division by zero is a runtime failure that surfaces in production when edge-case data arrives — e.g., `OrderLines` table with zero `Quantity`, or a reporting query calculating averages on a partition that has no rows.
+
+**How to spot it**
+```sql
+-- Triggers T52 — Qty could be 0
+SELECT TotalCost / Qty AS CostPerUnit FROM dbo.OrderLines;
+
+-- Also triggers
+SELECT Hits * 100.0 / Impressions AS CTR FROM dbo.AdStats;
+```
+
+**Example — fix**
+```sql
+-- NULLIF returns NULL when denominator is 0, avoiding the error
+SELECT TotalCost / NULLIF(Qty, 0) AS CostPerUnit FROM dbo.OrderLines;
+
+SELECT Hits * 100.0 / NULLIF(Impressions, 0) AS CTR FROM dbo.AdStats;
+```
+
+**Fix options**
+1. `NULLIF(denominator, 0)` — returns NULL on zero, propagating NULL through the expression.
+2. `CASE WHEN denominator = 0 THEN NULL ELSE numerator / denominator END` — for more explicit control.
+3. Add a WHERE filter to exclude rows with zero denominator if those rows are always invalid.
+
+**Related checks:** T23 (missing ELSE in CASE), T52
+
+---
+
+### T53 — TOP Without ORDER BY
+
+**What it means**
+`SELECT TOP (n) ...` without an `ORDER BY` clause returns a non-deterministic set — SQL Server picks whichever N rows it reads first, which can change between executions depending on parallelism, I/O state, and plan choice.
+
+**Why it matters**
+Applications expecting consistent "top N" results — dashboards, feeds, paginated APIs — can receive different rows on different calls with no error, making bugs impossible to reproduce.
+
+**How to spot it**
+```sql
+-- Triggers T53 — no ORDER BY; result varies per execution
+SELECT TOP (10) OrderId, CustomerId FROM dbo.Orders;
+```
+
+**Example — fix**
+```sql
+-- Deterministic: always returns 10 most recent orders
+SELECT TOP (10) OrderId, CustomerId
+FROM dbo.Orders
+ORDER BY OrderDate DESC, OrderId ASC;
+
+-- Random sampling (intentional): documented
+SELECT TOP (100) OrderId FROM dbo.Orders ORDER BY NEWID(); -- intentional random sample
+```
+
+**Fix options**
+1. Add an `ORDER BY` matching the business intent (most recent, highest value, etc.).
+2. For random sampling, add `ORDER BY NEWID()` with a comment.
+3. If the query is used as a subquery or EXISTS source where TOP serves as a row limiter, the lack of ORDER BY may be acceptable — document it.
+
+**Related checks:** T18 (missing ORDER BY in final SELECT), T49 (pagination without deterministic sort)
+
+---
+
+### T54 — COUNT(\*) > 0 Instead of EXISTS
+
+**What it means**
+Using `COUNT(*) > 0` solely to check whether any rows exist forces SQL Server to count all matching rows before determining existence. `EXISTS` stops at the first match.
+
+**Why it matters**
+On a large table where the matching row is near the end, `COUNT(*) > 0` reads the entire matching set. `EXISTS` reads exactly one row. The difference can be milliseconds vs. seconds.
+
+**How to spot it**
+```sql
+-- Triggers T54 — counts all matches just to check existence
+IF (SELECT COUNT(*) FROM dbo.Orders WHERE Status = 'Pending') > 0
+    PRINT 'Has pending orders';
+
+-- Also triggers in WHERE
+SELECT * FROM dbo.Customers c
+WHERE (SELECT COUNT(*) FROM dbo.Orders o WHERE o.CustomerId = c.CustomerId) > 0;
+```
+
+**Example — fix**
+```sql
+IF EXISTS (SELECT 1 FROM dbo.Orders WHERE Status = 'Pending')
+    PRINT 'Has pending orders';
+
+SELECT * FROM dbo.Customers c
+WHERE EXISTS (SELECT 1 FROM dbo.Orders o WHERE o.CustomerId = c.CustomerId);
+```
+
+**Fix options**
+1. Replace `(SELECT COUNT(*) FROM T WHERE ...) > 0` with `EXISTS (SELECT 1 FROM T WHERE ...)`.
+2. If the actual count value is also needed, keep `COUNT(*)` and reuse the variable — don't run both.
+
+**Related checks:** T15 (DISTINCT without aggregation), T9 (correlated subquery in SELECT)
+
+---
+
+### T55 — VARCHAR/NVARCHAR Implicit Promotion in String Concatenation
+
+**What it means**
+When `VARCHAR` and `NVARCHAR` values are concatenated with `+`, SQL Server implicitly promotes the `VARCHAR` operand to `NVARCHAR`. This doubles the memory allocated for the VARCHAR portion and can silently corrupt characters outside the ASCII range.
+
+**Why it matters**
+Dynamic SQL procedures building `NVARCHAR` strings often mix `N''` and `''` prefixes inconsistently. The implicit promotion goes unnoticed until a non-ASCII character in a `VARCHAR` value is truncated or corrupted during the conversion.
+
+**How to spot it**
+```sql
+-- Triggers T55 — mixing VARCHAR variable with NVARCHAR literals
+DECLARE @sql VARCHAR(500);
+SET @sql = N'SELECT * FROM dbo.' + @tableName + N' WHERE Status = @s';
+-- @sql is VARCHAR; N'' literals make the expression NVARCHAR but @sql loses the promotion
+```
+
+**Example — fix**
+```sql
+-- Consistent: all NVARCHAR
+DECLARE @sql NVARCHAR(500);
+SET @sql = N'SELECT * FROM dbo.' + @tableName + N' WHERE Status = @s';
+```
+
+**Fix options**
+1. Declare all dynamic SQL string variables as `NVARCHAR` — the standard for dynamic SQL in SQL Server.
+2. Use `N''` prefix consistently on all string literals in the concatenation.
+3. Add explicit `CAST(@varcharVar AS NVARCHAR(n))` when mixing types is unavoidable.
+
+**Related checks:** T5 (implicit type coercion), T29 (dynamic SQL concatenation), T50 (collation/type mismatch)
+
+---
+
+### T56 — @@IDENTITY Instead of SCOPE\_IDENTITY()
+
+**What it means**
+`@@IDENTITY` returns the last identity value generated anywhere in the current session — including identity values generated by triggers fired as a result of the INSERT. `SCOPE_IDENTITY()` returns only the value generated in the current scope.
+
+**Why it matters**
+If the target table has a trigger that inserts into another table with an identity column (common in replication and audit setups), `@@IDENTITY` returns the trigger's identity value instead of the original row's. This causes the calling code to store the wrong ID — silently, with no error.
+
+**How to spot it**
+```sql
+-- Triggers T56
+INSERT INTO dbo.Orders (CustomerId, OrderDate) VALUES (@cid, @date);
+SET @newOrderId = @@IDENTITY;  -- may return trigger's identity, not Orders.OrderId
+```
+
+**Example — fix**
+```sql
+INSERT INTO dbo.Orders (CustomerId, OrderDate) VALUES (@cid, @date);
+SET @newOrderId = SCOPE_IDENTITY();  -- always returns the Orders.OrderId value
+
+-- For multiple rows, use OUTPUT:
+INSERT INTO dbo.Orders (CustomerId, OrderDate)
+OUTPUT INSERTED.OrderId INTO @insertedIds
+SELECT CustomerId, @date FROM @customers;
+```
+
+**Fix options**
+1. Replace `@@IDENTITY` with `SCOPE_IDENTITY()` everywhere.
+2. For multi-row inserts, use the `OUTPUT INSERTED.id INTO @table` clause.
+3. For cross-scope identity retrieval, use `IDENT_CURRENT('TableName')` — but note it is not session-scoped.
+
+**Related checks:** T57 (@@ROWCOUNT invalidation), T19 (missing TRY/CATCH)
+
+---
+
+### T57 — @@ROWCOUNT Read After Statement That Resets It
+
+**What it means**
+`@@ROWCOUNT` is reset to reflect the row count of the most recently executed statement — every statement, including `IF`, `SET @var = val`, `PRINT`, `SELECT @var = col`, and `DECLARE`. A single intervening statement between the DML and the `@@ROWCOUNT` read returns the wrong count.
+
+**Why it matters**
+Developers commonly write: `UPDATE ...; IF @something ... ; IF @@ROWCOUNT = 0 ...` — the `IF @something` already reset `@@ROWCOUNT` to 0. The `UPDATE` may have affected rows, but the check reads 0 and incorrectly treats it as "no rows updated".
+
+**How to spot it**
+```sql
+-- Triggers T57 — IF statement resets @@ROWCOUNT before the check
+UPDATE dbo.Orders SET Status = 'Shipped' WHERE OrderId = @id;
+IF @logEnabled = 1  -- this IF resets @@ROWCOUNT!
+    INSERT INTO dbo.Log ...;
+IF @@ROWCOUNT = 0  -- reads the INSERT's rowcount, not the UPDATE's
+    RAISERROR('Order not found', 16, 1);
+```
+
+**Example — fix**
+```sql
+UPDATE dbo.Orders SET Status = 'Shipped' WHERE OrderId = @id;
+SET @rowsUpdated = @@ROWCOUNT;  -- capture immediately
+
+IF @logEnabled = 1
+    INSERT INTO dbo.Log ...;
+IF @rowsUpdated = 0
+    RAISERROR('Order not found', 16, 1);
+```
+
+**Fix options**
+1. Capture `SET @rows = @@ROWCOUNT` as the very next statement after every DML.
+2. Use the `OUTPUT` clause to capture affected rows into a table variable for more complex scenarios.
+
+**Related checks:** T56 (@@IDENTITY), T19 (missing TRY/CATCH), T20 (missing transaction)
+
+---
+
+### T58 — Recursive CTE Without MAXRECURSION
+
+**What it means**
+A recursive CTE processes levels of a hierarchy iteratively. The default maximum recursion depth is 100. A hierarchy deeper than 100 levels causes error 530 at runtime. Conversely, `OPTION (MAXRECURSION 0)` removes the limit entirely, allowing infinite loops on bad data.
+
+**Why it matters**
+The 100-level default works fine in development with shallow test data but fails in production when deeper hierarchies appear. `MAXRECURSION 0` silently allows runaway recursion if the anchor/recursive members have a logic error (e.g., a cycle in the data).
+
+**How to spot it**
+```sql
+-- Triggers T58 — no MAXRECURSION option
+WITH OrgHierarchy AS (
+    SELECT EmployeeId, ManagerId, 1 AS Level
+    FROM dbo.Employees WHERE ManagerId IS NULL
+    UNION ALL
+    SELECT e.EmployeeId, e.ManagerId, h.Level + 1
+    FROM dbo.Employees e
+    JOIN OrgHierarchy h ON e.ManagerId = h.EmployeeId
+)
+SELECT * FROM OrgHierarchy;  -- fails with error 530 if org has > 100 levels
+```
+
+**Example — fix**
+```sql
+WITH OrgHierarchy AS (
+    SELECT EmployeeId, ManagerId, 1 AS Level
+    FROM dbo.Employees WHERE ManagerId IS NULL
+    UNION ALL
+    SELECT e.EmployeeId, e.ManagerId, h.Level + 1
+    FROM dbo.Employees e
+    JOIN OrgHierarchy h ON e.ManagerId = h.EmployeeId
+    WHERE h.Level < 500  -- guard against cycles
+)
+SELECT * FROM OrgHierarchy
+OPTION (MAXRECURSION 500);
+```
+
+**Fix options**
+1. Add `OPTION (MAXRECURSION n)` where `n` matches the realistic maximum depth.
+2. For unbounded hierarchies: use `OPTION (MAXRECURSION 0)` with a depth-counter column in the recursive member (`WHERE h.Level < 1000`) to prevent runaway recursion.
+3. For cycle detection: add a path string (concatenating IDs) and check for repeated IDs in the anchor or recursive member.
+
+**Related checks:** T25 (CTE chain depth), T48 (deeply nested subqueries)
+
+---
+
+### T59 — MERGE Without HOLDLOCK (Race Condition)
+
+**What it means**
+The MERGE statement performs a read (to determine MATCHED / NOT MATCHED) and then a write (INSERT / UPDATE / DELETE). Under concurrent workloads, two sessions can both read "NOT MATCHED" before either completes the INSERT — causing a duplicate key violation or duplicate row.
+
+**Why it matters**
+This is a well-documented SQL Server behavior (not a bug). MERGE is frequently used for upsert patterns in high-concurrency environments. Without HOLDLOCK, occasional primary key violations (error 2627) appear under load, are hard to reproduce in testing, and surface as mysterious "intermittent failures".
+
+**How to spot it**
+```sql
+-- Triggers T59 — no HOLDLOCK; race condition under concurrent inserts
+MERGE dbo.Products AS t
+USING (SELECT @productId AS ProductId, @price AS Price) AS s
+ON t.ProductId = s.ProductId
+WHEN NOT MATCHED THEN INSERT (ProductId, Price) VALUES (s.ProductId, s.Price)
+WHEN MATCHED THEN UPDATE SET t.Price = s.Price;
+```
+
+**Example — fix**
+```sql
+-- HOLDLOCK acquires and holds a range lock, preventing the race
+MERGE dbo.Products WITH (HOLDLOCK) AS t
+USING (SELECT @productId AS ProductId, @price AS Price) AS s
+ON t.ProductId = s.ProductId
+WHEN NOT MATCHED THEN INSERT (ProductId, Price) VALUES (s.ProductId, s.Price)
+WHEN MATCHED THEN UPDATE SET t.Price = s.Price;
+```
+
+**Fix options**
+1. Add `WITH (HOLDLOCK)` to the MERGE target table — the simplest and most effective fix.
+2. Wrap the MERGE in a `SERIALIZABLE` transaction.
+3. Replace MERGE with explicit `IF EXISTS ... UPDATE ELSE INSERT` inside a `BEGIN TRANSACTION` with `UPDLOCK, SERIALIZABLE` hints on the check read.
+
+**Related checks:** T20 (missing transaction), T29 (dynamic SQL injection in MERGE)
+
+---
+
+### T60 — DATEDIFF as Non-Sargable Date Range Filter
+
+**What it means**
+`DATEDIFF(part, column, expression)` wraps the column side of the comparison, making it non-sargable — the same root cause as T4. SQL Server cannot use an index seek on the date column; it must evaluate `DATEDIFF` for every row.
+
+**Why it matters**
+A query like `WHERE DATEDIFF(DAY, OrderDate, GETDATE()) <= 30` on a 50M-row table forces a full scan of the `OrderDate` index instead of a range seek. Rewriting as a range predicate is O(log n) vs O(n).
+
+**How to spot it**
+```sql
+-- Triggers T60 — DATEDIFF wraps the column
+WHERE DATEDIFF(DAY, OrderDate, GETDATE()) <= 30
+WHERE DATEDIFF(MONTH, CreatedDate, GETDATE()) = 0
+WHERE DATEDIFF(HOUR, LastSeen, SYSDATETIME()) < 24
+```
+
+**Example — fix**
+```sql
+-- Range predicate on the bare column — allows index seek
+WHERE OrderDate >= DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
+
+WHERE CreatedDate >= DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0)
+  AND CreatedDate <  DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()) + 1, 0)
+
+WHERE LastSeen >= DATEADD(HOUR, -24, SYSDATETIME())
+```
+
+**Fix options**
+1. Rewrite as `WHERE col >= DATEADD(part, -n, reference_point)` — puts the arithmetic on the constant side only.
+2. For "current month" or "current year" filters, pre-compute the boundary dates into variables.
+
+**Related checks:** T4 (function wrapping column), T61 (BETWEEN datetime boundary)
+
+---
+
+### T61 — BETWEEN on DATETIME With Date-Only Boundaries
+
+**What it means**
+`BETWEEN '2024-01-01' AND '2024-01-31'` on a `DATETIME` or `DATETIME2` column is inclusive on both ends — but `'2024-01-31'` is interpreted as `'2024-01-31 00:00:00.000'`. All rows with a time component after midnight on the last day are silently excluded.
+
+**Why it matters**
+"Find all orders in January 2024" with `BETWEEN '2024-01-01' AND '2024-01-31'` will miss orders placed on January 31st at 9am, 2pm, or any time after midnight. This is a silent logic bug producing wrong financial totals, missing records, and reconciliation failures.
+
+**How to spot it**
+```sql
+-- Triggers T61 — misses Jan 31 times after midnight
+SELECT * FROM dbo.Orders WHERE OrderDate BETWEEN '2024-01-01' AND '2024-01-31';
+
+-- Also triggers
+SELECT * FROM dbo.Events WHERE EventDate BETWEEN @startDate AND @endDate;
+-- if @startDate/@endDate are DATE parameters used against a DATETIME column
+```
+
+**Example — fix**
+```sql
+-- Half-open range: captures the entire last day
+SELECT * FROM dbo.Orders
+WHERE OrderDate >= '2024-01-01' AND OrderDate < '2024-02-01';
+```
+
+**Fix options**
+1. Use half-open range: `WHERE col >= @start AND col < DATEADD(DAY, 1, @end)`.
+2. For DATE-typed columns (no time component), `BETWEEN` is safe — only flag for DATETIME/DATETIME2.
+3. Use `CAST(col AS DATE) BETWEEN @startDate AND @endDate` if time components should be ignored — but note this is non-sargable (T4).
+
+**Related checks:** T60 (DATEDIFF non-sargable), T42 (GETDATE/UTC precision)
+
+---
+
+### T62 — SELECT Variable Assignment — Silent Prior-Value Retention
+
+**What it means**
+`SELECT @var = col FROM T WHERE ...` does not set `@var = NULL` when no rows match — it leaves `@var` at whatever value it held before the SELECT. This is the opposite of `SET @var = (SELECT ...)`, which returns NULL when the subquery returns no rows.
+
+**Why it matters**
+A procedure that checks `IF @var IS NULL` after `SELECT @var = col FROM T WHERE ID = @id` will not detect the "not found" case if `@var` was initialized to a value before the SELECT. Callers receive stale data and act on it silently.
+
+**How to spot it**
+```sql
+-- Triggers T62 — if no row matches, @status retains its previous value
+DECLARE @status NVARCHAR(20) = N'Unknown';
+SELECT @status = Status FROM dbo.Orders WHERE OrderId = @orderId;
+IF @status = N'Unknown'
+    RAISERROR('Order not found', 16, 1);  -- WRONG: 'Unknown' may be the stale init value
+```
+
+**Example — fix**
+```sql
+-- SET form returns NULL when no rows found
+DECLARE @status NVARCHAR(20);
+SET @status = (SELECT Status FROM dbo.Orders WHERE OrderId = @orderId);
+IF @status IS NULL
+    RAISERROR('Order not found', 16, 1);  -- Correct: NULL means no row found
+```
+
+**Fix options**
+1. Use `SET @var = (SELECT col FROM T WHERE ...)` — NULL on no rows, error if multiple rows.
+2. Initialize `@var = NULL` before the SELECT and test with `IS NULL` after.
+3. Check `@@ROWCOUNT` immediately after the SELECT to detect the no-rows case.
+
+**Related checks:** T57 (@@ROWCOUNT invalidation), T16 (NULL comparison)
+
+---
+
+### T63 — ISNUMERIC() for Numeric Type Validation
+
+**What it means**
+`ISNUMERIC()` returns 1 for any string that can be interpreted as a number — including single characters like `'+'`, `'-'`, `'.'`, `','`, `'$'`, and `'E'` that are not valid for `CAST(... AS INT)` or `CAST(... AS DECIMAL)`.
+
+**Why it matters**
+Code that uses `IF ISNUMERIC(@val) = 1 THEN CAST(@val AS INT)` will still throw a conversion error in production when these edge-case inputs arrive. The validation is incomplete.
+
+**How to spot it**
+```sql
+-- Triggers T63
+IF ISNUMERIC(@input) = 1
+    SET @amount = CAST(@input AS DECIMAL(18,2));
+
+-- ISNUMERIC returns 1 for '$', '.', '+', 'E', ',' — none of which cast to DECIMAL
+```
+
+**Example — fix**
+```sql
+-- TRY_CAST returns NULL on failure; no conversion error thrown
+SET @amount = TRY_CAST(@input AS DECIMAL(18,2));
+IF @amount IS NULL
+    RAISERROR('Invalid amount', 16, 1);
+```
+
+**Fix options**
+1. Replace `ISNUMERIC(expr) = 1` with `TRY_CAST(expr AS target_type) IS NOT NULL` (SQL Server 2012+).
+2. Replace with `TRY_CONVERT(target_type, expr) IS NOT NULL` — equivalent but useful when a style code is needed.
+3. For INTEGER validation specifically, also test `FLOOR(TRY_CAST(expr AS FLOAT)) = TRY_CAST(expr AS FLOAT)` to exclude decimal values.
+
+**Related checks:** T22 (CASE type mismatch), T5 (implicit type coercion)
+
+---
+
+### T64 — Output Parameter Not Initialized in All Code Paths
+
+**What it means**
+A stored procedure or function declares an `OUTPUT` parameter but does not assign a value to it in every possible execution path through the body. The caller receives the parameter's pre-call value or an undefined value on paths where no assignment occurs.
+
+**Why it matters**
+If the caller does not initialize the output variable before the EXEC and relies on a non-NULL value from the procedure, it may silently receive garbage. This is especially dangerous in error paths where an OUTPUT parameter is the mechanism for returning error codes.
+
+**How to spot it**
+```sql
+-- Triggers T64 — @result is only set inside the IF branch
+CREATE PROCEDURE dbo.GetOrderStatus
+    @orderId INT,
+    @result NVARCHAR(20) OUTPUT
+AS
+BEGIN
+    IF EXISTS (SELECT 1 FROM dbo.Orders WHERE OrderId = @orderId)
+        SELECT @result = Status FROM dbo.Orders WHERE OrderId = @orderId;
+    -- If order doesn't exist, @result is never set
+END
+```
+
+**Example — fix**
+```sql
+CREATE PROCEDURE dbo.GetOrderStatus
+    @orderId INT,
+    @result NVARCHAR(20) OUTPUT
+AS
+BEGIN
+    SET @result = NULL;  -- initialize at top of body
+    IF EXISTS (SELECT 1 FROM dbo.Orders WHERE OrderId = @orderId)
+        SELECT @result = Status FROM dbo.Orders WHERE OrderId = @orderId;
+END
+```
+
+**Fix options**
+1. Set all `OUTPUT` parameters to a default at the top of the procedure body: `SET @outParam = NULL` or `SET @outParam = 0`.
+2. Ensure every code path (including CATCH blocks) assigns a value.
+3. Note: declaring a default in the signature (`@outParam INT = 0 OUTPUT`) does not satisfy this — the default applies to callers who omit the parameter, not to uninitialized paths within the body.
+
+**Related checks:** T13 (ISNULL/COALESCE in WHERE), T19 (missing TRY/CATCH)
+
+---
+
+### T65 — Dangerous OLE Automation and Registry Extended Procedures
+
+**What it means**
+OLE Automation procedures (`sp_OA*`) execute COM objects from within SQL Server, allowing file I/O, network calls, and arbitrary code execution. Registry procedures (`xp_reg*`) provide direct read/write access to the Windows registry. `xp_servicecontrol` can start and stop Windows services.
+
+**Why it matters**
+These are the same attack surface as `xp_cmdshell` (T36). If SQL Server is compromised via SQL injection (T29) and these procedures are enabled, an attacker gains full OS and registry control under the SQL Server service account. They should be disabled at server level and absent from all application T-SQL.
+
+**How to spot it**
+```sql
+-- Triggers T65
+EXEC sp_OACreate 'Scripting.FileSystemObject', @obj OUTPUT;
+EXEC sp_OAMethod @obj, 'CreateTextFile', @file OUTPUT, 'C:\output.txt';
+
+EXEC xp_regread 'HKEY_LOCAL_MACHINE', 'SOFTWARE\...', 'Value', @result OUTPUT;
+EXEC xp_servicecontrol 'STOP', 'W3SVC';
+```
+
+**Fix options**
+1. Remove entirely. Replace with SQL Server Agent jobs (scheduled tasks), SSIS packages (file I/O, ETL), PowerShell scripts executed via Agent, or application-layer code.
+2. Verify disabled server-wide: `EXEC sp_configure 'Ole Automation Procedures'` — should return `run_value = 0`.
+3. If required in a DBA-only maintenance script, scope to a privileged admin-only procedure, document the justification, and ensure the feature is disabled immediately after use.
+
+**Related checks:** T36 (xp_cmdshell), T29 (SQL injection), T33 (hardcoded credentials)
+
+---
+
+### T66 — QUOTENAME Misapplied to Values Instead of Identifiers
+
+**What it means**
+`QUOTENAME(string)` wraps its argument in square brackets: `QUOTENAME('Orders')` → `[Orders]`. It is designed to prevent identifier injection by escaping identifiers. It does not sanitize data values — a value containing `]` followed by SQL can still inject.
+
+**Why it matters**
+A common misconception: developers use `QUOTENAME(@userInput)` thinking it "escapes" the input for safe dynamic SQL. A value like `x]; DROP TABLE dbo.Orders; --` wrapped in QUOTENAME becomes `[x]; DROP TABLE dbo.Orders; --]` — the `]` in the value closes the bracket, and the following SQL is still executed.
+
+**How to spot it**
+```sql
+-- Triggers T66 — QUOTENAME applied to a value, not an identifier
+SET @sql = N'SELECT * FROM dbo.Orders WHERE Status = ' + QUOTENAME(@statusFilter);
+-- @statusFilter is a STATUS value, not an object name; QUOTENAME does not protect it
+```
+
+**Example — fix**
+```sql
+-- Values must be passed as bound parameters — never via QUOTENAME
+SET @sql = N'SELECT * FROM dbo.Orders WHERE Status = @p_status';
+EXEC sp_executesql @sql, N'@p_status NVARCHAR(20)', @p_status = @statusFilter;
+
+-- QUOTENAME is correct only for validated identifiers:
+IF @tableName NOT IN (SELECT name FROM sys.tables WHERE schema_id = SCHEMA_ID('dbo'))
+    RAISERROR('Invalid table', 16, 1);
+SET @sql = N'SELECT * FROM dbo.' + QUOTENAME(@tableName);
+```
+
+**Fix options**
+1. Pass all value parameters via `sp_executesql @params` binding — never via string concatenation or QUOTENAME.
+2. Use `QUOTENAME` only for object-name tokens (table, column, schema names) that have been validated against `sys.tables`/`sys.columns` or an explicit whitelist.
+
+**Related checks:** T29 (dynamic SQL concatenation), T31 (user input in dynamic SQL), T34 (sp_executesql without @params)
+
+---
+
+### T67 — Dynamic SQL Built and Executed Inside WHILE Loop
+
+**What it means**
+Dynamic SQL construction and execution inside a loop body means N compilations for N iterations. Each compilation takes time, pollutes the plan cache, and multiplies the injection surface area if the SQL string changes per iteration.
+
+**Why it matters**
+A loop processing 1,000 objects that builds and executes a query per iteration generates 1,000 plan compilations and 1,000 cache entries. The set-based alternative generates one.
+
+**How to spot it**
+```sql
+-- Triggers T67
+DECLARE @tableName NVARCHAR(128);
+DECLARE cur CURSOR FOR SELECT name FROM sys.tables WHERE is_ms_shipped = 0;
+OPEN cur; FETCH NEXT FROM cur INTO @tableName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @sql = N'UPDATE ' + QUOTENAME(@tableName) + N' SET ModifiedAt = SYSDATETIME()';
+    EXEC sp_executesql @sql;  -- one compile per table
+    FETCH NEXT FROM cur INTO @tableName;
+END
+```
+
+**Example — fix**
+```sql
+-- Build a single batch string outside the loop; execute once
+DECLARE @sql NVARCHAR(MAX) = N'';
+SELECT @sql += N'UPDATE ' + QUOTENAME(name) + N' SET ModifiedAt = SYSDATETIME();' + CHAR(10)
+FROM sys.tables WHERE is_ms_shipped = 0;
+EXEC sp_executesql @sql;  -- one compile, one execution
+```
+
+**Fix options**
+1. Move dynamic SQL construction outside the loop, concatenate a batch, execute once.
+2. Reformulate as a single set-based statement using a staged temp table or TVP.
+3. If per-object DDL is genuinely required, ensure the dynamic string uses only validated whitelist identifiers — never loop-variable content derived from data.
+
+**Related checks:** T29 (dynamic SQL injection), T7 (cursor usage), T77 (O(n²) string concatenation)
+
+---
+
+### T68 — Deprecated Large Object Types (text, ntext, image)
+
+**What it means**
+`text`, `ntext`, and `image` are the old SQL Server large object types. They are deprecated since SQL Server 2005 and have been announced for removal in a future version. They carry significant limitations compared to their `(MAX)` successors.
+
+**Why it matters**
+`text`/`ntext`/`image` columns cannot be used with: `LIKE`, `REPLACE`, `CHARINDEX`, `LEN`, `SUBSTRING` directly, `DISTINCT`, `ORDER BY` without casting, indexed views, or most modern SQL Server features. Code using these types will break on future SQL Server versions.
+
+**How to spot it**
+```sql
+-- Triggers T68
+DECLARE @doc TEXT;
+SET @doc = 'Some long text value';
+
+SELECT DATALENGTH(NoteText) FROM dbo.Notes;  -- NoteText is ntext
+UPDATE dbo.Documents SET Content = TEXTPTR(Content);  -- deprecated TEXTPTR
+```
+
+**Example — fix**
+```sql
+-- Modern equivalents
+DECLARE @doc NVARCHAR(MAX);
+SET @doc = N'Some long text value';
+
+SELECT LEN(NoteText) FROM dbo.Notes;  -- after ALTER COLUMN to NVARCHAR(MAX)
+```
+
+**Fix options**
+1. `text` → `VARCHAR(MAX)`, `ntext` → `NVARCHAR(MAX)`, `image` → `VARBINARY(MAX)`.
+2. Remove `TEXTPTR`, `READTEXT`, `WRITETEXT`, `UPDATETEXT` — use standard `UPDATE`, `SELECT` on the `(MAX)` column.
+3. Schema changes to existing tables: `ALTER TABLE dbo.T ALTER COLUMN col NVARCHAR(MAX)`.
+
+**Related checks:** T73 (variable-length type size 1–2), T44 (SET ANSI_NULLS OFF)
+
+---
+
+### T69 — Old System Catalog Table References
+
+**What it means**
+`sysobjects`, `syscolumns`, `sysindexes`, and similar names are SQL Server 2000 compatibility views. They expose a subset of metadata and are not updated for features added after SQL Server 2000.
+
+**Why it matters**
+These views are absent or reduced in Azure SQL Database, may be removed in future SQL Server versions, and do not include metadata for features like filtered indexes, columnstore indexes, In-Memory OLTP tables, or XML columns. Code using them may silently miss objects.
+
+**How to spot it**
+```sql
+-- Triggers T69
+SELECT name FROM sysobjects WHERE xtype = 'U';         -- user tables
+SELECT name FROM syscolumns WHERE id = OBJECT_ID('T'); -- columns
+SELECT * FROM sysindexes WHERE id = OBJECT_ID('T');    -- indexes
+```
+
+**Example — fix**
+```sql
+SELECT name FROM sys.tables WHERE is_ms_shipped = 0;
+SELECT name, column_id FROM sys.columns WHERE object_id = OBJECT_ID('dbo.T');
+SELECT name, type_desc FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.T');
+```
+
+**Fix options**
+1. `sysobjects` → `sys.objects`, `sys.tables`, `sys.views`, `sys.procedures`
+2. `syscolumns` → `sys.columns`
+3. `sysindexes` → `sys.indexes` + `sys.index_columns`
+4. `sysdatabases` → `sys.databases`
+5. `syslogins` → `sys.server_principals`
+
+**Related checks:** T38 (missing schema prefix), T68 (deprecated LOB types)
+
+---
+
+### T70 — STUFF + FOR XML PATH String Aggregation (Pre-2017 Pattern)
+
+**What it means**
+`STUFF((SELECT ',' + col FROM T FOR XML PATH('')), 1, 1, '')` is the SQL Server 2005–2016 workaround for string aggregation. It uses XML generation as a side effect to concatenate rows into a single string.
+
+**Why it matters**
+The pattern has two failure modes: XML special characters (`<`, `>`, `&`, `"`, `'`) in the data are XML-escaped by `FOR XML`, corrupting the result silently. It is also verbose, hard to maintain, and slower than the native `STRING_AGG` on large rowsets.
+
+**How to spot it**
+```sql
+-- Triggers T70
+SELECT STUFF((
+    SELECT ',' + ProductName
+    FROM dbo.Products
+    FOR XML PATH('')
+), 1, 1, '') AS ProductList;
+-- If ProductName contains '&', it becomes '&amp;' in the result
+```
+
+**Example — fix (SQL Server 2017+)**
+```sql
+SELECT STRING_AGG(ProductName, ',') WITHIN GROUP (ORDER BY ProductName) AS ProductList
+FROM dbo.Products;
+```
+
+**Example — fix (pre-2017, entity-safe)**
+```sql
+SELECT STUFF((
+    SELECT ',' + ProductName
+    FROM dbo.Products
+    FOR XML PATH(''), TYPE
+).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS ProductList;
+-- The .value() call decodes XML entities back to their original characters
+```
+
+**Fix options**
+1. SQL Server 2017+: use `STRING_AGG(col, separator) WITHIN GROUP (ORDER BY ...)`.
+2. Pre-2017 with XML special characters: add `TYPE).value('.', 'NVARCHAR(MAX)')` to decode entities.
+3. Pre-2017 for purely ASCII data: the plain `FOR XML PATH('')` pattern is acceptable — document it.
+
+**Related checks:** T77 (O(n²) string concatenation in loop), T47 (string functions on large rowsets)
+
+---
+
+### T71 — Locale-Dependent Date String Literal Format
+
+**What it means**
+Date string literals like `'01/15/2024'` are interpreted based on the server's `SET DATEFORMAT` and `SET LANGUAGE` settings. On a US-English server `'01/15/2024'` is January 15; on a British-English server it is interpreted as day 1, month 15 and fails.
+
+**Why it matters**
+A procedure that works correctly on a developer's workstation (US English) may return wrong dates or throw error 241 ("Conversion failed when converting date and/or time from character string") on a production server with a different language setting. This is a common source of environment-dependent bugs.
+
+**How to spot it**
+```sql
+-- Triggers T71 — locale-dependent
+WHERE OrderDate >= '01/15/2024'
+SET @endDate = '31/12/2024'
+INSERT INTO dbo.Events (EventDate) VALUES ('January 15, 2024')
+```
+
+**Example — fix**
+```sql
+-- ISO 8601 — language-independent
+WHERE OrderDate >= '2024-01-15'
+SET @endDate = '2024-12-31'
+INSERT INTO dbo.Events (EventDate) VALUES ('2024-01-15')
+
+-- Or the unseparated format (also unambiguous for DATETIME):
+WHERE OrderDate >= '20240115'
+```
+
+**Fix options**
+1. Use `'YYYY-MM-DD'` for DATE and `DATETIME2`; `'YYYYMMDD'` for DATETIME.
+2. Use `'YYYY-MM-DDTHH:MM:SS'` (ISO 8601 with T separator) for DATETIME2 with time.
+3. For procedure parameters: declare them as DATE, DATETIME2, or DATETIME rather than VARCHAR, pushing the conversion to the client.
+
+**Related checks:** T42 (GETDATE/UTC precision), T61 (BETWEEN datetime boundary)
+
+---
+
+### T72 — Missing SET NOCOUNT ON in Stored Procedure or Trigger
+
+**What it means**
+Without `SET NOCOUNT ON`, SQL Server sends a DONE_IN_PROC message to the client after every DML statement, reporting the number of rows affected. For procedures executing DML in loops or batches, this produces a stream of row-count messages.
+
+**Why it matters**
+Some ADO and ODBC client libraries misinterpret these DONE_IN_PROC messages as empty result sets, causing "there is already an open DataReader" errors or unexpected result-set handling. For very high-frequency procedures the accumulated network traffic of row-count messages is measurable.
+
+**How to spot it**
+```sql
+-- Triggers T72 — no SET NOCOUNT ON
+CREATE PROCEDURE dbo.ProcessOrders
+AS
+BEGIN
+    UPDATE dbo.Orders SET Status = 'Processing' WHERE Status = 'Queued';
+    -- Sends a row-count DONE_IN_PROC message to client after the UPDATE
+END
+```
+
+**Example — fix**
+```sql
+CREATE PROCEDURE dbo.ProcessOrders
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.Orders SET Status = 'Processing' WHERE Status = 'Queued';
+END
+```
+
+**Fix options**
+1. Add `SET NOCOUNT ON;` as the first statement in every procedure and trigger body.
+2. Exception: if the calling application explicitly relies on receiving row counts from the procedure (rare), document it and suppress the check.
+
+**Related checks:** T57 (@@ROWCOUNT), T71 (locale date literal)
+
+---
+
+### T73 — Variable-Length Type of Size 1 or 2
+
+**What it means**
+`VARCHAR(1)`, `NVARCHAR(2)`, and similar tiny variable-length declarations carry a 2-byte length prefix overhead in storage. For sizes 1 or 2, the overhead equals or exceeds the data size. `VARCHAR` or `NVARCHAR` with no length specified silently defaults to 1.
+
+**Why it matters**
+Fixed-length types (`CHAR`, `NCHAR`, `BINARY`) have no length prefix and use exactly their declared size. For size 1–2 columns this gives a 33–100% storage saving. The no-length-specified default-to-1 is also almost always a developer mistake — the intent is usually `VARCHAR(MAX)` or a specific business-meaningful size.
+
+**How to spot it**
+```sql
+-- Triggers T73
+DECLARE @flag VARCHAR(1);
+CREATE TABLE dbo.Codes (TypeCode VARCHAR(2), CategoryFlag NVARCHAR(1));
+CREATE PROCEDURE dbo.Proc1 (@indicator VARCHAR) AS ...  -- defaults to VARCHAR(1)!
+```
+
+**Example — fix**
+```sql
+DECLARE @flag CHAR(1);
+CREATE TABLE dbo.Codes (TypeCode CHAR(2), CategoryFlag NCHAR(1));
+CREATE PROCEDURE dbo.Proc1 (@indicator CHAR(1)) AS ...
+```
+
+**Fix options**
+1. Replace `VARCHAR(1)`/`VARCHAR(2)` → `CHAR(1)`/`CHAR(2)`.
+2. Replace `NVARCHAR(1)`/`NVARCHAR(2)` → `NCHAR(1)`/`NCHAR(2)`.
+3. Replace `VARBINARY(1)`/`VARBINARY(2)` → `BINARY(1)`/`BINARY(2)`.
+4. For bare `VARCHAR`/`NVARCHAR` with no length: determine the intended maximum and specify it explicitly.
+
+**Related checks:** T68 (deprecated LOB types), T43 (INSERT without column list)
+
+---
+
+### T74 — LEN() or DATALENGTH() as Non-Sargable Filter Predicate
+
+**What it means**
+`LEN(col)` and `DATALENGTH(col)` wrap the column in a function call, making the predicate non-sargable — the same root cause as T4. SQL Server cannot seek into an index on `col` when it is wrapped.
+
+**Why it matters**
+`WHERE LEN(Email) > 0` is the most common form — checking for a non-empty string. But this forces SQL Server to evaluate `LEN()` for every row before filtering. `WHERE Email <> ''` is identical in semantics and allows an index seek.
+
+**How to spot it**
+```sql
+-- Triggers T74
+WHERE LEN(PhoneNumber) > 0          -- non-empty check (use <> '' instead)
+WHERE DATALENGTH(Description) > 0   -- non-empty check on MAX column
+WHERE LEN(PostalCode) = 5           -- length filter (use a computed column + index)
+```
+
+**Example — fix**
+```sql
+-- Sargable equivalents
+WHERE PhoneNumber <> ''
+WHERE Description <> ''           -- works for NVARCHAR(MAX) too
+WHERE LEN(PostalCode) = 5         -- if selectivity is high, add computed column:
+-- ALTER TABLE dbo.T ADD PostalCodeLen AS LEN(PostalCode) PERSISTED;
+-- CREATE INDEX IX_T_PostalCodeLen ON dbo.T (PostalCodeLen);
+```
+
+**Fix options**
+1. Replace `LEN(col) > 0` with `col <> ''`; `DATALENGTH(col) > 0` with `col <> ''`.
+2. For nullable columns: `WHERE col IS NOT NULL AND col <> ''`.
+3. For length-specific predicates (`LEN(col) = n`): add a persisted computed column and index.
+
+**Related checks:** T4 (function wrapping column), T13 (ISNULL/COALESCE in WHERE)
+
+---
+
+### T75 — Unbatched Large DML Without TOP Batch Control
+
+**What it means**
+A single `DELETE` or `UPDATE` affecting a large number of rows is one atomic transaction. SQL Server holds all acquired locks until commit, the transaction log grows proportionally to rows affected, and lock escalation to a table lock blocks all other queries for the duration.
+
+**Why it matters**
+A single `DELETE FROM dbo.AuditLog WHERE LogDate < DATEADD(YEAR, -1, GETDATE())` against a table with 50M old rows: holds a table-level lock for minutes, grows the transaction log by gigabytes, and blocks all reads and writes on the table.
+
+**How to spot it**
+```sql
+-- Triggers T75 — one transaction for potentially millions of rows
+DELETE FROM dbo.AuditLog WHERE LogDate < DATEADD(YEAR, -1, GETDATE());
+UPDATE dbo.Orders SET IsArchived = 1 WHERE OrderDate < '2020-01-01';
+```
+
+**Example — fix**
+```sql
+-- Batched: each iteration is a short transaction; locks released between batches
+WHILE 1 = 1
+BEGIN
+    DELETE TOP (5000) FROM dbo.AuditLog WHERE LogDate < DATEADD(YEAR, -1, GETDATE());
+    IF @@ROWCOUNT < 5000 BREAK;
+    WAITFOR DELAY '00:00:00.050';  -- optional: yield to other workloads
+END
+```
+
+**Fix options**
+1. Wrap in a WHILE loop with `DELETE TOP (n) FROM T WHERE ...`; break when `@@ROWCOUNT < n`.
+2. Batch size of 1,000–10,000 rows per iteration is typical; tune based on log growth and blocking tolerance.
+3. Consider partitioned tables or archival patterns for recurring large-scale deletes.
+
+**Related checks:** T20 (missing transaction), T73 (unbatched DELETE/UPDATE)
+
+---
+
+### T76 — WITH (NOLOCK) Overuse Across All Tables
+
+**What it means**
+`WITH (NOLOCK)` is READ UNCOMMITTED isolation per table — it reads uncommitted rows (dirty reads), can read a row twice during a page split, or skip a row entirely. When applied to three or more tables in the same query (or every table in a procedure), it is usually cargo-cult practice added indiscriminately.
+
+**Why it matters**
+NOLOCK does not prevent all locking (it still takes a schema stability lock), yet it trades correctness for an uncertain performance benefit. Queries joining several NOLOCK tables can return logically inconsistent result sets — e.g., an order header with no matching order lines from the same transaction, or financial totals that don't balance.
+
+**How to spot it**
+```sql
+-- Triggers T76 — NOLOCK on every table in the join
+SELECT o.OrderId, c.Name, ol.Qty
+FROM dbo.Orders o WITH (NOLOCK)
+JOIN dbo.Customers c WITH (NOLOCK) ON c.CustomerId = o.CustomerId
+JOIN dbo.OrderLines ol WITH (NOLOCK) ON ol.OrderId = o.OrderId
+WHERE o.Status = 'Open';
+```
+
+**Fix options**
+1. Remove NOLOCK from tables where inconsistent reads would produce incorrect results (financial summaries, joined transactions).
+2. Enable `READ_COMMITTED_SNAPSHOT` (RCSI) at the database level: readers no longer block writers and vice versa — no dirty reads.
+3. Keep NOLOCK only on tables where approximate/stale reads are explicitly acceptable and documented (e.g., `-- intentional: approximate dashboard count`).
+
+**Related checks:** T20 (missing transaction), T59 (MERGE race condition)
+
+---
+
+### T77 — O(n²) String Concatenation in Loop
+
+**What it means**
+Each `SET @result = @result + item` in a loop allocates a new string of total length `LEN(@result) + LEN(item)` and copies both halves. For N iterations producing a final string of length L, total work is proportional to L² — quadratic in the output size.
+
+**Why it matters**
+Building a comma-separated list of 10,000 items averaging 20 characters (200 KB final string) via loop concatenation performs roughly 20 billion character copies. The equivalent `STRING_AGG` or `FOR XML PATH` approach performs a single linear pass.
+
+**How to spot it**
+```sql
+-- Triggers T77
+DECLARE @list NVARCHAR(MAX) = N'';
+DECLARE cur CURSOR FOR SELECT Name FROM dbo.Products;
+OPEN cur; FETCH NEXT FROM cur INTO @name;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @list = @list + @name + N',';  -- O(n^2) total copies
+    FETCH NEXT FROM cur INTO @name;
+END
+```
+
+**Example — fix**
+```sql
+-- Single set-based pass — O(n) total work
+SELECT @list = STRING_AGG(Name, N',') FROM dbo.Products;
+
+-- Or pre-2017:
+SELECT @list = STUFF((SELECT N',' + Name FROM dbo.Products FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, N'');
+```
+
+**Fix options**
+1. SQL Server 2017+: use `STRING_AGG(col, separator) WITHIN GROUP (ORDER BY ...)`.
+2. Pre-2017: use `STUFF + FOR XML PATH` with the `TYPE` directive to preserve non-ASCII characters (T70).
+3. If the loop is required for other processing, collect values into a `@table TABLE (item NVARCHAR(n))` and aggregate at the end.
+
+**Related checks:** T70 (STUFF + FOR XML PATH), T7 (cursor), T47 (string functions on large rowsets)
+
+---
+
+### T78 — Deterministic Function Call on Value Side of WHERE Predicate
+
+**What it means**
+A function call in a WHERE clause where the argument is a variable or literal (not a column reference) produces the same result for every row in the query. SQL Server evaluates it once per row instead of pre-computing it once for the whole query.
+
+**Why it matters**
+`WHERE col > ABS(@param)` evaluates `ABS(@param)` once per row. `WHERE col > DATEADD(DAY, -@n, GETDATE())` evaluates `DATEADD(...)` once per row. On a 10M-row scan this adds 10M redundant function calls. Pre-computing to a variable eliminates them and gives the optimizer a stable literal to work with, potentially improving plan quality.
+
+**How to spot it**
+```sql
+-- Triggers T78 — function on the value (parameter) side
+WHERE c2 > ABS(@param)                         -- ABS of a parameter
+WHERE EventDate > DATEADD(DAY, -@daysBack, GETDATE())  -- constant date expression
+WHERE Amount BETWEEN @low AND ROUND(@high, 2)  -- ROUND of a parameter
+WHERE LEN(@prefix) > 0 AND Name LIKE @prefix + N'%'    -- LEN of a parameter in predicate
+```
+
+**Example — fix**
+```sql
+DECLARE @threshold INT = ABS(@param);
+DECLARE @since DATETIME2 = DATEADD(DAY, -@daysBack, GETDATE());
+DECLARE @roundedHigh DECIMAL(18,2) = ROUND(@high, 2);
+
+SELECT * FROM dbo.Events
+WHERE c2 > @threshold AND EventDate > @since AND Amount <= @roundedHigh;
+```
+
+**Fix options**
+1. Assign the result of the deterministic expression to a variable before the query.
+2. For complex multi-predicate queries, pre-compute all constant expressions at the top of the procedure.
+3. Note: SQL Server sometimes optimizes simple constant expressions automatically. Flag only when the function is non-trivial or appears inside a subquery that runs per outer row.
+
+**Related checks:** T4 (function wrapping column), T60 (DATEDIFF non-sargable), T28 (OPTION RECOMPILE for high-variance)
+
+---
+
 ## Quick Reference: Checks by Severity
 
 ### Critical (fix before merge)
@@ -1831,12 +2838,16 @@ ALTER TABLE dbo.Contacts ALTER COLUMN Email NVARCHAR(255) COLLATE SQL_Latin1_Gen
 | T33 | Hardcoded credentials |
 | T36 | xp_cmdshell reference |
 | T39 | Deprecated outer join syntax |
+| T51 | NOT IN with nullable subquery |
+| T59 | MERGE without HOLDLOCK (race condition) |
+| T65 | OLE Automation / registry extended procedures |
+| T66 | QUOTENAME misapplied to values |
 
 ### Warning (should fix)
 | Check | Issue |
 |-------|-------|
 | T1 | SELECT * |
-| T4 | Non-sargable: function on column |
+| T4 | Non-sargable: function/arithmetic on column |
 | T5 | Non-sargable: implicit type coercion |
 | T6 | Leading wildcard LIKE |
 | T7 | Cursor usage |
@@ -1859,6 +2870,23 @@ ALTER TABLE dbo.Contacts ALTER COLUMN Email NVARCHAR(255) COLLATE SQL_Latin1_Gen
 | T48 | Deeply nested subqueries |
 | T49 | Pagination without deterministic sort |
 | T50 | Collation/type mismatch |
+| T52 | Division by zero without NULLIF guard |
+| T53 | TOP without ORDER BY |
+| T55 | VARCHAR/NVARCHAR implicit promotion in concat |
+| T56 | @@IDENTITY instead of SCOPE_IDENTITY() |
+| T57 | @@ROWCOUNT after statement that resets it |
+| T58 | Recursive CTE without MAXRECURSION |
+| T60 | DATEDIFF as non-sargable date filter |
+| T61 | BETWEEN on DATETIME with date-only boundary |
+| T63 | ISNUMERIC() for type validation |
+| T64 | Output parameter not initialized in all paths |
+| T67 | Dynamic SQL executed inside WHILE loop |
+| T68 | Deprecated text/ntext/image types |
+| T71 | Locale-dependent date string literal |
+| T74 | LEN()/DATALENGTH() as filter predicate |
+| T75 | Unbatched large DML without TOP batch control |
+| T76 | WITH (NOLOCK) overuse across all tables |
+| T77 | O(n²) string concatenation in loop |
 
 ### Info (investigate and document)
 | Check | Issue |
@@ -1881,3 +2909,10 @@ ALTER TABLE dbo.Contacts ALTER COLUMN Email NVARCHAR(255) COLLATE SQL_Latin1_Gen
 | T42 | GETDATE() where UTC preferred |
 | T45 | Temp table without explicit columns |
 | T47 | String functions on large rowsets |
+| T54 | COUNT(*) > 0 instead of EXISTS |
+| T62 | SELECT variable assignment silent retention |
+| T69 | Old system catalog table references |
+| T70 | STUFF + FOR XML PATH (pre-2017 pattern) |
+| T72 | Missing SET NOCOUNT ON |
+| T73 | Variable-length type of size 1 or 2 |
+| T78 | Deterministic function call on value side of WHERE |

@@ -120,7 +120,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║         │                                                    ║
 ║         ▼                                                    ║
 ║  /tsql-review                                                ║
-║  50 checks — SQL injection, non-sargable predicates,         ║
+║  78 checks — SQL injection, non-sargable predicates,         ║
 ║  cursor patterns, NULL bugs, deprecated syntax               ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
@@ -516,7 +516,7 @@ OrderLines table: scan count 48,291, logical reads 2.5M. Elapsed 18 seconds.
 
 ## tsql-review
 
-Analyze raw T-SQL source code for anti-patterns, security vulnerabilities, and logic bugs. Applies **50 checks** (T1–T50) across five categories and produces a prioritized Critical → Warning → Info report. No execution plan required — runs on source code before the query is ever executed.
+Analyze raw T-SQL source code for anti-patterns, security vulnerabilities, and logic bugs. Applies **78 checks** (T1–T78) across five categories and produces a prioritized Critical → Warning → Info report. No execution plan required — runs on source code before the query is ever executed.
 
 ### Triggers
 

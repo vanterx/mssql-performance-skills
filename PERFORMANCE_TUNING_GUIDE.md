@@ -9,7 +9,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | Skill | Trigger | Input | What it does |
 |-------|---------|-------|-------------|
 | [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
-| [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 50 checks for anti-patterns, security, logic bugs |
+| [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 78 checks for anti-patterns, security, logic bugs |
 | [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
 | [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 40 checks (V1–V40): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency |
@@ -537,7 +537,7 @@ Each skill sees a different slice of query behavior. Together they give a comple
 Source Code               │  T-SQL source (.sql)
 ──────────────────────────┼─────────────────────────────────────────
 /tsql-review              │  Static: can I spot problems before running?
-                          │  50 checks: injection, predicates, cursors,
+                          │  78 checks: injection, predicates, cursors,
                           │  deprecated syntax, correctness, security
 
 Execution (no plan)       │  SSMS Messages tab
@@ -772,7 +772,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|
-| `T1–T50` | `tsql-review` | T-SQL source: structural, security, correctness, deprecated syntax, performance | 50 |
+| `T1–T78` | `tsql-review` | T-SQL source: structural, security, correctness, deprecated syntax, performance | 78 |
 | `I1–I15` | `sqlstats-review` | I/O metrics: logical reads, scan count, physical reads, spills, LOB, columnstore | 15 |
 | `W1–W7` | `sqlstats-review` | Time metrics: CPU vs elapsed ratio, compile overhead, long execution | 7 |
 | `X1–X12` | `sqltrace-review` | Event-level: long duration, high CPU/reads, attention, lock timeout, recompile, spill warnings | 12 |
@@ -794,7 +794,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
 | `K1–K30` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation config, AD account sensitivity | 30 |
 
-**Total: 407 checks across all skills.**
+**Total: 435 checks across all skills.**
 
 ---
 
