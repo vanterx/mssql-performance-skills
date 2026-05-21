@@ -64,6 +64,8 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 231-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
+| [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
+| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 16 SKILL.md files are discovered by the plugin system |
 
 ### Examples
 
@@ -88,14 +90,19 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 
 ## Installing Skills
 
-**Prerequisites:** [Node.js](https://nodejs.org) (>= 18)
-
+**Option 1: Plugin Marketplace (recommended)**
 ```bash
-npx skills add vanterx/mssql-performance-skills          # recommended
+/plugin marketplace add vanterx/mssql-performance-skills
+/plugin install mssql-performance-skills@mssql-performance-skills
+```
+
+**Option 2: `npx` one-liner** — requires [Node.js](https://nodejs.org) (>= 18)
+```bash
+npx skills add vanterx/mssql-performance-skills          # user scope
 npx skills add vanterx/mssql-performance-skills -g       # global
 ```
 
-**Manual fallback:**
+**Option 3: Manual fallback:**
 ```bash
 cp -r skills/* ~/.claude/skills/          # global (all 16 skills)
 cp -r skills/* .claude/skills/            # project-scoped

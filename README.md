@@ -53,6 +53,28 @@ The skills are plain Markdown files. Copy them into your agent's skills director
 
 ### Claude Code
 
+**Option 1: Plugin Marketplace (recommended)**
+
+```bash
+# Add the marketplace (once per machine or project)
+/plugin marketplace add vanterx/mssql-performance-skills
+
+# Install all 16 skills
+/plugin install mssql-performance-skills@mssql-performance-skills
+```
+
+For project-scoped install, append `--scope project` to the marketplace add command.
+
+**Option 2: `npx` one-liner**
+
+```bash
+npx skills add vanterx/mssql-performance-skills   # requires Node.js >= 18
+```
+
+Uses the third-party [`skills` npm package](https://www.npmjs.com/package/skills) — not maintained by Anthropic or this repo.
+
+**Option 3: Manual**
+
 ```bash
 git clone https://github.com/vanterx/mssql-performance-skills.git
 cp -r mssql-performance-skills/skills/* ~/.claude/skills/   # global
@@ -73,16 +95,6 @@ cp -r mssql-performance-skills/skills/* .claude/skills/     # project-scoped
 | Aider | `.aider.conf.yml` under `custom-instructions` |
 
 For non-Claude LLMs, use `SKILL.md` alone (not `references/check-explanations.md`) — it contains every trigger and threshold in a compact form. For large `.sqlplan` XML, ask the LLM to extract key fields first.
-
-### Optional: third-party `skills` CLI
-
-If you prefer a one-command installer with auto-detect and update:
-
-```bash
-npx skills add vanterx/mssql-performance-skills   # requires Node.js >= 18
-```
-
-This uses the third-party [`skills` npm package](https://www.npmjs.com/package/skills) — not maintained by Anthropic or this repo. The git clone above is equivalent and dependency-free.
 
 > **Not sure which skill to use?** See [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) for symptom-based routing.
 > **Costs?** See [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md).

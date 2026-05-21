@@ -1,0 +1,6 @@
+{
+  "name": "mssql-performance-skills",
+  "description": "16 SQL Server performance tuning skills for Claude Code — static T-SQL analysis, execution plans, wait stats, deadlock, query store, AG health, ERRORLOG, and SPN review",
+  "version": "1.0.0",
+  "skills": "./skills"
+}
