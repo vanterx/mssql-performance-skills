@@ -35,7 +35,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | Skill | SKILL.md tokens |
 |-------|----------------|
 | `sqlplan-review` | ~13,500 |
-| `tsql-review` | ~8,500 |
+| `tsql-review` | ~14,000 |
 | `sqlwait-review` | ~7,000 |
 | `sqltrace-review` | ~5,200 |
 | `sqlstats-review` | ~4,800 |
@@ -91,18 +91,18 @@ Cost (Sonnet 4.6):
 
 ```
 System context:    4,000  tokens in
-SKILL.md:          8,500  tokens in
+SKILL.md:         14,000  tokens in
 T-SQL source:      2,400  tokens in
 ───────────────────────────────────
-Total input:      14,900  tokens
+Total input:      20,400  tokens
 
 Output report:     1,500  tokens out
 
 Cost (Sonnet 4.6):
-  input:  14,900 × $3/M  =  $0.045
+  input:  20,400 × $3/M  =  $0.061
   output:  1,500 × $15/M =  $0.023
   ──────────────────────────────────
-  Total per call:           $0.068
+  Total per call:           $0.084
 ```
 
 ### `/sqlstats-review` on 10 statements, 30 tables
@@ -180,7 +180,7 @@ For plans above ~100,000 characters, Sonnet 4.6 input cost alone exceeds **$0.30
 | `sqltrace-review` (large trace, ~10,000 events) | ~5,200 tok | 50,000–150,000 | **$0.18–$0.47** |
 | `sqlplan-compare` | ~1,750 tok | 8,000–35,000 | **$0.03–$0.12** |
 | `sqlplan-deadlock` | ~2,400 tok | 7,000–10,000 | **$0.03–$0.05** |
-| `tsql-review` | ~8,500 tok | 13,000–20,000 | **$0.05–$0.09** |
+| `tsql-review` | ~14,000 tok | 18,000–26,000 | **$0.07–$0.12** |
 | `sqlplan-review` (medium plan) | ~13,500 tok | 17,000–70,000 | **$0.07–$0.25** |
 | `sqlplan-review` (large plan) | ~13,500 tok | 70,000–160,000 | **$0.25–$0.55** |
 | `sqlplan-batch` (10 plans) | ~1,500 tok | 85,000–165,000 | **$0.27–$0.53** |

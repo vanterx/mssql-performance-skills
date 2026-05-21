@@ -1,6 +1,6 @@
 ---
 name: tsql-review
-description: Analyze raw T-SQL source code for anti-patterns, security risks, and static performance smells. Applies 50 checks (T1–T50) across structural, correctness, security, deprecated syntax, and performance categories. Use this skill whenever a user pastes a stored procedure, function, view, trigger, or ad-hoc SQL and asks for a review; asks if code is safe, correct, or optimized; mentions implicit conversions, missing indexes, SET options, or cursor usage; or wants a code review before deploying to production. No execution plan required — trigger for any T-SQL review request.
+description: Analyze raw T-SQL source code for anti-patterns, security risks, and static performance smells. Applies 78 checks (T1–T78) across structural, correctness, security, deprecated syntax, and performance categories. Use this skill whenever a user pastes a stored procedure, function, view, trigger, or ad-hoc SQL and asks for a review; asks if code is safe, correct, or optimized; mentions implicit conversions, missing indexes, SET options, or cursor usage; or wants a code review before deploying to production. No execution plan required — trigger for any T-SQL review request.
 triggers:
   - /tsql-review
   - /sql-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze T-SQL source code — stored procedures, ad-hoc queries, scripts, migration files — for anti-patterns that are detectable without running the query or capturing an execution plan. Covers 50 checks (T1–T50) across five categories: structural anti-patterns, correctness and logic, security and dynamic SQL, deprecated and non-idiomatic syntax, and performance smells.
+Analyze T-SQL source code — stored procedures, ad-hoc queries, scripts, migration files — for anti-patterns that are detectable without running the query or capturing an execution plan. Covers 78 checks (T1–T78) across five categories: structural anti-patterns, correctness and logic, security and dynamic SQL, deprecated and non-idiomatic syntax, and performance smells.
 
 This is the "shift-left" complement to `sqlplan-review`. Run it during code review to catch problems before they reach production. Run `sqlplan-review` on the resulting execution plan to catch what only surfaces at runtime.
 
@@ -38,10 +38,12 @@ Walk T1–T50 in category order. Report every triggered finding — do not stop 
 | Nested subquery depth | ≥ 3 levels of nested scalar subqueries |
 | Excessive parameters | > 50 named parameters in a stored procedure |
 | Wide index suggestion | > 4 key columns OR > 5 INCLUDE columns |
+| NOLOCK overuse threshold | ≥ 3 tables WITH (NOLOCK) in the same query |
+| Small variable-length type | ≤ 2 characters (VARCHAR(1), VARCHAR(2), NVARCHAR(1), NVARCHAR(2)) |
 
 ---
 
-## Structural Anti-Patterns (T1–T15)
+## Structural Anti-Patterns (T1–T15, T51–T55)
 
 Run these checks for patterns that prevent index usage, expand data volumes unnecessarily, or indicate set-based logic replaced by row-by-row processing.
 ### T1 — SELECT * (No Explicit Column List)
@@ -56,8 +58,8 @@ Run these checks for patterns that prevent index usage, expand data volumes unne
 - **Trigger:** A `SELECT` or `SELECT INTO` with no `WHERE` clause on a named user table (not a system view or TVF with no filter parameter)
 - **Severity:** Info
 - **Fix:** Confirm the full-table read is intentional. Add `WHERE 1=1 -- intentional full scan` as documentation if it is. Otherwise add a predicate.
-### T4 — Non-Sargable Predicate — Function Wrapping Indexed Column
-- **Trigger:** A function call in a `WHERE`, `HAVING`, or `JOIN ON` clause wraps a column reference: `YEAR(col)`, `MONTH(col)`, `DAY(col)`, `CAST(col AS ...)`, `CONVERT(type, col)`, `UPPER(col)`, `LOWER(col)`, `LEFT(col, n)`, `SUBSTRING(col, 1, n)`, `ISNULL(col, default)`, `COALESCE(col, ...)`
+### T4 — Non-Sargable Predicate — Function Wrapping or Arithmetic on Indexed Column
+- **Trigger:** A function call or arithmetic expression in a `WHERE`, `HAVING`, or `JOIN ON` clause that wraps or involves a column reference: `YEAR(col)`, `MONTH(col)`, `DAY(col)`, `CAST(col AS ...)`, `CONVERT(type, col)`, `UPPER(col)`, `LOWER(col)`, `LEFT(col, n)`, `SUBSTRING(col, 1, n)`, `ISNULL(col, default)`, `COALESCE(col, ...)`, or arithmetic on the column side: `col + n`, `col - n`, `col * n`, `col / n`. For DATEDIFF specifically see T60; for LEN/DATALENGTH see T74.
 - **Severity:** Warning
 - **Fix:** Rewrite the predicate so the column is bare and the transformation is applied to the literal or parameter. Example: `WHERE YEAR(OrderDate) = 2024` → `WHERE OrderDate >= '2024-01-01' AND OrderDate < '2025-01-01'`. This allows an index seek instead of a full scan.
 ### T5 — Non-Sargable Predicate — Implicit Type Coercion
@@ -107,7 +109,7 @@ Run these checks for patterns that prevent index usage, expand data volumes unne
 
 ---
 
-## Correctness and Logic (T16–T28)
+## Correctness and Logic (T16–T28, T56–T64)
 
 Checks for logic errors that produce wrong results or unreliable behavior, often silently.
 ### T16 — NULL Comparison Using = NULL
@@ -165,7 +167,7 @@ Checks for logic errors that produce wrong results or unreliable behavior, often
 
 ---
 
-## Security and Dynamic SQL (T29–T38)
+## Security and Dynamic SQL (T29–T38, T65–T67)
 
 Checks for SQL injection risk, privilege escalation, and dangerous server-level access.
 ### T29 — Dynamic SQL Built by String Concatenation
@@ -211,7 +213,7 @@ Checks for SQL injection risk, privilege escalation, and dangerous server-level 
 
 ---
 
-## Deprecated and Non-Idiomatic Syntax (T39–T45)
+## Deprecated and Non-Idiomatic Syntax (T39–T45, T68–T73)
 
 Checks for syntax that is removed, deprecated, or diverges from SQL Server best practice.
 ### T39 — Deprecated Outer Join Syntax
@@ -245,7 +247,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 
 ---
 
-## Performance Smells (T46–T50)
+## Performance Smells (T46–T50, T74–T78)
 
 Checks for patterns that are likely to degrade performance at scale, even when syntactically correct.
 ### T46 — Table Variable Used for Potentially Large Data
@@ -268,6 +270,131 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 - **Trigger:** A comparison or JOIN between columns with different collations (e.g., `Latin1_General_CI_AS` vs `SQL_Latin1_General_CP1_CI_AS`) or between string columns of different types (`VARCHAR` vs `NVARCHAR`) without explicit COLLATE or CAST
 - **Severity:** Warning
 - **Fix:** Collation mismatches prevent index usage and can cause errors at runtime if collation compatibility is not met. Resolve by: aligning column collations (ALTER TABLE ALTER COLUMN), adding an explicit `COLLATE` clause in the query, or casting both sides to the same type. Confirm no index seeks are blocked using `sqlplan-review` (check T5 / N12).
+
+### T51 — NOT IN With Nullable Subquery
+- **Trigger:** `NOT IN (SELECT col FROM ...)` where `col` is nullable — no `WHERE col IS NOT NULL` filter inside the subquery, or the column is not defined NOT NULL
+- **Severity:** Critical
+- **Fix:** Replace with `NOT EXISTS (SELECT 1 FROM T WHERE T.col = outer.col)`, which handles NULLs correctly. If keeping `NOT IN`, add `WHERE col IS NOT NULL` inside the subquery. Three-valued logic causes the entire `NOT IN` to return zero rows whenever the subquery returns any NULL.
+### T52 — Division by Zero Without NULLIF Guard
+- **Trigger:** A division expression (`/`) where the denominator is a column reference, variable, or expression that could evaluate to zero, with no `NULLIF(denominator, 0)` or `CASE WHEN denominator = 0 THEN NULL END` guard
+- **Severity:** Warning
+- **Fix:** Wrap the denominator: `numerator / NULLIF(denominator, 0)`. Returns NULL instead of raising error 8134 when the denominator is zero.
+### T53 — TOP Without ORDER BY
+- **Trigger:** `SELECT TOP (n)` or `SELECT TOP n` in a top-level or API-facing SELECT statement with no `ORDER BY` clause
+- **Severity:** Warning
+- **Fix:** Add an `ORDER BY` clause that determines which rows qualify as "top". If random sampling is intended, use `ORDER BY NEWID()` and add a comment documenting the intent.
+### T54 — COUNT(\*) > 0 Instead of EXISTS
+- **Trigger:** `IF (SELECT COUNT(*) FROM T WHERE ...) > 0`, `WHERE (SELECT COUNT(*) FROM T WHERE ...) > 0`, or a subquery `COUNT(*) > 0` check used solely to test for the existence of rows (not to use the count value)
+- **Severity:** Info
+- **Fix:** Replace with `IF EXISTS (SELECT 1 FROM T WHERE ...)` or `WHERE EXISTS (...)`. `EXISTS` short-circuits at the first matching row; `COUNT(*)` must scan all matching rows.
+### T55 — VARCHAR/NVARCHAR Implicit Promotion in String Concatenation
+- **Trigger:** A `+` string concatenation expression that mixes `VARCHAR` literals or variables with `NVARCHAR` literals (`N'...'`) or `NVARCHAR` variables, causing implicit promotion of the whole expression to `NVARCHAR`
+- **Severity:** Warning
+- **Fix:** Use `NVARCHAR` consistently for all variables and literals when building dynamic SQL. Mixing `VARCHAR` and `NVARCHAR` in a concatenation doubles memory consumption for the `VARCHAR` operand and may silently corrupt characters above code-point 127.
+
+---
+
+### T56 — @@IDENTITY Instead of SCOPE\_IDENTITY()
+- **Trigger:** `@@IDENTITY` used to retrieve the last-inserted identity value after an `INSERT` statement
+- **Severity:** Warning
+- **Fix:** Replace `@@IDENTITY` with `SCOPE_IDENTITY()`. `@@IDENTITY` returns the last identity inserted in the session across all scopes including triggers; `SCOPE_IDENTITY()` returns the value from the current scope only. For multiple-row inserts, use `OUTPUT INSERTED.id INTO @ids`.
+### T57 — @@ROWCOUNT Read After Statement That Resets It
+- **Trigger:** A `@@ROWCOUNT` check that is not the statement immediately following the DML whose count is needed — any `SET`, `DECLARE`, `IF`, `SELECT @var = ...`, `PRINT`, or other non-DML statement appears between the DML and the `@@ROWCOUNT` read
+- **Severity:** Warning
+- **Fix:** Capture `@@ROWCOUNT` immediately after the DML: `SET @rowsAffected = @@ROWCOUNT;`. Every T-SQL statement — including `IF` evaluations and `SET @var = val` — resets `@@ROWCOUNT` to its own row count.
+### T58 — Recursive CTE Without MAXRECURSION
+- **Trigger:** A recursive CTE (a `WITH` clause where the CTE references itself in its recursive member) without `OPTION (MAXRECURSION n)` on the outermost SELECT
+- **Severity:** Warning
+- **Fix:** Add `OPTION (MAXRECURSION n)` where `n` reflects the maximum expected hierarchy depth. The default is 100; hierarchies deeper than 100 levels fail with error 530. Use `OPTION (MAXRECURSION 0)` only with an explicit depth-counter guard in the recursive member to prevent infinite loops.
+### T59 — MERGE Without HOLDLOCK (Race Condition)
+- **Trigger:** A `MERGE` statement where the target table does not have a `WITH (HOLDLOCK)` or `WITH (SERIALIZABLE)` hint and the statement is not inside a serializable transaction
+- **Severity:** Critical
+- **Fix:** Add `WITH (HOLDLOCK)` to the MERGE target: `MERGE dbo.Target WITH (HOLDLOCK) AS t USING @source AS s ON ...`. Without it, concurrent sessions can both pass the NOT MATCHED check and both attempt the INSERT, causing a primary key violation (error 2627) or duplicate row.
+### T60 — DATEDIFF as Non-Sargable Date Range Filter
+- **Trigger:** `DATEDIFF(part, column, expression)` or `DATEDIFF(part, expression, column)` in a `WHERE`, `HAVING`, or `JOIN ON` clause where one argument is a table column reference
+- **Severity:** Warning
+- **Fix:** Rewrite as a range predicate on the bare column: `WHERE col >= DATEADD(part, -n, reference_date)`. Example: `WHERE DATEDIFF(DAY, OrderDate, GETDATE()) <= 30` → `WHERE OrderDate >= DATEADD(DAY, -30, CAST(GETDATE() AS DATE))`.
+### T61 — BETWEEN on DATETIME With Date-Only Boundaries
+- **Trigger:** A `BETWEEN` predicate on a `DATETIME` or `DATETIME2` column where both boundaries are date-only literals (`'YYYY-MM-DD'`), parameters typed as `DATE`, or expressions truncated to midnight: e.g., `col BETWEEN '2024-01-01' AND '2024-01-31'`
+- **Severity:** Warning
+- **Fix:** Replace with a half-open range: `WHERE col >= '2024-01-01' AND col < '2024-02-01'`. `BETWEEN '2024-01-01' AND '2024-01-31'` excludes all times on January 31st after midnight.
+### T62 — SELECT Variable Assignment — Silent Prior-Value Retention
+- **Trigger:** `SELECT @var = col FROM T WHERE ...` used to fetch a single scalar value, without an explicit `SET @var = NULL` before the SELECT or a `@@ROWCOUNT` check after, in contexts where the caller expects `@var` to be NULL when no rows match
+- **Severity:** Info
+- **Fix:** Use `SET @var = (SELECT col FROM T WHERE ...)` if NULL-on-no-rows is the intended semantics, or initialize `@var = NULL` before the SELECT. Unlike `SET`, `SELECT @var = col` leaves `@var` at its previous value when the query returns no rows.
+### T63 — ISNUMERIC() for Numeric Type Validation
+- **Trigger:** `ISNUMERIC(expression)` in a WHERE clause, IF condition, or CASE expression to validate that a string can be safely cast to a numeric type
+- **Severity:** Warning
+- **Fix:** Replace with `TRY_CAST(expression AS target_type) IS NOT NULL` or `TRY_CONVERT(target_type, expression) IS NOT NULL`. `ISNUMERIC()` returns 1 for `'+'`, `'-'`, `'.'`, `','`, `'$'`, and `'E'` — all of which fail `CAST(... AS INT)` or `CAST(... AS DECIMAL)`.
+### T64 — Output Parameter Not Initialized in All Code Paths
+- **Trigger:** A stored procedure or function with an `OUTPUT` parameter that is not assigned a value in one or more code paths through the procedure body (assignment inside an IF branch that may not execute, or only inside the TRY block)
+- **Severity:** Warning
+- **Fix:** Initialize all `OUTPUT` parameters at the top of the procedure body before any branching: `SET @outParam = NULL;`. Note: assigning a default in the procedure signature (`@outParam INT = 0 OUTPUT`) does not count — the assignment must be inside the body.
+
+---
+
+### T65 — Dangerous OLE Automation and Registry Extended Procedures
+- **Trigger:** Any reference to: `sp_OACreate`, `sp_OAMethod`, `sp_OADestroy`, `sp_OAGetProperty`, `sp_OASetProperty`, `sp_OAGetErrorInfo`, `xp_regread`, `xp_regwrite`, `xp_regdeletevalue`, `xp_regdeletekey`, `xp_servicecontrol`
+- **Severity:** Critical
+- **Fix:** Remove entirely. Replace with SQL Server Agent jobs, SSIS packages, PowerShell via Agent, or application-layer code. These allow arbitrary COM object execution, registry read/write, and service control under the SQL Server service account — same risk category as `xp_cmdshell` (T36). Verify disabled server-wide: `EXEC sp_configure 'Ole Automation Procedures'` should return 0.
+### T66 — QUOTENAME Misapplied to Values Instead of Identifiers
+- **Trigger:** `QUOTENAME(@var)` or `QUOTENAME(col)` where the argument represents a data value (a filter condition, status code, search term) rather than a SQL Server object name (table, column, schema name)
+- **Severity:** Critical
+- **Fix:** `QUOTENAME` adds square brackets and is safe only for identifier injection. It does not sanitize values — a value like `]; DROP TABLE T; --` remains injectable after `QUOTENAME`. Pass all values as bound parameters via `sp_executesql @params`. Use `QUOTENAME` only for validated object-name tokens confirmed against `sys.tables`/`sys.columns`.
+### T67 — Dynamic SQL Built and Executed Inside WHILE Loop
+- **Trigger:** A `WHILE` loop or cursor body that contains both dynamic SQL construction (`SET @sql = ...`) and execution (`EXEC(@sql)` or `EXEC sp_executesql @sql`) within the same loop iteration
+- **Severity:** Warning
+- **Fix:** Move dynamic SQL construction and execution outside the loop. Reformulate as a single set-based statement processing all iterations at once using JOINs, a TVP, or a staging table. If per-object DDL is genuinely required, ensure the dynamic string uses only validated whitelist identifiers.
+
+---
+
+### T68 — Deprecated Large Object Types (text, ntext, image)
+- **Trigger:** Use of `text`, `ntext`, or `image` data types in column references, CAST/CONVERT expressions, function arguments, or variable declarations; or use of deprecated LOB statements: `READTEXT`, `WRITETEXT`, `UPDATETEXT`, `TEXTPTR`
+- **Severity:** Warning
+- **Fix:** Replace with `VARCHAR(MAX)`, `NVARCHAR(MAX)`, or `VARBINARY(MAX)`. These support all standard string functions, indexed views, and modern SQL Server features. Remove `TEXTPTR`, `READTEXT`, `WRITETEXT`, `UPDATETEXT` — use standard DML on `(MAX)` columns instead.
+### T69 — Old System Catalog Table References
+- **Trigger:** Direct references to deprecated SQL Server 2000 system tables: `sysobjects`, `syscolumns`, `sysindexes`, `sysdatabases`, `sysusers`, `syspermissions`, `sysforeignkeys`, `syslogins`, `systypes`, `syscomments`, `sysdepends`
+- **Severity:** Info
+- **Fix:** Replace with equivalent `sys.*` catalog views: `sysobjects` → `sys.objects` or `sys.tables`; `syscolumns` → `sys.columns`; `sysindexes` → `sys.indexes`; `sysdatabases` → `sys.databases`; `syslogins` → `sys.server_principals`. These are supported in Azure SQL Database and all current SQL Server versions.
+### T70 — STUFF + FOR XML PATH String Aggregation (Pre-2017 Pattern)
+- **Trigger:** The pattern `STUFF((SELECT separator + col FROM T ... FOR XML PATH('')), 1, n, '')` used to aggregate multiple rows into a delimited string
+- **Severity:** Info
+- **Fix (SQL Server 2017+):** Replace with `STRING_AGG(col, separator) WITHIN GROUP (ORDER BY sort_col)`. `STRING_AGG` is cleaner, ignores NULLs by default, and avoids XML entity corruption (`<`, `>`, `&` are escaped by `FOR XML` unless the `TYPE` directive is used). For pre-2017 servers, use `FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')` to decode entities.
+### T71 — Locale-Dependent Date String Literal Format
+- **Trigger:** Date or datetime string literals in comparisons, assignments, CAST/CONVERT arguments, or function parameters that use locale-dependent formats: `'MM/DD/YYYY'` (e.g., `'01/15/2024'`), `'DD-MM-YYYY'`, `'DD.MM.YYYY'`, two-digit year (`'01/15/24'`), or named-month formats (`'January 15, 2024'`)
+- **Severity:** Warning
+- **Fix:** Use ISO 8601 unambiguous format: `'2024-01-15'` for DATE, `'2024-01-15T14:30:00'` for DATETIME2, or the compact `'20240115'` for DATETIME. These formats are independent of `SET DATEFORMAT` and server language. For procedure parameters, use strongly-typed DATE, DATETIME2, or DATETIME instead of VARCHAR.
+### T72 — Missing SET NOCOUNT ON in Stored Procedure or Trigger
+- **Trigger:** A stored procedure or trigger body that does not include `SET NOCOUNT ON` before the first DML statement
+- **Severity:** Info
+- **Fix:** Add `SET NOCOUNT ON;` as the first statement in the procedure or trigger body. Without it, SQL Server sends a DONE_IN_PROC network message after every DML statement. Some ADO/ODBC clients misinterpret these as result sets; for high-frequency procedures executing DML in loops, the accumulated message traffic is measurable.
+### T73 — Variable-Length Type of Size 1 or 2
+- **Trigger:** Column, variable, or parameter declarations using `VARCHAR(1)`, `VARCHAR(2)`, `NVARCHAR(1)`, `NVARCHAR(2)`, `VARBINARY(1)`, `VARBINARY(2)`, or `VARCHAR`/`NVARCHAR`/`VARBINARY` with no length specified (defaults to 1 per the thresholds table)
+- **Severity:** Info
+- **Fix:** Use fixed-length equivalents: `CHAR(1)`, `CHAR(2)`, `NCHAR(1)`, `NCHAR(2)`, `BINARY(1)`, `BINARY(2)`. Variable-length types carry a 2-byte length prefix; for size 1–2 the overhead equals or exceeds the data. Bare `VARCHAR` or `NVARCHAR` with no length silently defaults to 1 — almost always a mistake.
+
+---
+
+### T74 — LEN() or DATALENGTH() as Non-Sargable Filter Predicate
+- **Trigger:** `LEN(col)` or `DATALENGTH(col)` in a `WHERE`, `HAVING`, or `JOIN ON` clause where `col` is a table column reference: `WHERE LEN(Email) > 0`, `WHERE DATALENGTH(Description) = 0`
+- **Severity:** Warning
+- **Fix:** Replace with bare column comparisons: `WHERE LEN(col) > 0` → `WHERE col <> ''`; `WHERE DATALENGTH(col) = 0` → `WHERE col = ''`. For nullable columns: `WHERE col IS NOT NULL AND col <> ''`. Removing the function wrapper restores seek ability.
+### T75 — Unbatched Large DML Without TOP Batch Control
+- **Trigger:** A `DELETE FROM T WHERE ...` or `UPDATE T SET ... WHERE ...` on a large table (no `TOP` clause and no surrounding WHILE loop performing incremental batches) that could affect a large number of rows in a single transaction
+- **Severity:** Warning
+- **Fix:** Batch the operation: `WHILE 1=1 BEGIN DELETE TOP (5000) FROM T WHERE ...; IF @@ROWCOUNT < 5000 BREAK; END`. Each batch commits independently, keeping transactions short, log space bounded, and locks released between batches.
+### T76 — WITH (NOLOCK) Overuse Across All Tables
+- **Trigger:** `WITH (NOLOCK)` appearing on three or more table references in the same query (per the thresholds table), or present on every table reference in a stored procedure body
+- **Severity:** Warning
+- **Fix:** Use NOLOCK only where dirty reads are explicitly acceptable (approximate counts, monitoring queries). For general performance, address the root cause: shorter transactions (T20), better indexes, or enable `READ_COMMITTED_SNAPSHOT` isolation at the database level. Ubiquitous NOLOCK trades correctness for perceived performance and can return logically inconsistent result sets.
+### T77 — O(n²) String Concatenation in Loop
+- **Trigger:** `SET @result = @result + expression` or `SET @result += expression` (string append-in-place) inside a `WHILE` loop or cursor body, accumulating string content across iterations
+- **Severity:** Warning
+- **Fix:** Collect values into a staging table or table variable, then produce the result string with a single `STRING_AGG(col, separator)` call (SQL Server 2017+) or the `STUFF + FOR XML PATH` pattern (T70). Each `+` concatenation in a loop allocates a new string of the full accumulated length — O(n²) total work for n iterations.
+### T78 — Deterministic Function Call on Value Side of WHERE Predicate
+- **Trigger:** A function call in a `WHERE`, `HAVING`, or `JOIN ON` clause where the argument is a variable or literal (not a column reference) and the function's result is constant for the entire query execution: `WHERE col > ABS(@param)`, `WHERE EventDate > DATEADD(DAY, -@n, GETDATE())`, `WHERE Amount < ROUND(@threshold, 2)`
+- **Severity:** Info
+- **Fix:** Pre-compute the constant expression into a variable before the query: `SET @threshold = ABS(@param); ... WHERE col > @threshold`. This eliminates per-row evaluation of a value that is identical for every row and makes the query plan more stable.
 
 ---
 
