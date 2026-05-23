@@ -10,8 +10,8 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/App
 {
   "mcpServers": {
     "mssql-performance": {
-      "command": "node",
-      "args": ["C:/GitHub/mssql-performance-skills/mcp-server/dist/index.js"]
+      "type": "sse",
+      "url": "https://mssql-mcp.tsx113.workers.dev"
     }
   }
 }
@@ -101,26 +101,16 @@ cp -r mssql-performance-skills/skills/* .claude/skills/     # project-scoped
 
 ### MCP Server (Claude Desktop / any MCP client)
 
-Use the bundled MCP server to expose all 16 skills as tools, resources, and prompts — no Claude Code CLI required.
+The skills are hosted as a remote MCP server on Cloudflare Workers — no Node.js, no clone, no build required.
 
-**Step 1 — Build once** (requires Node.js ≥ 18)
-
-```bash
-git clone https://github.com/vanterx/mssql-performance-skills.git
-cd mssql-performance-skills/mcp-server
-npm install && npm run build
-```
-
-**Step 2 — Add to Claude Desktop config**
-
-Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+**Add to Claude Desktop config** (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "mssql-performance": {
-      "command": "node",
-      "args": ["C:/path/to/mssql-performance-skills/mcp-server/dist/index.js"]
+      "type": "sse",
+      "url": "https://mssql-mcp.tsx113.workers.dev"
     }
   }
 }
@@ -133,6 +123,8 @@ Restart Claude Desktop. The following are now available in any conversation:
 | **3 Tools** | `list_skills`, `get_skill`, `route_artifact` |
 | **18 Resources** | `mssql://skills`, `mssql://skills/{name}` (×16), `mssql://guide` |
 | **16 Prompts** | One per skill — pass your artifact as `input` |
+
+> The server auto-deploys via GitHub Actions on every push. Source: [`mcp-server/`](mcp-server/)
 
 ### Other LLMs and IDEs
 
