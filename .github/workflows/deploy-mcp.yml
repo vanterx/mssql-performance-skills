@@ -9,6 +9,9 @@ on:
       - "PERFORMANCE_TUNING_GUIDE.md"
       - ".github/workflows/deploy-mcp.yml"
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
