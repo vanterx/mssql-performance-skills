@@ -1,0 +1,37 @@
+name: Deploy MCP Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mcp-server/**"
+      - "skills/**"
+      - "PERFORMANCE_TUNING_GUIDE.md"
+      - ".github/workflows/deploy-mcp.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: mcp-server
+
+      - name: Bundle skills
+        run: npm run bundle
+        working-directory: mcp-server
+
+      - name: Deploy to Cloudflare Workers
+        run: npx wrangler deploy
+        working-directory: mcp-server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,0 +1,4 @@
+name = "mssql-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-05-23"
+compatibility_flags = ["nodejs_compat"]

@@ -5,3 +5,7 @@ backlog/
 .claude/settings.local.json
 
 changes.log
+
+# MCP server build artifacts
+mcp-server/node_modules/
+mcp-server/dist/
