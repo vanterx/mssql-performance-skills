@@ -10,7 +10,6 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/App
 {
   "mcpServers": {
     "mssql-performance": {
-      "type": "sse",
       "url": "https://mssql-mcp.tsx113.workers.dev"
     }
   }
@@ -107,7 +106,6 @@ The skills are hosted as a remote MCP server on Cloudflare Workers — no Node.j
 {
   "mcpServers": {
     "mssql-performance": {
-      "type": "sse",
       "url": "https://mssql-mcp.tsx113.workers.dev"
     }
   }
