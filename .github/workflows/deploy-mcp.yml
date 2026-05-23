@@ -7,6 +7,7 @@ on:
       - "mcp-server/**"
       - "skills/**"
       - "PERFORMANCE_TUNING_GUIDE.md"
+      - ".github/workflows/deploy-mcp.yml"
 
 jobs:
   deploy:
