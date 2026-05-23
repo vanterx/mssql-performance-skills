@@ -2,18 +2,12 @@
 
 > https://github.com/vanterx/mssql-performance-skills
 
-### Claude Desktop (MCP)
+### Claude.ai (Remote MCP)
 
-Add to `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), then restart Claude Desktop:
+Go to **claude.ai → Settings → Connectors → Add custom connector**, enter the URL and click Add:
 
-```json
-{
-  "mcpServers": {
-    "mssql-performance": {
-      "url": "https://mssql-mcp.tsx113.workers.dev"
-    }
-  }
-}
+```
+https://mssql-mcp.tsx113.workers.dev
 ```
 
 A collection of Claude Code skills covering the full SQL Server performance tuning workflow — from static T-SQL source review to execution plan analysis, I/O statistics, workload traces, wait statistics, Query Store analysis, procedure runtime stats, index recommendations, deadlock diagnosis, batch workload assessment, WSFC cluster log analysis, Always On AG health, ERRORLOG operational review, and SPN/Kerberos delegation diagnosis — plus an agentic orchestrator that routes mixed artifacts to the right specialised skill. **407 checks across 16 skills.**
@@ -96,23 +90,18 @@ cp -r mssql-performance-skills/skills/* ~/.claude/skills/   # global
 cp -r mssql-performance-skills/skills/* .claude/skills/     # project-scoped
 ```
 
-### MCP Server (Claude Desktop / any MCP client)
+### MCP Server (Remote — Cloudflare Workers)
 
 The skills are hosted as a remote MCP server on Cloudflare Workers — no Node.js, no clone, no build required.
 
-**Add to Claude Desktop config** (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
-
-```json
-{
-  "mcpServers": {
-    "mssql-performance": {
-      "url": "https://mssql-mcp.tsx113.workers.dev"
-    }
-  }
-}
+**claude.ai web** — Settings → Connectors → Add custom connector:
+```
+https://mssql-mcp.tsx113.workers.dev
 ```
 
-Restart Claude Desktop. The following are now available in any conversation:
+**Claude Desktop** does not support remote MCP servers via URL — use claude.ai web or the local Claude Code install method above.
+
+Once connected, the following are available in any conversation:
 
 | MCP Primitive | What's exposed |
 |---------------|----------------|
