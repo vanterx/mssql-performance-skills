@@ -1,5 +1,49 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/verify-docs.sh)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push origin*)",
+      "Bash(git checkout*)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(git merge*)",
+      "Bash(git pull*)",
+      "Bash(gh *)",
+      "Bash(node .claude/hooks/pre-tool-security.js)",
+      "Bash(node .claude/hooks/stop-secret-scan.js)",
+      "Bash(npm ci)",
+      "Bash(npm run *)",
+      "Bash(npx wrangler*)",
+      "Bash(npx ecc-agentshield*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(* > /dev/*)",
+      "Bash(ssh *)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)"
+    ]
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/pre-tool-security.js"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -7,6 +51,16 @@
           {
             "type": "command",
             "command": "bash scripts/verify-docs.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stop-secret-scan.js"
           }
         ]
       }
