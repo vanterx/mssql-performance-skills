@@ -1,14 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
 import type { SkillMeta } from "./skill-loader.js";
 
 export function registerResources(
   server: McpServer,
   skills: SkillMeta[],
-  repoRoot: string
+  guideContent: string
 ): void {
-  // mssql://skills — metadata index for all skills
   server.resource(
     "skills-index",
     "mssql://skills",
@@ -34,7 +31,6 @@ export function registerResources(
     })
   );
 
-  // mssql://skills/{name} — full SKILL.md for each skill
   for (const skill of skills) {
     server.resource(
       `skill-${skill.name}`,
@@ -55,10 +51,7 @@ export function registerResources(
     );
   }
 
-  // mssql://guide — PERFORMANCE_TUNING_GUIDE.md
-  const guidePath = join(repoRoot, "PERFORMANCE_TUNING_GUIDE.md");
-  if (existsSync(guidePath)) {
-    const guideContent = readFileSync(guidePath, "utf-8");
+  if (guideContent) {
     server.resource(
       "performance-guide",
       "mssql://guide",
@@ -67,13 +60,7 @@ export function registerResources(
         description: "Symptom-to-skill routing guide — which skill to use for each scenario",
       },
       async () => ({
-        contents: [
-          {
-            uri: "mssql://guide",
-            mimeType: "text/markdown",
-            text: guideContent,
-          },
-        ],
+        contents: [{ uri: "mssql://guide", mimeType: "text/markdown", text: guideContent }],
       })
     );
   }

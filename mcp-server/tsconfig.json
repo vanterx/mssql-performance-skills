@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noEmit": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
