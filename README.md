@@ -90,6 +90,16 @@ cp -r mssql-performance-skills/skills/* ~/.claude/skills/   # global
 cp -r mssql-performance-skills/skills/* .claude/skills/     # project-scoped
 ```
 
+### Contributing / Local Development
+
+After cloning, install the git hooks to keep `skills-data.ts` in sync automatically:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+This installs a pre-commit hook that regenerates `mcp-server/src/skills-data.ts` whenever a `skills/*/SKILL.md` file is staged, so you never have to run `npm run bundle` manually before committing.
+
 ### MCP Server (Remote — Cloudflare Workers)
 
 The skills are hosted as a remote MCP server on Cloudflare Workers — no Node.js, no clone, no build required.

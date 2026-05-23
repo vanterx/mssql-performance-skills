@@ -140,6 +140,16 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 8. Add example input + analysis files to `example/<skill-name>/`
 9. Add `tsql-review` as companion in `sqlplan-review/SKILL.md` (or the relevant existing companion)
 
+## Git Hooks
+
+Run once after cloning to install the pre-commit hook:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+The hook watches for staged `skills/*/SKILL.md` changes and automatically runs `npm run bundle` + re-stages `mcp-server/src/skills-data.ts` before the commit lands. Without it, you must run `cd mcp-server && npm run bundle` manually before every commit that touches a skill.
+
 ## Development Scratch Log
 
 `changes.log` is a local, uncommitted development scratch log. It is `.gitignore`d and tracks work-in-progress notes during active development sessions. It is not part of the canonical project history — use `git log` for that.
