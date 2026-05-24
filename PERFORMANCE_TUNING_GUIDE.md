@@ -190,7 +190,7 @@ Or paste the raw `<deadlock>` XML directly.
 
 **Use: `/sqlwait-review`**
 
-Run the wait statistics capture query and paste the results. The skill applies 36 checks (V1–V36) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo).
+Run the wait statistics capture query and paste the results. The skill applies 40 checks (V1–V40) based on the Paul Randal Waits and Queues methodology and the Brent Ozar First Responder Kit. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V40 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo).
 
 **Step 1 — Capture wait statistics (choose one)**
 

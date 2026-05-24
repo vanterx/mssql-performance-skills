@@ -6,7 +6,8 @@
     "bundle": "tsx scripts/bundle-skills.ts",
     "dev": "npm run bundle && wrangler dev",
     "deploy": "npm run bundle && wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit"
   },
   "keywords": ["mcp", "sql-server", "mssql", "performance", "t-sql", "cloudflare-workers"],
   "license": "MIT",

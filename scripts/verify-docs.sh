@@ -642,6 +642,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Check 33: Per-prefix check range upper bounds match reference table in PERFORMANCE_TUNING_GUIDE.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[33 ] Per-prefix check range upper bounds match guide reference table"
+check33_ok=1
+
+for skill_file in skills/*/SKILL.md; do
+    name=$(basename "$(dirname "$skill_file")")
+
+    # Extract unique check prefixes used in this skill (e.g., V, T, S, N)
+    prefixes=$(grep -oE '^### [A-Z][0-9]+' "$skill_file" | grep -oE '[A-Z]' | sort -u)
+    [ -z "$prefixes" ] && continue  # dispatcher skill — skip
+
+    while IFS= read -r prefix; do
+        # Actual last check number in SKILL.md
+        actual_max=$(grep -oE "^### ${prefix}[0-9]+" "$skill_file" \
+                     | grep -oE '[0-9]+$' | sort -n | tail -1)
+        [ -z "$actual_max" ] && continue
+
+        # Max upper bound in guide reference table for this prefix.
+        # Looks at rows like: | `V1–V18` | or | `V37–V40` |
+        guide_max=$(grep "^\| \`${prefix}" PERFORMANCE_TUNING_GUIDE.md \
+                    | grep -oE "${prefix}[0-9]+" \
+                    | grep -oE '[0-9]+$' \
+                    | sort -n | tail -1)
+
+        if [ -z "$guide_max" ]; then
+            warn "$name: prefix $prefix has checks up to ${prefix}${actual_max} — no rows in guide reference table"
+            check33_ok=0
+        elif [ "$guide_max" != "$actual_max" ]; then
+            fail "$name: prefix $prefix — last check is ${prefix}${actual_max} but guide reference table max is ${prefix}${guide_max}"
+            check33_ok=0
+        fi
+    done <<< "$prefixes"
+done
+[ "$check33_ok" -eq 1 ] && pass "All per-prefix check upper bounds match PERFORMANCE_TUNING_GUIDE.md reference table"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

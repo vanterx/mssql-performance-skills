@@ -115,7 +115,7 @@ Once connected, the following are available in any conversation:
 
 | MCP Primitive | What's exposed |
 |---------------|----------------|
-| **3 Tools** | `list_skills`, `get_skill`, `route_artifact` |
+| **3 Tools** | `list_skills`, `get_skill`, `route_artifact` (13 types: `tsql`, `sqlplan`, `deadlock`, `waits`, `trace`, `stats`, `querystore`, `procstats`, `hadr`, `clusterlog`, `errorlog`, `spn`, `mixed`) |
 | **18 Resources** | `mssql://skills`, `mssql://skills/{name}` (×16), `mssql://guide` |
 | **16 Prompts** | One per skill — pass your artifact as `input` |
 
