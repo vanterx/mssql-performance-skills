@@ -787,6 +787,7 @@ npm run bundle       # re-reads all skills/*/SKILL.md, writes src/skills-data.ts
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `@modelcontextprotocol/sdk` | `^1.12.0` | MCP server, transport, tool/resource/prompt registration |
+| `zod` | `^4.4.3` | Input validation schemas for tool and prompt arguments |
 
 ### Dev dependencies
 
@@ -797,7 +798,3 @@ npm run bundle       # re-reads all skills/*/SKILL.md, writes src/skills-data.ts
 | `tsx` | `^4.19.0` | Direct TypeScript execution for `bundle-skills.ts` (no compile step) |
 | `@cloudflare/workers-types` | `^4.20250522.0` | TypeScript types for Workers globals (`Request`, `Response`, `fetch`, etc.) |
 | `@types/node` | `^22.0.0` | Node.js types for `bundle-skills.ts` (`fs`, `path`, `process`) |
-
-### Why no Zod in dependencies
-
-Zod is imported in `tools.ts` and `prompts.ts` as `import { z } from "zod"` but is not listed in `package.json`. Zod is re-exported by `@modelcontextprotocol/sdk` — the MCP SDK depends on it internally and exposes it for use in tool/prompt schema definitions. This avoids a duplicate Zod installation at a different version.
