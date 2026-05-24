@@ -109,6 +109,19 @@ The skills are hosted as a remote MCP server on Cloudflare Workers — no Node.j
 https://mssql-mcp.tsx113.workers.dev
 ```
 
+**OpenCode** — add to `~/.config/opencode/opencode.jsonc`:
+```jsonc
+{
+  "mcp": {
+    "mssql": {
+      "type": "remote",
+      "url": "https://mssql-mcp.tsx113.workers.dev"
+    }
+  }
+}
+```
+> `"type": "remote"` is required (OpenCode v1.15.10+). Without it OpenCode treats the entry as a local stdio server and crashes on startup.
+
 **Claude Desktop** does not support remote MCP servers via URL — use claude.ai web or the local Claude Code install method above.
 
 Once connected, the following are available in any conversation:
