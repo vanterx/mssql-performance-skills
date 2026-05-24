@@ -608,6 +608,40 @@ done
 [ "$check31_ok" -eq 1 ] && pass "All SKILL.md Output Format blocks contain the attribution footer"
 
 # ---------------------------------------------------------------------------
+# Check 32: README.md total check count matches PERFORMANCE_TUNING_GUIDE.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[32 ] README.md total check count matches PERFORMANCE_TUNING_GUIDE.md"
+guide_total=$(grep "Total:.*checks across all skills" PERFORMANCE_TUNING_GUIDE.md 2>/dev/null \
+              | grep -o '[0-9]*' | head -1)
+if [ -z "$guide_total" ]; then
+    warn "Cannot find 'Total: N checks across all skills' in PERFORMANCE_TUNING_GUIDE.md — skipping README cross-check"
+else
+    check32_ok=1
+    # Check intro paragraph
+    intro_total=$(grep -o '[0-9]* checks across [0-9]* skills' README.md 2>/dev/null \
+                  | grep -o '^[0-9]*' | head -1)
+    if [ -z "$intro_total" ]; then
+        fail "README.md intro paragraph has no 'N checks across M skills' — add the total"
+        check32_ok=0
+    elif [ "$intro_total" != "$guide_total" ]; then
+        fail "README.md intro says '$intro_total checks' but PERFORMANCE_TUNING_GUIDE.md says '$guide_total' — update README intro"
+        check32_ok=0
+    fi
+    # Check Reference table footer
+    ref_total=$(grep "^\| \*\*Total\*\*" README.md 2>/dev/null \
+                | grep -o '\*\*[0-9]*\*\*' | grep -o '[0-9]*' | head -1)
+    if [ -z "$ref_total" ]; then
+        fail "README.md Check Reference table has no **Total** row — add it"
+        check32_ok=0
+    elif [ "$ref_total" != "$guide_total" ]; then
+        fail "README.md Check Reference table total is '$ref_total' but PERFORMANCE_TUNING_GUIDE.md says '$guide_total' — update the table"
+        check32_ok=0
+    fi
+    [ "$check32_ok" -eq 1 ] && pass "README.md total ($intro_total) matches PERFORMANCE_TUNING_GUIDE.md ($guide_total) in both locations"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
