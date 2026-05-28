@@ -1,6 +1,6 @@
 ---
 name: sqlplan-review
-description: Analyze SQL Server execution plans for performance anti-patterns. Applies all 99 checks (S1–S33 statement-level, N1–N66 node-level). Use when a user pastes a .sqlplan XML, describes operators, or asks why a query is slow.
+description: Analyze SQL Server execution plans for performance anti-patterns, bottleneck identification, and actionable fix recommendations. Applies all 99 checks (S1–S33 statement-level, N1–N66 node-level) covering memory grants, parallelism, cardinality errors, spills, scans, and index usage. Use this skill whenever a user pastes a .sqlplan file or XML, shares an SSMS execution plan, asks why a query is slow or regressed after a deployment or stats update, mentions a specific operator (Key Lookup, Hash Match, Sort, Nested Loops, Scan), asks about memory grants, spills, compile timeout, parameter sniffing, or plan shape. Also trigger when the user uploads a .sqlplan file, describes a plan tree verbally, or asks for execution plan review, plan analysis, or query tuning help.
 triggers:
   - /sqlplan-review
   - /plan-review
@@ -175,7 +175,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 ### S22 — SET ROWCOUNT Active
 - **Trigger:** `RowCountAssignment` attribute > 0 on `StmtSimple`
 - **Severity:** Warning
-- **Fix:** `SET ROWCOUNT` is deprecated, silently changes plan shapes, and can truncate results without warning. Replace with `TOP (N)` — the optimizer understands TOP and factors it into cost estimation.
+- **Fix:** `SET ROWCOUNT` is deprecated, silently changes plan shapes, and can truncate results without warning. The optimizer builds the plan assuming the full result set will be returned; `SET ROWCOUNT` truncates silently at execution. Sort operators are sized for all rows, indexes are chosen for full-scan patterns, and row goals are not applied. Replace with `TOP (N)` — `TOP` is a compile-time directive the optimizer can see, enabling row goals, seek strategies, and right-sized memory grants for N rows rather than all rows.
 ### S23 — Excessive Parameter Count
 - **Trigger:** `<ParameterList>` has > 50 `<ColumnReference>` children
 - **Severity:** Info
@@ -233,6 +233,7 @@ Apply these to every operator node in the plan tree.
 ### N2 — Eager Index Spool
 - **Trigger:** `logicalOp` = Eager Spool AND operator name contains "index"
 - **Severity:** Critical
+- **Why Critical:** The spool combines the cost of a full scan, a TempDB write, and a B-tree build before any seeks can begin. Every execution pays this full construction cost afresh — unlike a permanent index which is built once. On hot-path procedures the spool cost is paid on every call, making it cumulative across all executions.
 - **Fix:** SQL Server is building a temporary index at runtime because a suitable index does not exist. Add a permanent index matching the spool's seek predicate. Check the Missing Indexes section first.
 ### N3 — Function on Scan Predicate
 - **Trigger:** Operator is a scan AND predicate contains any of: UPPER, LOWER, SUBSTRING, LEFT, RIGHT, LTRIM, RTRIM, REPLACE, CAST, CONVERT, ISNULL, COALESCE, CASE, ABS, CEILING, FLOOR, ROUND, DATEADD, DATEDIFF, DATEPART, YEAR, MONTH, DAY, GETDATE, GETUTCDATE, SYSUTCDATETIME, TRY_CONVERT, PARSE, TRY_PARSE
@@ -267,7 +268,7 @@ Apply these to every operator node in the plan tree.
 ### N10 — No Join Predicate (Cartesian Product)
 - **Trigger:** `NoJoinPredicate` flag = 1 or true on the Warnings element of the node
 - **Severity:** Critical
-- **Fix:** Almost always a bug. Verify the JOIN or WHERE clause includes all intended conditions. If a cross join is intentional, add a comment confirming intent.
+- **Fix:** Almost always a bug. Verify the JOIN or WHERE clause includes all intended conditions. If a cross join is intentional, add a comment confirming intent. A cartesian product multiplies row counts: two 1,000-row tables produce 1,000,000 output rows; three tables produce 1 billion. Memory grants, hash build sizes, and elapsed time scale with the product — not the sum — of input sizes. A missing join predicate on large tables is one of the fastest ways to exhaust server memory and saturate TempDB.
 ### N11 — Columns With No Statistics
 - **Trigger:** `<ColumnsWithNoStatistics>` element present in node Warnings
 - **Severity:** Warning
@@ -275,7 +276,7 @@ Apply these to every operator node in the plan tree.
 ### N12 — Backward Scan
 - **Trigger:** `ScanDirection` = BACKWARD
 - **Severity:** Warning
-- **Fix:** Add a DESC index that matches the ORDER BY direction, or rewrite the query to avoid reversing the scan direction. Backward scans have higher CPU cost than forward scans.
+- **Fix:** Add a DESC index that matches the ORDER BY direction, or rewrite the query to avoid reversing the scan direction. Backward scans have higher CPU cost than forward scans. SQL Server's read-ahead prefetching is forward-only; backward scans cannot benefit from it, increasing the random-I/O fraction. Latch contention also increases because page latches are acquired out of allocation order. The overhead is proportional to row count — negligible on small seeks, significant on full-index backward scans.
 ### N13 — MSTVF Bad Row Estimate
 - **Trigger:** `logicalOp` = "Table-valued function" AND `estimateRows` = 1 or 100
 - **Severity:** Warning
@@ -287,7 +288,7 @@ Apply these to every operator node in the plan tree.
 ### N15 — High Nested Loop Count
 - **Trigger:** `physicalOp` = Nested Loops AND `actualExecutions` > 10,000 (Warning); Info if > 1,000 AND inner subtree `estimatedTotalSubtreeCost` ≥ 0.5
 - **Severity:** Warning (> 10,000 executions); Info (> 1,000 with non-trivial inner cost)
-- **Fix:** This is often an N+1 query pattern. Consider Hash Match or Merge Join. Check if an index on the inner side would reduce the per-iteration cost. Look for missing indexes on the inner table's join columns.
+- **Fix:** This is often an N+1 query pattern. Consider Hash Match or Merge Join. Check if an index on the inner side would reduce the per-iteration cost. Look for missing indexes on the inner table's join columns. The threshold hierarchy (Warning at 10,000, Info at 1,000 with inner cost ≥ 0.5) reflects that loops with a cheap inner side are often benign, but high loops with a non-trivial inner side are almost always a join-strategy error. Even a per-iteration cost of 0.001, repeated 10,000 times, totals 10 units — but if the inner estimate was 0.001 and actual is 0.1, real cost is 1,000 units.
 ### N16 — Busy Loop Pattern
 - **Trigger:** `physicalOp` = Nested Loops AND (rebinds + rewinds + 1) > `estimateRows` × 100
 - **Severity:** Warning
@@ -319,7 +320,7 @@ Apply these to every operator node in the plan tree.
 ### N23 — Remote Query
 - **Trigger:** `physicalOp` contains "Remote"
 - **Severity:** Warning
-- **Fix:** Remote operators (linked servers, OPENQUERY) add network latency and reduce optimizer visibility. Pull data locally into a temp table first, or use a distributed view. Avoid JOINs between local and remote tables in the same query.
+- **Fix:** Remote operators (linked servers, OPENQUERY) add network latency and reduce optimizer visibility. The optimizer cannot see remote statistics at compile time, so it uses a fixed 1-row estimate for the remote side of any join — the same cardinality collapse as N13/N21, but structural and not fixable with statistics updates. A 1-row estimate on a table that returns 1 million rows forces nested loops where hash join is needed, on every execution. Pull data locally into a temp table first, or use a distributed view. Avoid JOINs between local and remote tables in the same query.
 ### N24 — High Cost Operator
 - **Trigger:** `costPercent` ≥ 50%
 - **Severity:** Info
@@ -360,6 +361,10 @@ Apply these to every operator node in the plan tree.
 - **Trigger:** `logicalOp` = "Row Count Spool" AND actual stats present AND `ActualRewinds` > 1000
 - **Severity:** Warning
 - **Fix:** A high-rewind Row Count Spool typically indicates a `NOT IN` against a nullable column. SQL Server must verify the absence of NULLs on every iteration. Rewrite as `NOT EXISTS` or add a `WHERE col IS NOT NULL` filter on the subquery to eliminate the NULL-safety check.
+### N34 — Wide Index Suggestion
+- **Trigger:** A `MissingIndexGroup` suggestion contains > 4 key columns OR > 5 INCLUDE columns
+- **Severity:** Info
+- **Fix:** Wide index suggestions are often the result of the optimizer combining multiple independent access patterns. A wide index is costly to maintain and may not be the right solution. Evaluate the suggestion critically — split into narrower targeted indexes, or address the queries individually to reduce column requirements.
 ### N35 — Estimated Plan CE Guess
 - **Trigger:** Estimated plan only (no runtime stats) AND operator is a Scan AND selectivity (`EstimateRows` / `TableCardinality`) matches a known CE default: 30%, 10%, 9%, 16.4%, or 1% (± 0.5%)
 - **Severity:** Info
@@ -367,7 +372,7 @@ Apply these to every operator node in the plan tree.
 
 ---
 
-## Missing Index Checks
+## Node-Level Checks (N36–N66, continued)
 ### N36 — Forced Plan
 - **Trigger:** `PlanGuideName` attribute is present on `StmtSimple` OR `StatementText` contains `USE PLAN`
 - **Severity:** Warning
@@ -383,7 +388,7 @@ Apply these to every operator node in the plan tree.
 ### N39 — Heap Scan
 - **Trigger:** `physicalOp` = "Table Scan" (indicates a scan on a heap — a table with no clustered index)
 - **Severity:** Warning
-- **Fix:** Heap scans read every row with no ordering guarantees. Add a clustered index to the table to enable ordered access and reduce I/O. If the table is intentionally a heap (e.g., staging table), add a nonclustered index on the filter column instead.
+- **Fix:** Heap scans read every row with no ordering guarantees. Add a clustered index to the table to enable ordered access and reduce I/O. If the table is intentionally a heap (e.g., staging table), add a nonclustered index on the filter column instead. On heavily updated heaps, forwarded record pointers add extra random I/O: each moved row leaves a pointer, and every scan must follow it. Heaps cannot use efficient read-ahead prefetching (which assumes allocation order). On active-write heaps, actual I/O can be 2–4× what row count alone implies.
 ### N40 — Forced Index / Seek / Scan Hint
 - **Trigger:** `ForcedIndex` = 1, `ForceSeek` = 1, or `ForceScan` = 1 attribute on any `RelOp`
 - **Severity:** Warning
@@ -403,7 +408,7 @@ Apply these to every operator node in the plan tree.
 ### N44 — Many Joins (Greedy Optimizer Threshold)
 - **Trigger:** Count of join operators (`PhysicalOp` = Hash Match, Merge Join, or Nested Loops) ≥ 8 in the plan
 - **Severity:** Info
-- **Fix:** SQL Server's optimizer uses exhaustive join reordering up to approximately 7–8 tables, then switches to greedy heuristics that may miss the optimal order. This can combine with S5 (compile timeout) to produce a suboptimal plan. Break the query into smaller units using temp tables or CTEs materialised into temp tables to reduce the join count below the greedy threshold.
+- **Fix:** SQL Server's optimizer uses exhaustive join reordering up to approximately 7–8 tables, then switches to greedy heuristics that may miss the optimal order. This can combine with S5 (compile timeout) to produce a suboptimal plan. Exhaustive enumeration evaluates all join-order permutations (5,040 for 7 tables) and picks the cheapest. Greedy starts from the cheapest two-way join and never backtracks. For skewed data — where joining Table A to B first reduces rows by 99% but that is only apparent after comparing A×C — greedy locks in a catastrophically wrong order. Splitting via temp tables is counterintuitive but necessary: break the query into smaller units using temp tables or CTEs materialised into temp tables to reduce the join count below the greedy threshold.
 ### N45 — Non-Index Eager Spool (Halloween Protection / Subquery Materialisation)
 - **Trigger:** `LogicalOp` = "Eager Spool" AND `PhysicalOp` does NOT contain "Index" AND cost ≥ 10% of plan (distinguishes from N2 which catches index spools)
 - **Severity:** Warning
@@ -492,17 +497,14 @@ Apply these to every operator node in the plan tree.
 - **Trigger:** `PhysicalOp` = Nested Loops AND `ActualRebinds` > `EstimateRebinds` × 10 AND `ActualRebinds` > 1,000 (requires actual execution plan)
 - **Severity:** Warning
 - **Fix:** The Nested Loops operator executed far more inner-side iterations than the optimizer estimated at compile time. `EstimateRebinds` comes from the outer side cardinality estimate; when the actual outer side is much larger, every under-estimated join drives N66. This is a complement to N16 (Busy Loop based on estimates alone) that fires on actual execution evidence. Fix: correct the cardinality error on the outer side of the join (statistics update, parameter sniffing fix), or force a Hash Match join that is less sensitive to outer cardinality: `INNER HASH JOIN`.
-### N34 — Wide Index Suggestion
-- **Trigger:** A `MissingIndexGroup` suggestion contains > 4 key columns OR > 5 INCLUDE columns
-- **Severity:** Info
-- **Fix:** Wide index suggestions are often the result of the optimizer combining multiple independent access patterns. A wide index is costly to maintain and may not be the right solution. Evaluate the suggestion critically — split into narrower targeted indexes, or address the queries individually to reduce column requirements.
 
 ---
 
 ## Output Format
 
-Structure your report as follows. Follow every formatting rule below exactly — the reference
-output in `example/sqlplan-review/horrible-analysis.md` demonstrates the expected quality level.
+Structure your report as follows. The reference output in `example/sqlplan-review/horrible-analysis.md`
+demonstrates the expected quality level — reading it once shows how findings link to each other,
+how the fix sequence table resolves multiple checks, and how the Passed Checks table signals completeness.
 
 ---
 
@@ -542,8 +544,6 @@ output in `example/sqlplan-review/horrible-analysis.md` demonstrates the expecte
 
 ---
 
----
-
 ### Section: Findings (Critical / Warnings / Info)
 
 Each finding header **must** include the check ID that fired:
@@ -556,9 +556,8 @@ Each finding header **must** include the check ID that fired:
 ```
 
 Rules:
-- The bracket suffix (`— S4`, `— N21`, etc.) is the check ID from the sections above. Always include it.
-- **Table and index names in Observed lines and finding text must use schema-qualified format
-  when the plan XML includes a `Schema` attribute on the `<Object>` or `<RelOp>` element.**
+- Including the bracket suffix (`— S4`, `— N21`, etc.) links the finding back to its check definition, making the report auditable and allowing users to cross-reference `references/check-explanations.md` for deeper fix options.
+- Use schema-qualified names in Observed lines when the plan XML includes a `Schema` attribute on `<Object>` or `<RelOp>` — this prevents ambiguity in multi-tenant databases where identically-named tables exist in different schemas.
   Format: `[Schema].[Table]` preserving SQL Server bracket notation, or `Schema.Table` in prose.
   Example: `dbo.Orders` not `Orders`; `[dbo].[Orders].[IX_Orders_Status]` in DDL.
   When the plan XML omits the Schema attribute (estimated plans, simplified XML), bare table
@@ -575,24 +574,17 @@ Rules:
 #### Info section — parameter sniffing
 
 If `<ParameterList>` shows `ParameterCompiledValue` ≠ `ParameterRuntimeValue` on any parameter,
-report it as a named Info item — never bury it in a prose note:
+report it as a named Info item — parameter sniffing buried in prose notes tends to be missed,
+and it is almost always the root cause of the N21 cardinality errors above it:
 
 ```
 ### [I1] Parameter Sniffing — @ParamName compiled 'X', runtime 'Y'
 - **Observed:** ParameterCompiledValue="X" vs ParameterRuntimeValue="Y"
 - **Impact:** [how this explains the N21 estimate errors above]
-- **Fix options:**
-  ```sql
-  -- Option 1: Recompile per execution
-  OPTION (RECOMPILE)
-  -- Option 2: Optimize for representative value
-  OPTION (OPTIMIZE FOR (@Param = 'value'))
-  -- Option 3: Local variable (breaks sniffing, uses average density)
-  DECLARE @Local type = @Param; -- use @Local in query
-  -- Option 4: Filtered statistics for the common range
-  CREATE STATISTICS stat_col ON table (col) WHERE col >= 'value';
-  ```
+- **Fix options:** [four SQL options]
 ```
+
+See `references/output-format.md` for the four-option fix template with SQL.
 
 S25, S26, N17, N32, and N52 findings also go in the Info section (labeled by statement in multi-statement plans).
 
@@ -626,43 +618,31 @@ Use comments to explain which finding each index addresses.
 
 ### Section: Prioritized Fix Sequence
 
-Always end the findings with a fix sequence table. Order: (a) fixes that unblock other fixes
-first, (b) highest severity, (c) lowest effort. Reference the finding IDs in Resolves.
-
-```
-### Prioritized Fix Sequence
-
-| Step | Action | Resolves |
-|------|--------|----------|
-| 1    | ...    | C1, W4   |
-| 2    | ...    | I1, W7   |
-```
+End findings with a fix-sequence table — without it, users must read all findings to extract an
+action plan. The table distills the report into a prioritized checklist.
+Order by: (a) fixes that unblock others first, (b) highest severity, (c) lowest effort.
+Reference finding IDs (e.g. C1, W4) in a Resolves column.
+See `references/output-format.md` for the exact table template.
 
 ---
 
 ### Section: Passed Checks
 
-Format as a two-column table. Include every check explicitly evaluated and not triggered.
-A thorough PASS table signals that the full ruleset was applied — completeness is a feature.
+Include every check evaluated but not triggered as a two-column `| Check | Result |` table.
+A complete PASS table signals the full ruleset was applied — omitting it signals an incomplete review.
+End the table with the attribution line:
 
 ```
-### Passed Checks
-
-| Check | Result |
-|-------|--------|
-| S1 — Serial Plan | PASS — DOP=8, plan is parallel |
-| S2 — Excessive Memory Grant | PASS — grant is under-sized, not over-sized (S18 fired instead) |
-| ...   | ...    |
-
----
-*Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
+*Analyzed by: [AI model and version] · [date/time UTC or user's local timezone]*
 ```
+
+See `references/output-format.md` for the full table template and NOT ASSESSED conventions.
 
 ---
 
-## Notes
+## Limitations
 
-- When actual execution stats are absent (estimated-only plan), skip checks that require actual rows/elapsed time and note this limitation.
+- When actual execution stats are absent (estimated-only plan), skip checks that require actual rows/elapsed time and note this in the Passed Checks table as `NOT ASSESSED`.
 - For checks where the threshold is ambiguous from the description, state your assumption explicitly.
 - If the user provides only a partial plan (one operator), analyze what is visible and note what cannot be assessed.
 - Do not invent warnings not triggered by the rules above. If nothing fires, say the plan is clean.
@@ -678,3 +658,18 @@ A thorough PASS table signals that the full ruleset was applied — completeness
 - **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.
+
+## Reference Files
+
+Load `references/check-explanations.md` when:
+- A check fires and the user asks "what does this mean?" or needs ranked fix options beyond the primary fix above
+- You need XML attribute examples or SQL code samples to verify a finding
+
+The file is 3,500+ lines. Navigate with its Contents table at the top:
+- **Before You Start** — key concepts (execution plans, statistics, memory grants)
+- **Statement-Level Checks (S1–S33)** — XML attribute examples per check
+- **Node-Level Checks (N1–N66)** — ranked fix options per check
+- **Quick Reference Tables** — severity/trigger summary for all 99 checks
+
+Load `references/output-format.md` when producing the Prioritized Fix Sequence,
+Passed Checks table, or parameter-sniffing fix options in the final report.

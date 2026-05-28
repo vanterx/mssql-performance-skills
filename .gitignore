@@ -9,3 +9,6 @@ changes.log
 # MCP server build artifacts
 mcp-server/node_modules/
 mcp-server/dist/
+
+# Local backups
+backup/
