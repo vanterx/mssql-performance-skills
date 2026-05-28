@@ -389,6 +389,44 @@ Every Critical finding must cite at least one check ID plus the source artifact 
 
 The Recommendation Conflicts section is mandatory — if no conflicts, state "None detected" explicitly. Silence is not acceptable.
 
+---
+
+### Section: Verbose Output (--verbose)
+
+When the user's request includes `--verbose`, `--trace`, or the word `verbose`:
+
+**1. Append a `## Check Evaluation Log` section** after the Passed Checks table.
+
+Include one row for every check in this skill's ruleset, in check-ID order:
+
+| Check | Evidence | Threshold | Result |
+|-------|----------|-----------|--------|
+| [ID — Name] | [key attribute(s) and value found, or "absent"] | [threshold or condition] | PASS / **FIRE → [severity]** / NOT ASSESSED |
+
+Result conventions:
+- `PASS` — attribute present, threshold not met
+- `**FIRE → Critical/Warning/Info**` — threshold met; bold to distinguish from passes
+- `NOT ASSESSED` — required attribute absent from input
+
+**2. Save both files** to the current working directory using the Write tool:
+
+  output/<skill-name>/<YYYY-MM-DD-HHmmss>-<input-prefix>/analysis.md  ← full report
+  output/<skill-name>/<YYYY-MM-DD-HHmmss>-<input-prefix>/trace.md     ← Check Evaluation Log
+
+Derive `<input-prefix>`:
+1. Filename stem if a file path was provided (e.g. `horrible.sqlplan` → `horrible`)
+2. First meaningful identifier from the artifact (top wait type, first table name, procedure name, etc.)
+3. Fallback: `run`
+Sanitize: alphanumeric + hyphens/underscores only, max 32 chars.
+
+File headers:
+  analysis.md → `# Analysis — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
+  trace.md    → `# Check Evaluation Log — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
+
+Create directories as needed. When `--verbose` is not present, write nothing to disk.
+
+---
+
 ## Notes
 
 - The orchestrator never opens a network connection to SQL Server. The capture-bundle generator (tier 3) emits scripts for the user to run; result files come back to the orchestrator as inputs.

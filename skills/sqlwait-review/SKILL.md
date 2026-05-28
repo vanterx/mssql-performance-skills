@@ -725,6 +725,44 @@ Always end the single-snapshot section with this table. Order: (a) emergency/poi
 - **Short capture windows (< 10 minutes):** Percentage thresholds (V1–V17) are fully valid at any window length. For absolute comparisons across captures of different lengths, normalise to a per-minute rate: `wait_ms_per_min = wait_time_ms ÷ window_minutes`. A 5-minute capture with 8,400,000 ms of PAGEIOLATCH = 1,680,000 ms/min — the same load rate as a 30-minute capture showing 50,400,000 ms. Report both the raw total and the per-minute rate in the Input Summary so captures of different lengths can be meaningfully compared. The "In context" concurrent-session metric requires the window to be known; without it, report as N/A.
 - **Unequal intervals in trend mode:** If snapshot intervals vary (e.g., 5-min → 30-min → 15-min), percentage-based checks (V19, V20, V23, V24, V25, V26) remain valid because they compare proportions. V21 (peak period) and V22 (velocity) must use per-minute normalization — a longer-interval period will naturally accumulate more delta_wait_ms than a shorter one at identical load, making raw comparison misleading.
 
+---
+
+### Section: Verbose Output (--verbose)
+
+When the user's request includes `--verbose`, `--trace`, or the word `verbose`:
+
+**1. Append a `## Check Evaluation Log` section** after the Passed Checks table.
+
+Include one row for every check in this skill's ruleset, in check-ID order:
+
+| Check | Evidence | Threshold | Result |
+|-------|----------|-----------|--------|
+| [ID — Name] | [key attribute(s) and value found, or "absent"] | [threshold or condition] | PASS / **FIRE → [severity]** / NOT ASSESSED |
+
+Result conventions:
+- `PASS` — attribute present, threshold not met
+- `**FIRE → Critical/Warning/Info**` — threshold met; bold to distinguish from passes
+- `NOT ASSESSED` — required attribute absent from input
+
+**2. Save both files** to the current working directory using the Write tool:
+
+  output/<skill-name>/<YYYY-MM-DD-HHmmss>-<input-prefix>/analysis.md  ← full report
+  output/<skill-name>/<YYYY-MM-DD-HHmmss>-<input-prefix>/trace.md     ← Check Evaluation Log
+
+Derive `<input-prefix>`:
+1. Filename stem if a file path was provided (e.g. `horrible.sqlplan` → `horrible`)
+2. First meaningful identifier from the artifact (top wait type, first table name, procedure name, etc.)
+3. Fallback: `run`
+Sanitize: alphanumeric + hyphens/underscores only, max 32 chars.
+
+File headers:
+  analysis.md → `# Analysis — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
+  trace.md    → `# Check Evaluation Log — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
+
+Create directories as needed. When `--verbose` is not present, write nothing to disk.
+
+---
+
 ## Companion Skills
 
 - **sqlblock-review** — If `LCK_M_*` waits are dominant (V2), use this skill on `sys.dm_exec_requests` output to identify the head blocker and the full blocking chain.
