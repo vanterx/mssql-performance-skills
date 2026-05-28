@@ -36,7 +36,7 @@ SELECT TOP 30
          / NULLIF(wait_time_ms, 0) AS decimal(5,2))                AS pct_signal  /* CPU queue pressure */
 FROM sys.dm_os_wait_stats
 WHERE wait_type NOT IN (
-    /* Benign background / idle waits — Paul Randal / SQLskills.com exclusion list */
+    /* Benign background / idle waits — community exclusion list */
     'BROKER_EVENTHANDLER','BROKER_RECEIVE_WAITFOR','BROKER_TASK_STOP',
     'BROKER_TO_FLUSH','BROKER_TRANSMITTER',
     'CHECKPOINT_QUEUE','CHKPT','CLR_AUTO_EVENT','CLR_MANUAL_EVENT','CLR_SEMAPHORE',

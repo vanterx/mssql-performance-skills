@@ -15,7 +15,7 @@ Analyze SQL Server Query Store (`sys.query_store_*` DMV) output to identify the 
 
 Query Store is the most powerful built-in monitoring tool in SQL Server 2016+. It persists query execution history, plan history, runtime statistics, and wait statistics across server restarts — enabling trend analysis without external monitoring tools. This skill is the diagnostic counterpart to `sqlplan-review`: Query Store tells you *which* queries need attention; execution plan review tells you *why*.
 
-Based on patterns from Erik Darling's sp_QuickieStore and the Microsoft Query Store DMV documentation.
+Based on Microsoft Query Store DMV documentation and SQL Server community best practices.
 
 ## Input
 
@@ -130,7 +130,7 @@ FROM sys.database_query_store_options;
 -- Run against baseline period, note avg_* values per query_hash.
 -- Run again against current period.
 -- Compare: current_avg / baseline_avg > 2 indicates regression.
--- Or use sp_QuickieStore with @regression_baseline_start_date and @regression_baseline_end_date.
+-- Compare by query_hash across two time windows using sys.query_store_query_text and sys.query_store_runtime_stats.
 ```
 
 ---
