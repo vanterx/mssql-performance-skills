@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "I have two snapshots of wait stats 30 minutes apart. What waits are accumulating fastest? Are there poison waits?",
-      "expected_output": "Differential analysis showing fastest-growing waits per minute. Poison wait check using Brent Ozar proportional formula (V18, V13 etc). Trend analysis section.",
+      "expected_output": "Differential analysis showing fastest-growing waits per minute. Poison wait check using proportional formula (V18, V13 etc). Trend analysis section.",
       "files": []
     }
   ]

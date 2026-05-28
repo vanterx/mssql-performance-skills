@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same ruleset used by SentryOne Plan Explorer and similar tools. Covers 99 checks across statement-level (S1–S33) and node-level (N1–N66) categories.
+Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same analysis ruleset used by commercial SQL Server execution plan tools. Covers 99 checks across statement-level (S1–S33) and node-level (N1–N66) categories.
 
 ## Input
 

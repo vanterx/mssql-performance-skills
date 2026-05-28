@@ -79,7 +79,7 @@ BEGIN
         reason      nvarchar(200) NULL
     );
 
-    /* Paul Randal / SQLskills.com benign exclusion list */
+    /* Community benign exclusion list */
     INSERT collect.ignored_wait_types (wait_type, reason) VALUES
         ('BROKER_EVENTHANDLER',         'Service Broker idle'),
         ('BROKER_RECEIVE_WAITFOR',      'Service Broker idle'),
