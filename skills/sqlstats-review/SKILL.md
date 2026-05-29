@@ -287,6 +287,18 @@ I1 ✓ (brief reason), I3 ✓ (brief reason) [list every check verified clean wi
 
 ---
 
+### Section: Output Filters (--brief / --critical-only)
+
+**`--brief`** — Omit the Passed Checks table and attribution footer. Output the Summary, Findings, and Prioritized Fix Sequence sections only. Use when a quick scan of what fired is all that's needed.
+
+**`--critical-only`** — Suppress Warning and Info findings. Show only Critical findings. The Passed Checks table is also omitted. Use when triaging an incident and only actionable blockers matter.
+
+Both flags can be combined: `--brief --critical-only` produces the Summary section plus Critical findings only.
+
+When neither flag is present, produce the full report as documented above.
+
+---
+
 ### Section: Verbose Output (--verbose)
 
 When the user's request includes `--verbose`, `--trace`, or the word `verbose`:
