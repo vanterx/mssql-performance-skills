@@ -44,12 +44,12 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 **5 minutes to your first analysis:**
 
 1. Install the skills (see [Installation](#installation) below)
-2. In SSMS, open [example/sqlplan-review/horrible.sqlplan](example/sqlplan-review/horrible.sqlplan)
+2. In SSMS, open [skills/sqlplan-review/examples/horrible.sqlplan](skills/sqlplan-review/examples/horrible.sqlplan)
 3. In Claude Code, type:
    ```
-   /sqlplan-review example/sqlplan-review/horrible.sqlplan
+   /sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan
    ```
-4. Compare the output to [example/sqlplan-review/horrible-analysis.md](example/sqlplan-review/horrible-analysis.md) — that's the reference gold-standard output showing the expected Critical / Warning / Info findings and Passed Checks table.
+4. Compare the output to [skills/sqlplan-review/examples/horrible-analysis.md](skills/sqlplan-review/examples/horrible-analysis.md) — that's the reference gold-standard output showing the expected Critical / Warning / Info findings and Passed Checks table.
 
 **Don't have a plan yet?** Use the symptom-based routing in [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) to pick the right skill for what you have.
 
@@ -1209,7 +1209,7 @@ R11–R15 (pattern detection), R16–R20 (trend analysis, requires ≥ 3 snapsho
 EXECUTE collect.usp_CollectProcStats;
 ```
 
-**Sample output:** See [`example/procstats-review/proc_stats_output-analysis.md`](example/procstats-review/proc_stats_output-analysis.md).
+**Sample output:** See [`skills/procstats-review/examples/proc_stats_output-analysis.md`](skills/procstats-review/examples/proc_stats_output-analysis.md).
 
 ---
 
@@ -1296,10 +1296,10 @@ symptom ──► /sql-triage ──► capture bundle ◄──┘ (if artifact
 
 **Sample outputs:**
 
-- [`example/mssql-performance-review/mixed-artifacts-analysis.md`](example/mssql-performance-review/mixed-artifacts-analysis.md) — artifact-driven review with full report
-- [`example/mssql-performance-review/symptom-first-analysis.md`](example/mssql-performance-review/symptom-first-analysis.md) — symptom-only triage with capture-bundle response
-- [`example/mssql-performance-review/capture-bundle-example/`](example/mssql-performance-review/capture-bundle-example/) — sample bundle (README, scripts, paste-back template, manifest.json)
-- [`example/mssql-performance-review/baseline-diff-analysis.md`](example/mssql-performance-review/baseline-diff-analysis.md) — verification report 24h after deploy with recommendation tags
+- [`skills/mssql-performance-review/examples/mixed-artifacts-analysis.md`](skills/mssql-performance-review/examples/mixed-artifacts-analysis.md) — artifact-driven review with full report
+- [`skills/mssql-performance-review/examples/symptom-first-analysis.md`](skills/mssql-performance-review/examples/symptom-first-analysis.md) — symptom-only triage with capture-bundle response
+- [`skills/mssql-performance-review/examples/capture-bundle-example/`](skills/mssql-performance-review/examples/capture-bundle-example/) — sample bundle (README, scripts, paste-back template, manifest.json)
+- [`skills/mssql-performance-review/examples/baseline-diff-analysis.md`](skills/mssql-performance-review/examples/baseline-diff-analysis.md) — verification report 24h after deploy with recommendation tags
 
 **When to use this vs a specialised skill directly:**
 
@@ -1346,7 +1346,7 @@ The orchestrator does not duplicate the specialised skills — it composes them.
 
 ## Example
 
-See [`example/sqlplan-review/horrible-analysis.md`](example/sqlplan-review/horrible-analysis.md) for a full analysis of [`example/sqlplan-review/horrible.sqlplan`](example/sqlplan-review/horrible.sqlplan) — a deliberately bad plan demonstrating parameter sniffing, memory grant failure, TempDb spills, leading-wildcard LIKE, implicit conversion, and 5M-row key lookups.
+See [`skills/sqlplan-review/examples/horrible-analysis.md`](skills/sqlplan-review/examples/horrible-analysis.md) for a full analysis of [`skills/sqlplan-review/examples/horrible.sqlplan`](skills/sqlplan-review/examples/horrible.sqlplan) — a deliberately bad plan demonstrating parameter sniffing, memory grant failure, TempDb spills, leading-wildcard LIKE, implicit conversion, and 5M-row key lookups.
 
 ---
 

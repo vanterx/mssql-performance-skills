@@ -3,9 +3,9 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Why is this query slow? Here is the actual execution plan from SSMS at example/sqlplan-review/horrible.sqlplan. The query used to run in 200ms, now 8 seconds.",
+      "prompt": "Why is this query slow? Here is the actual execution plan from SSMS at skills/sqlplan-review/examples/horrible.sqlplan. The query used to run in 200ms, now 8 seconds.",
       "expected_output": "Structured analysis identifying slow operators (key lookups N5, expensive scans N4, parameter sniffing S9, cardinality mismatches N21, memory grant issues S2/S18). Prioritized Fix Sequence table. Passed Checks lists every S/N check evaluated.",
-      "files": ["example/sqlplan-review/horrible.sqlplan"]
+      "files": ["skills/sqlplan-review/examples/horrible.sqlplan"]
     },
     {
       "id": 2,

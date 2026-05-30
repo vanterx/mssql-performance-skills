@@ -192,7 +192,7 @@ These checks fire on SQL Server AG-specific resource events within the WSFC log 
 ## Output Format
 
 Structure the report as follows. The reference output in
-`example/clusterlog-review/cluster-analysis.md` demonstrates the expected quality level.
+`skills/clusterlog-review/examples/cluster-analysis.md` demonstrates the expected quality level.
 
 ```
 ## Cluster Log Analysis

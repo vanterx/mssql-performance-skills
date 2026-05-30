@@ -1,9 +1,9 @@
 # Batch Plan Analysis
 
-> **Input:** `example/sqlplan-batch/plans/` + `example/sqlplan-review/horrible.sqlplan` — 3 plans
-> Run with: `/sqlplan-batch example/sqlplan-batch/plans/ example/sqlplan-review/horrible.sqlplan`
+> **Input:** `skills/sqlplan-batch/examples/plans/` + `skills/sqlplan-review/examples/horrible.sqlplan` — 3 plans
+> Run with: `/sqlplan-batch skills/sqlplan-batch/examples/plans/ skills/sqlplan-review/examples/horrible.sqlplan`
 >
-> Plans: `plans/order_report.sqlplan`, `plans/customer_lookup.sqlplan`, `example/sqlplan-review/horrible.sqlplan`
+> Plans: `plans/order_report.sqlplan`, `plans/customer_lookup.sqlplan`, `skills/sqlplan-review/examples/horrible.sqlplan`
 
 ---
 
@@ -165,7 +165,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 | N5 | Warning | Key Lookup on `Orders.PK_Orders` — 5,000,000 executions |
 | N21 | Warning | Row estimate 1 vs actual 9,999,999 (N21 × 6 nodes) |
 
-Full analysis: `/sqlplan-review example/sqlplan-review/horrible.sqlplan`
+Full analysis: `/sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan`
 
 ### `order_report.sqlplan`
 
@@ -189,7 +189,7 @@ Root cause: Statistics are stale — all nodes estimate 100 rows. Update statist
 
 ## Recommended Next Steps
 
-1. **`horrible.sqlplan`** — Fix implicit conversion first (restores cardinality estimates → eliminates spills); then run `/sqlplan-index-advisor example/sqlplan-review/horrible.sqlplan` for DDL. Full check: `/sqlplan-review example/sqlplan-review/horrible.sqlplan`.
+1. **`horrible.sqlplan`** — Fix implicit conversion first (restores cardinality estimates → eliminates spills); then run `/sqlplan-index-advisor skills/sqlplan-review/examples/horrible.sqlplan` for DDL. Full check: `/sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan`.
 2. **`order_report.sqlplan`** — Update statistics on Orders, Customers, OrderLines immediately. Deploy `IX_OrderLines_OrderId`. Recapture actual plan (this plan has estimated-rows-only at runtime context — confirm with `Ctrl+M` in SSMS).
 3. **Index deployment** — Run consolidated script above in a maintenance window. Validate with `/sqlplan-compare` against pre-index baseline.
 4. **`customer_lookup.sqlplan`** — No action needed; 1 info-level note only.

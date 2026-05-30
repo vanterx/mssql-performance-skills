@@ -1,7 +1,7 @@
 # Deadlock Analysis — `deadlock.xml`
 
-> **Input:** `example/sqlplan-deadlock/deadlock.xml`
-> Run with: `/sqlplan-deadlock example/sqlplan-deadlock/deadlock.xml`
+> **Input:** `skills/sqlplan-deadlock/examples/deadlock.xml`
+> Run with: `/sqlplan-deadlock skills/sqlplan-deadlock/examples/deadlock.xml`
 >
 > Source: `system_health` Extended Events session — captured automatically by SQL Server
 

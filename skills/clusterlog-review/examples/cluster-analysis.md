@@ -1,6 +1,6 @@
 # /clusterlog-review — Example Output
 
-Input: `example/clusterlog-review/cluster.log`
+Input: `skills/clusterlog-review/examples/cluster.log`
 
 ---
 

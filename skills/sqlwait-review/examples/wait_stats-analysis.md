@@ -1,7 +1,7 @@
 # Wait Statistics Analysis — `wait_stats.txt`
 
-> **Input:** `example/sqlwait-review/wait_stats.txt`
-> Run with: `/sqlwait-review example/sqlwait-review/wait_stats.txt`
+> **Input:** `skills/sqlwait-review/examples/wait_stats.txt`
+> Run with: `/sqlwait-review skills/sqlwait-review/examples/wait_stats.txt`
 >
 > Server: PROD-SQL-01 · SQL Server 2019 CU23 · 16 cores / 128 GB RAM
 > Capture window: 30-minute differential (2025-05-02 10:00–10:30)

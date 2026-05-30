@@ -3,9 +3,9 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I have a folder of mixed SQL Server artifacts from an incident at 09:30 this morning — one .sqlplan, one .sql source, a STATISTICS IO/TIME excerpt, and a wait stats snapshot. They are at example/mssql-performance-review/mixed-artifacts/. Please run a full review and tell me the root cause and what to fix first.",
+      "prompt": "I have a folder of mixed SQL Server artifacts from an incident at 09:30 this morning — one .sqlplan, one .sql source, a STATISTICS IO/TIME excerpt, and a wait stats snapshot. They are at skills/mssql-performance-review/examples/mixed-artifacts/. Please run a full review and tell me the root cause and what to fix first.",
       "expected_output": "Unified Report with: Summary block (counts, primary bottleneck, highest-priority fix); Hypothesis Trace table with 2 or 3 ranked hypotheses; Adversarial Check section showing the disproof attempt and result; Findings section grouped by Critical/Warning/Info, each Critical citing >=3 specialised check IDs with source + observed value + threshold; Consolidated Fix Priority table with action + effort + window + risk + side effects + rollback + verification; Recommendation Conflicts section (even if 'None detected'); Skills Skipped table.",
-      "files": ["example/mssql-performance-review/mixed-artifacts/"]
+      "files": ["skills/mssql-performance-review/examples/mixed-artifacts/"]
     },
     {
       "id": 2,

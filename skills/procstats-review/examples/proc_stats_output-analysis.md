@@ -1,7 +1,7 @@
 # Procedure Stats Analysis
 
-> **Input:** `example/procstats-review/proc_stats_output.txt` — Q1 (Top CPU Consumers)
-> Run with: `/procstats-review example/procstats-review/proc_stats_output.txt`
+> **Input:** `skills/procstats-review/examples/proc_stats_output.txt` — Q1 (Top CPU Consumers)
+> Run with: `/procstats-review skills/procstats-review/examples/proc_stats_output.txt`
 
 ### Input Summary
 - Source: collect.proc_stats — Q1 (Top CPU Consumers) output

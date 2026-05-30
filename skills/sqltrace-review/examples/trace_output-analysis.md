@@ -1,7 +1,7 @@
 # Trace Analysis — `trace_output.txt`
 
-> **Input:** `example/sqltrace-review/trace_output.txt`
-> Run with: `/sqltrace-review example/sqltrace-review/trace_output.txt`
+> **Input:** `skills/sqltrace-review/examples/trace_output.txt`
+> Run with: `/sqltrace-review skills/sqltrace-review/examples/trace_output.txt`
 >
 > Source: `sys.fn_trace_gettable()` output · Duration column in microseconds
 

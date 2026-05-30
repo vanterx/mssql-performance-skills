@@ -105,19 +105,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Check 6: Every skill has an example/ subfolder
+# Check 6: Every skill has an examples/ subfolder
 # ---------------------------------------------------------------------------
 echo ""
 echo "[ 6 ] Example folders"
 check6_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    if [ ! -d "example/$name" ]; then
-        warn "example/$name/ is missing — add an input file and -analysis.md"
+    if [ ! -d "skills/$name/examples" ]; then
+        warn "skills/$name/examples/ is missing — add an input file and -analysis.md"
         check6_ok=0
     fi
 done
-[ "$check6_ok" -eq 1 ] && pass "All skills have example/ subfolders"
+[ "$check6_ok" -eq 1 ] && pass "All skills have examples/ subfolders"
 
 # ---------------------------------------------------------------------------
 # Check 7: Check prefix uniqueness — no letter used by two different skills
@@ -260,12 +260,13 @@ done
 [ "$check14_ok" -eq 1 ] && pass "Frontmatter description check counts match actual (for skills that declare them)"
 
 # ---------------------------------------------------------------------------
-# Check 15: Each example subfolder has at least one *-analysis.md
+# Check 15: Each skill's examples/ subfolder has at least one *-analysis.md
 # ---------------------------------------------------------------------------
 echo ""
 echo "[15 ] Example subfolders contain an analysis file"
 check15_ok=1
-for d in example/*/; do
+for skill_dir in skills/*/; do
+    d="${skill_dir}examples/"
     [ ! -d "$d" ] && continue
     analysis_count=$(ls "$d"*-analysis.md 2>/dev/null | wc -l | tr -d ' ')
     if [ "$analysis_count" -eq 0 ]; then

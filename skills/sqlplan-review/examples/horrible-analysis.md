@@ -1,6 +1,6 @@
 # Execution Plan Analysis — `horrible.sqlplan`
 
-> **Input:** `example/sqlplan-review/horrible.sqlplan` — Run with: `/sqlplan-review example/sqlplan-review/horrible.sqlplan`
+> **Input:** `skills/sqlplan-review/examples/horrible.sqlplan` — Run with: `/sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan`
 >
 > See also: [sqlplan-index-advisor analysis](sqlplan-index-advisor/index-advisor-analysis.md) · [sqlplan-batch analysis](sqlplan-batch/batch-analysis.md)
 

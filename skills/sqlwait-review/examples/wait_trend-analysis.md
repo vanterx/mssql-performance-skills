@@ -1,7 +1,7 @@
 # Wait Statistics Analysis — `wait_trend.txt`
 
-> **Input:** `example/sqlwait-review/wait_trend.txt`
-> Run with: `/sqlwait-review example/sqlwait-review/wait_trend.txt`
+> **Input:** `skills/sqlwait-review/examples/wait_trend.txt`
+> Run with: `/sqlwait-review skills/sqlwait-review/examples/wait_trend.txt`
 >
 > Server: PROD-SQL-01 · SQL Server 2019 CU23 · 16 cores / 128 GB RAM
 > Capture window: 4-snapshot trend (2025-05-02 10:00–11:00, 15-minute intervals)

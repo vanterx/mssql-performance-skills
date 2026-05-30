@@ -1,7 +1,7 @@
 # Execution Plan Comparison — `baseline.sqlplan` vs `regression.sqlplan`
 
-> **Input:** `example/sqlplan-compare/baseline.sqlplan` vs `example/sqlplan-compare/regression.sqlplan`
-> Run with: `/sqlplan-compare example/sqlplan-compare/baseline.sqlplan example/sqlplan-compare/regression.sqlplan`
+> **Input:** `skills/sqlplan-compare/examples/baseline.sqlplan` vs `skills/sqlplan-compare/examples/regression.sqlplan`
+> Run with: `/sqlplan-compare skills/sqlplan-compare/examples/baseline.sqlplan skills/sqlplan-compare/examples/regression.sqlplan`
 >
 > Source: `dbo.GetOrdersByStatus` — same query, two plan captures before and after schema change
 
