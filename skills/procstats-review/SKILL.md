@@ -1,6 +1,6 @@
 ---
 name: procstats-review
-description: Analyze SQL Server procedure/trigger/function runtime stats collected from sys.dm_exec_procedure_stats into collect.proc_stats. Applies 20 checks (R1–R20) across four categories — top consumers, per-execution efficiency, pattern detection, and trend analysis. Use when pasting output from the report queries in scripts/collection/04_report_queries.sql.
+description: Analyze SQL Server procedure/trigger/function runtime stats collected from sys.dm_exec_procedure_stats into collect.proc_stats. Applies 25 checks (R1–R25) across five categories — top consumers, per-execution efficiency, pattern detection, trend analysis, and advanced runtime patterns. Use when pasting output from the report queries in scripts/collection/04_report_queries.sql.
 triggers:
   - /procstats-review
   - /proc-stats
@@ -12,7 +12,7 @@ triggers:
 
 Analyze runtime statistics collected from `sys.dm_exec_procedure_stats`,
 `sys.dm_exec_trigger_stats`, and `sys.dm_exec_function_stats` into the `collect.proc_stats`
-table. Applies 20 checks (R1–R20) across four categories:
+table. Applies 25 checks (R1–R25) across five categories:
 
 - **R1–R5** — Top resource consumers: identify which procedure, trigger, or function is
   burning the most CPU, reads, or elapsed time in the collection interval
@@ -22,6 +22,8 @@ table. Applies 20 checks (R1–R20) across four categories:
   workload concentration, infrequent-but-heavy outliers
 - **R16–R20** — Trend analysis: worsening CPU/reads across snapshots, execution spikes,
   plan changes, new high-cost entries (requires ≥ 3 snapshots from Q5)
+- **R21–R25** — Advanced runtime patterns: natively compiled proc regression, high CLR ratio,
+  trigger-dominated elapsed time, parallel-to-serial regression, Query Store plan instability
 
 ## Input
 
@@ -188,6 +190,33 @@ the input does not contain multiple rows per object across different `collection
 - **Trigger:** The same `database_name` + `object_name` shows different `plan_handle` values across consecutive snapshots in the trend output
 - **Severity:** Warning
 - **Fix:** The execution plan changed during the monitoring window — plan recompilation, cache eviction, or statistics update triggered a new plan. Check whether `avg_cpu_ms` or `avg_logical_reads` worsened after the plan change (correlate with R16/R18). If so, this is a plan regression — use Query Store to force the prior plan while investigating the root cause.
+
+## Advanced Runtime Pattern Checks (R21–R25)
+
+### R21 — Natively Compiled Proc Regression
+- **Trigger:** A procedure with `object_name` that exists in `sys.sql_modules` with `EXECUTE AS` and is stored in a memory-optimized filegroup shows `avg_cpu_ms` increasing by ≥ 100% across snapshots — SQL 2014+ (In-Memory OLTP)
+- **Severity:** Warning — natively compiled procedures are expected to be extremely fast (sub-millisecond); CPU increase signals schema change, statistics shift, or lock contention on memory-optimized tables
+- **Fix:** Recompile the procedure: `EXEC sp_recompile N'schema.proc'`. Check for schema changes to underlying memory-optimized tables. Verify that `SCHEMA_AND_DATA` binding is intact and no new row-version contention has emerged. Compare STATISTICS IO output for the proc before and after the regression.
+
+### R22 — High CLR Assembly Execution Ratio
+- **Trigger:** A procedure's `total_clr_time_ms / total_elapsed_ms ≥ 40%` — indicates CLR assembly code dominates execution time
+- **Severity:** Warning — CLR integration is not always slower than T-SQL, but a ratio ≥ 40% of elapsed time warrants review; CLR assemblies bypass the query optimizer and can mask inefficient .NET code paths
+- **Fix:** Profile the CLR assembly itself (if source is available) using Visual Studio or dotnet-trace. If the CLR assembly performs I/O, consider moving that logic to T-SQL with indexed access. Evaluate whether the CLR function can be replaced by a built-in SQL Server function introduced in a later version (e.g., STRING_SPLIT, OPENJSON, STRING_AGG).
+
+### R23 — Trigger Dominating Proc Elapsed Time
+- **Trigger:** Cross-referencing `sys.dm_exec_trigger_stats` with `sys.dm_exec_procedure_stats` reveals that a trigger's `total_elapsed_ms` is ≥ 50% of the DML procedure's `total_elapsed_ms` on the same table
+- **Severity:** Warning — triggers add invisible overhead to DML; their cost does not appear in the procedure's own DMV entry and is often overlooked during tuning
+- **Fix:** Identify triggers on the table: `SELECT * FROM sys.triggers WHERE parent_id = OBJECT_ID('schema.table')`. Run the trigger body through `/tsql-review` and capture its execution plan. Consider whether trigger logic can be moved to the application layer or batched asynchronously (e.g., via Service Broker or a background job).
+
+### R24 — Parallel Proc Became Serial (CPU/Elapsed Ratio Drop)
+- **Trigger:** The same procedure shows `avg_cpu_ms / avg_elapsed_ms` ratio decreasing from ≥ 1.5 to ≤ 1.0 across consecutive snapshots — signals transition from a parallel to a serial plan
+- **Severity:** Warning — a parallel plan becoming serial is a plan regression; elapsed time typically increases while CPU drops, indicating lost parallelism
+- **Fix:** Check Query Store for plan changes: `SELECT * FROM sys.query_store_plan WHERE query_id = (SELECT query_id FROM sys.query_store_query WHERE query_hash = 0x<hash>)`. If a MAXDOP change, statistics update, or schema change caused the plan regression, use Query Store to force the parallel plan. Run `/sqlplan-review` on both plans to confirm the DOP change (check S7, N30).
+
+### R25 — QS Plan Instability Correlated to Procstats Variance
+- **Trigger:** A procedure appears in Query Store `sys.query_store_plan` with ≥ 3 distinct plans AND `avg_cpu_ms` variance between proc_stats snapshots is ≥ 50% — SQL 2016+ (Query Store)
+- **Severity:** Warning — high variance in proc stats correlated with multiple Query Store plans indicates parameter-sensitive or plan-cache-churn behavior; each plan change risks a performance cliff
+- **Fix:** Force the best plan in Query Store: `EXEC sys.sp_query_store_force_plan @query_id = <id>, @plan_id = <id>`. Investigate why plans are changing: statistics updates, ad-hoc parameter values, or RECOMPILE hints. Use `/query-store-review` (Q7–Q12) for full plan instability analysis.
 
 ---
 

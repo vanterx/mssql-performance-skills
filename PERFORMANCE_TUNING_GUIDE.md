@@ -10,17 +10,17 @@ A decision guide for choosing the right skill — or combination of skills — f
 |-------|---------|-------|-------------|
 | [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
 | [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 85 checks for anti-patterns, security, logic bugs, SQL 2017–2022 modern syntax |
-| [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
-| [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
-| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 40 checks (V1–V40): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency |
+| [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 27 checks for I/O and wait patterns |
+| [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 25 checks for N+1, sniffing, recompiles, spills, top consumers, SQL 2019/2022 modern events |
+| [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 43 checks (V1–V43): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency, IQP/PSP/ADR feature waits |
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 107 checks across operators, memory, parallelism, row widths, elapsed timing, IQP/PSP/ADR/CE feedback |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
 | [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
-| [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
-| [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
-| [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 25 checks (L1–L25): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
+| [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 30 checks for regressed queries, plan instability, resource hotspots, query-level waits, configuration health, and SQL 2019/2022 IQP/PSP/DOP/CE feedback |
+| [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 25 checks (R1–R25): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis, natively compiled proc regression, CLR ratio, trigger dominance, parallel-to-serial regression |
+| [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 30 checks (L1–L30): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics |
 | [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 33 checks (E1–E33): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, configuration signals, and SQL 2019/2022 modern feature events |
 | [`hadr-health-review`](#hadr-health-review) | `/hadr-health-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 27 checks (H1–H27): replica connectivity, data loss risk, recovery time, throughput, configuration, and modern AG features (Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection) |
 | [`spn-review`](#spn-review) | `/spn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 40 checks (K1–K40): SPN presence, service account binding, AG listener, permissions, delegation, Azure AD hybrid, gMSA rollover, FCI/DAG, FAST armoring, CNAME alias |
@@ -190,7 +190,7 @@ Or paste the raw `<deadlock>` XML directly.
 
 **Use: `/sqlwait-review`**
 
-Run the wait statistics capture query and paste the results. The skill applies 40 checks (V1–V40) based on the Waits and Queues methodology. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V40 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo).
+Run the wait statistics capture query and paste the results. The skill applies 43 checks (V1–V43) based on the Waits and Queues methodology. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V40 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V41–V43 cover SQL 2019/2022 IQP/PSP/ADR feature waits.
 
 **Step 1 — Capture wait statistics (choose one)**
 
@@ -775,28 +775,29 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|
 | `T1–T85` | `tsql-review` | T-SQL source: structural, security, correctness, deprecated syntax, performance, SQL 2017–2022 modern syntax | 85 |
-| `I1–I15` | `sqlstats-review` | I/O metrics: logical reads, scan count, physical reads, spills, LOB, columnstore | 15 |
-| `W1–W7` | `sqlstats-review` | Time metrics: CPU vs elapsed ratio, compile overhead, long execution | 7 |
+| `I1–I18` | `sqlstats-review` | I/O metrics: logical reads, scan count, physical reads, spills, LOB, columnstore, Hyperscale page server reads, temp object amplification | 18 |
+| `W1–W9` | `sqlstats-review` | Time metrics: CPU vs elapsed ratio, compile overhead, long execution, compile dominance, clock skew artifacts | 9 |
 | `X1–X12` | `sqltrace-review` | Event-level: long duration, high CPU/reads, attention, lock timeout, recompile, spill warnings | 12 |
-| `X13–X20` | `sqltrace-review` | Workload aggregate: N+1 frequency, sniffing variance, ad-hoc ratio, recompile rate, auto-grow | 8 |
+| `X13–X25` | `sqltrace-review` | Workload aggregate: N+1 frequency, sniffing variance, ad-hoc ratio, recompile rate, auto-grow, PSP switching, XE overhead, columnstore delta store, Ledger block, ADR version cleaner | 13 |
 | `V1–V18` | `sqlwait-review` | Wait types: I/O, locks, parallelism (CXPACKET/HT*), memory grants, log I/O, CPU, TempDB, latch, log space, poison/throttle waits | 18 |
 | `V19–V26` | `sqlwait-review` | Trend analysis (3+ snapshots): direction, spikes, peak period, velocity, emerging waits, correlated spikes, transient events, pattern | 8 |
 | `V27–V29` | `sqlwait-review` | Operational checks: PAGELATCH on user DBs (insert hotspots), BACKUPIO/BACKUPBUFFER (backup I/O), cumulative skew detection (outlier dominance) | 3 |
 | `V30–V36` | `sqlwait-review` | Modern feature wait types: In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, Parallel Redo | 7 |
 | `V37–V40` | `sqlwait-review` | Memory and I/O detail: forced memory grants, grant timeouts, stolen memory, file-level I/O latency (requires optional capture queries) | 4 |
+| `V41–V43` | `sqlwait-review` | SQL 2019/2022 feature waits: PSP selector wait, IQP DOP Feedback adjustment wait, ADR PVS cleanup worker wait | 3 |
 | `S1–S36` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width, PSP dispatcher, ADR version store, CE feedback | 36 |
 | `N1–N71` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes | 71 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P16` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
-| `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
-| `R1–R20` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis | 20 |
-| `L1–L25` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals | 25 |
+| `Q1–Q30` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage | 30 |
+| `R1–R25` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
+| `L1–L30` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics | 30 |
 | `H1–H27` | `hadr-health-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, configuration, Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection | 27 |
 | `E1–E33` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals, ADR PVS, IQP/CE feedback, Ledger verification, Azure Arc | 33 |
 | `K1–K40` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
 
-**Total: 488 checks across all skills.**
+**Total: 516 checks across all skills.**
 
 ---
 

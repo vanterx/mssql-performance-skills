@@ -3,7 +3,7 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [Wait Statistics Checks (V1–V36)](#wait-statistics-checks-v1v36)
+- [Wait Statistics Checks (V1–V43)](#wait-statistics-checks-v1v43)
 - [Trend Analysis Checks (V19–V26)](#trend-analysis-checks-v19v26)
 - [Operational Checks (V27–V29)](#operational-checks-v27v29)
 - [Modern Feature Checks (V30–V36)](#modern-feature-checks-v30v36)
@@ -52,7 +52,7 @@ Many wait types are normal background activity and should be excluded before ana
 
 ---
 
-## Wait Statistics Checks (V1–V36)
+## Wait Statistics Checks (V1–V43)
 
 ---
 
@@ -1279,6 +1279,109 @@ From the File I/O latency query: `avg_read_latency_ms` or `avg_write_latency_ms`
 
 ---
 
+### V41 — PSP Optimization Selector Wait (SQL 2022+)
+
+**What it means**
+`QUERY_OPTIMIZER_PSP_WAIT` appears in wait stats with cumulative wait > 1,000 ms. The Parameter Sensitive Plan (PSP) optimizer is spending significant time selecting the correct variant plan for incoming parameters — indicating either an excessive variant plan count or high plan-switching frequency across executions.
+
+**Why it matters**
+PSP optimization generates multiple variant plans (dispatcher + variants) for queries with significant parameter-driven cardinality differences. When many variants exist or switching is very frequent, the selector logic runs on every execution before the plan is dispatched. This overhead accumulates and can become measurable on high-throughput workloads calling affected queries thousands of times per second.
+
+**How to spot it**
+```sql
+SELECT wait_type, waiting_tasks_count, wait_time_ms,
+       wait_time_ms / NULLIF(waiting_tasks_count, 0) AS avg_wait_ms
+FROM sys.dm_os_wait_stats
+WHERE wait_type = 'QUERY_OPTIMIZER_PSP_WAIT'
+  AND wait_time_ms > 1000;
+```
+
+**Fix options**
+1. **Identify affected queries** — `SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP'` — find queries where the optimizer is generating and switching between variant plans.
+2. **Pin a single plan with OPTION(OPTIMIZE FOR UNKNOWN)** — if plan switching is frequent and providing little benefit: add the query hint to suppress per-parameter variant selection and use a generic plan instead.
+3. **Apply a Query Store hint** — use `sys.sp_query_store_set_hints` to bind the query to a specific plan without code changes: `EXEC sys.sp_query_store_set_hints @query_id = <id>, @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'`.
+4. **Review variant count** — if SQL Server generated more than 3 variants for a query, the cardinality ranges may be too narrow; investigate the predicate column's histogram and consider manual statistics updates.
+
+**Related checks:** V3 (CXPACKET — parallelism overhead that may co-occur with PSP-selected parallel plans), S34 in sqlplan-review (PSP Dispatcher Plan Detected)
+
+---
+
+### V42 — IQP DOP Feedback Adjustment Wait (SQL 2022+)
+
+**What it means**
+`DOP_FEEDBACK_WAIT` appears in wait stats with cumulative wait > 500 ms. Intelligent Query Processing (IQP) DOP Feedback is actively evaluating and adjusting the degree of parallelism for one or more queries. The wait itself is brief per occurrence, but recurring instances indicate feedback is frequently applying new DOP settings across executions.
+
+**Why it matters**
+DOP Feedback evaluation adds a brief wait before each adjusted execution while the feedback mechanism verifies whether the proposed DOP change improves elapsed time. When many queries are simultaneously receiving DOP adjustments, these waits accumulate. If DOP adjustments result in worse elapsed times (e.g., by eliminating parallelism on a genuinely parallel-friendly query), the feedback loop may repeatedly re-adjust, adding unnecessary overhead.
+
+**How to spot it**
+```sql
+SELECT wait_type, waiting_tasks_count, wait_time_ms,
+       wait_time_ms / NULLIF(waiting_tasks_count, 0) AS avg_wait_ms
+FROM sys.dm_os_wait_stats
+WHERE wait_type = 'DOP_FEEDBACK_WAIT'
+  AND wait_time_ms > 500;
+```
+
+Cross-reference which queries are receiving DOP adjustments:
+```sql
+SELECT query_id, plan_id, feedback_type, feedback_data
+FROM sys.query_store_plan_feedback
+WHERE feedback_type = 'DOP';
+```
+
+**Fix options**
+1. **Verify DOP adjustments are beneficial** — compare elapsed time before and after DOP reduction for the flagged queries. If regressions are observed, disable DOP Feedback for those queries.
+2. **Disable DOP Feedback for a specific query** — apply a Query Store hint: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_DOP_FEEDBACK''))'`.
+3. **Review COST_THRESHOLD_FOR_PARALLELISM** — if the cost threshold is too low, many marginal parallel plans are selected; DOP Feedback may be fighting against an underlying MAXDOP misconfiguration. Set to 25–50 and re-evaluate.
+4. **Disable globally if overall regression** — `ALTER DATABASE SCOPED CONFIGURATION SET DOP_FEEDBACK = OFF` — use only if DOP Feedback is causing broad regressions across many queries.
+
+**Related checks:** V3 (CXPACKET — parallelism), V4 (RESOURCE_SEMAPHORE — memory grants interact with DOP changes)
+
+---
+
+### V43 — ADR PVS Cleanup Worker Wait (SQL 2019+)
+
+**What it means**
+`PVSVERSIONSTORE_WAIT` or `ADR_CLEANUP_WAIT` appears in wait stats with cumulative wait > 5,000 ms. The Accelerated Database Recovery (ADR) Persistent Version Store (PVS) cleanup worker is blocked or stalled, preventing version store space reclamation. When the cleanup worker cannot advance, the PVS grows unboundedly until either the database's PVS filegroup or tempdb (the default PVS location prior to a dedicated filegroup) is exhausted.
+
+**Why it matters**
+ADR uses a persistent version store to enable instant rollback and faster log truncation. Unlike classic version store (in tempdb), the ADR PVS persists across restarts. If PVS cleanup stalls — typically because a long-running or idle open transaction holds a snapshot that cleanup cannot advance past — the PVS grows continuously. On write-heavy systems this growth can exhaust available space within hours, causing all further DML to fail.
+
+**How to spot it**
+```sql
+SELECT wait_type, waiting_tasks_count, wait_time_ms,
+       wait_time_ms / NULLIF(waiting_tasks_count, 0) AS avg_wait_ms
+FROM sys.dm_os_wait_stats
+WHERE wait_type IN ('PVSVERSIONSTORE_WAIT', 'ADR_CLEANUP_WAIT')
+  AND wait_time_ms > 5000;
+```
+
+Check PVS size and oldest active transaction:
+```sql
+-- PVS current size and cleanup state
+SELECT * FROM sys.dm_tran_persistent_version_store_stats;
+
+-- Find long-running or idle transactions blocking cleanup
+SELECT transaction_id, transaction_begin_time,
+       DATEDIFF(MINUTE, transaction_begin_time, GETUTCDATE()) AS age_minutes,
+       name AS transaction_name
+FROM sys.dm_tran_active_transactions
+WHERE transaction_begin_time < DATEADD(MINUTE, -5, GETUTCDATE())
+ORDER BY transaction_begin_time;
+```
+
+**Fix options**
+1. **Find and commit or kill the blocking transaction** — the most common cause is an open transaction (application bug, orphaned connection, long-running report) that holds a snapshot PVS cleanup cannot advance past. Kill it: `KILL <spid>`.
+2. **Monitor PVS growth** — if `sys.dm_tran_persistent_version_store_stats` shows `persistent_version_store_size_kb` growing continuously, cleanup is stalled — treat as urgent.
+3. **Move PVS to a dedicated filegroup** — `ALTER DATABASE [db] SET PERSISTENT_VERSION_STORE_FILEGROUP = [pvs_fg]` — isolates PVS growth from user data and tempdb, preventing cross-contamination of space.
+4. **Disable ADR if not required** — if ADR was enabled incidentally (Azure SQL Managed Instance enables it by default) and instant recovery is not needed: `ALTER DATABASE [db] SET ACCELERATED_DATABASE_RECOVERY = OFF`. This triggers a full PVS cleanup. Note: disabling ADR requires an exclusive database connection and may take time proportional to current PVS size.
+5. **Set application transaction timeouts** — prevent open-ended transactions from ever reaching multi-minute age; most ORMs and ADO.NET have a `CommandTimeout` and `TransactionTimeout` setting.
+
+**Related checks:** V9 (PAGELATCH TempDB contention — PVS uses tempdb by default unless a dedicated filegroup is configured), V4 (RESOURCE_SEMAPHORE — PVS cleanup can consume memory)
+
+---
+
 ## Quick Reference: Checks by Category
 
 ### Emergency / Poison (investigate immediately)
@@ -1323,6 +1426,13 @@ From the File I/O latency query: `avg_read_latency_ms` or `avg_write_latency_ms`
 | Check | Trigger | Primary Fix |
 |-------|---------|------------|
 | V40 | File avg latency ≥ 100 ms | Move files to faster storage, add TempDB files, isolate log |
+
+### Modern Query Processing / ADR (SQL 2019+/2022+)
+| Check | Name | Version | Severity |
+|-------|------|---------|----------|
+| V41 | PSP Optimization Selector Wait | SQL 2022+ | Warning |
+| V42 | IQP DOP Feedback Adjustment Wait | SQL 2022+ | Info |
+| V43 | ADR PVS Cleanup Worker Wait | SQL 2019+ | Warning |
 
 ### Capacity bound (fix server limits)
 | Check | Wait Type | Primary Fix |

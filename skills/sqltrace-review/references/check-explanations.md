@@ -4,14 +4,14 @@
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
 - [Event-Level Checks (X1–X12)](#event-level-checks-x1x12)
-- [Workload-Level Checks (X13–X20)](#workload-level-checks-x13x20)
+- [Workload-Level Checks (X13–X25)](#workload-level-checks-x13x25)
 - [How to Capture Trace Data](#how-to-capture-trace-data)
 - [Quick Reference: Checks by Severity](#quick-reference-checks-by-severity)
 
 ---
 
 
-A detailed guide to every check the analyser performs on SQL Server Profiler trace output and Extended Events session data.
+A detailed guide to every 25 checks the analyser performs on SQL Server Profiler trace output and Extended Events session data.
 Each entry explains what the check means, why it matters, how to spot it, real-world examples, and fix options ranked by impact.
 
 ---
@@ -401,7 +401,7 @@ EventClass  TextData
 
 ---
 
-## Workload-Level Checks (X13–X20)
+## Workload-Level Checks (X13–X25)
 
 ---
 
@@ -652,6 +652,140 @@ EventClass  TextData (XML truncated)          Duration   CPU    Reads
 
 ---
 
+### X21 — PSP Variant Switching in Trace (SQL 2022+)
+
+**What it means**
+The same `query_hash` appears in the trace with two or more distinct plan handles AND the duration variance across executions is greater than 5×. This indicates Parameter Sensitive Plan (PSP) optimization is switching between different compiled variant plans for different parameter values — a SQL Server 2022+ feature.
+
+**Why it matters**
+PSP optimization intentionally creates multiple plan variants calibrated to different cardinality ranges. Frequent variant switching in a trace means SQL Server is regularly re-routing executions between variant plans. If the switching is erratic or the duration variance remains large even after PSP, the thresholds may be miscalibrated or the query may need explicit guidance.
+
+**How to spot it**
+```
+query_hash              plan_handle   avg_duration_ms   executions
+0x8F3A...C12            0xA1B2...01   3 ms              8,200
+0x8F3A...C12            0xC3D4...02   1,840 ms            142
+```
+Same query hash, two plan handles, 613× duration difference → triggers X21
+
+**Fix options**
+1. Confirm PSP is active: `SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP'` — validate that both plans appear and are tagged as PSP variants.
+2. If one variant consistently performs poorly, force the better plan: `EXEC sp_query_store_force_plan @query_id = N, @plan_id = M`.
+3. Use `OPTION(OPTIMIZE FOR UNKNOWN)` to disable sniffing entirely and bypass PSP variant selection, relying on average selectivity instead.
+4. Add a Query Store hint: `EXEC sys.sp_query_store_set_hints @query_id = N, @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'`.
+
+**Related checks:** X3 (parameter sniffing variance), X14 (parameter sniffing signal)
+
+---
+
+### X22 — XE Showplan Capture Overhead > 15% (All versions)
+
+**What it means**
+`ShowPlan XML` events (Profiler class 146) or `query_post_execution_showplan` XE events account for more than 15% of the total trace event count at a rate exceeding 1,000 events per minute. The trace itself is generating significant observer overhead.
+
+**Why it matters**
+Each Showplan XML event serializes the complete plan XML inline with every captured query execution. At high event rates this is expensive: the XML serialization consumes CPU on the SQL Server and the sheer volume of data inflates trace file size. The monitoring overhead can itself degrade the workload being monitored.
+
+**How to spot it**
+```
+Total trace events (10-min window):   92,400
+query_post_execution_showplan events: 14,200
+Showplan share: 14,200 / 92,400 = 15.4% → triggers X22
+Rate: 14,200 / 10 min = 1,420 events/min → exceeds 1,000/min threshold
+```
+
+**Fix options**
+1. Limit Showplan capture to specific queries using XE predicates: filter on `sql_text LIKE '%critical_proc%'` or `query_hash = 0x...` rather than capturing all executions.
+2. After capturing representative plans for the queries under investigation, remove the Showplan event from the XE session — it is not needed for ongoing performance monitoring.
+3. Prefer Query Store for plan capture: `SELECT * FROM sys.query_store_plan` retrieves plans without runtime overhead. Use inline Showplan capture only for queries not yet in Query Store.
+
+**Related checks:** X20 (ShowPlan XML events present)
+
+---
+
+### X23 — Columnstore Delta Store Flush Frequency (SQL 2012+)
+
+**What it means**
+`columnstore_delta_store_flush` XE events appear more than 10 times within the trace window, indicating high-frequency small inserts are being written into the delta (rowstore) portion of a columnstore index and flushing repeatedly.
+
+**Why it matters**
+Columnstore indexes store data in compressed segments of approximately 1,048,576 rows. Small inserts first land in a delta store (an uncompressed B-tree rowstore). When the delta store fills, SQL Server flushes it into a compressed columnstore segment. Frequent flushes mean many small delta stores are being created and compressed, which: reduces compression efficiency (small segments compress worse), consumes background CPU for the tuple mover, and can create segment fragmentation over time.
+
+**How to spot it**
+```
+event_name                         count   table_name
+columnstore_delta_store_flush       47     dbo.FactSales
+```
+47 delta store flushes in one trace window → triggers X23 (> 10)
+
+**Fix options**
+1. Batch DML into chunks of at least 102,400 rows per transaction — inserts of this size bypass the delta store entirely and write directly into compressed columnstore segments.
+2. Review application insert patterns: replace row-by-row inserts with bulk load (`BULK INSERT`, `bcp`, or `SqlBulkCopy`) targeting the columnstore table.
+3. Enable delayed durability for non-critical columnstore tables: `ALTER DATABASE YourDb SET DELAYED_DURABILITY = ALLOWED` — reduces log flush frequency and allows larger effective batch sizes.
+4. Schedule high-volume inserts to off-peak windows to avoid competing with query workloads for tuple mover background threads.
+
+**Related checks:** I10 (columnstore segment skip rate)
+
+---
+
+### X24 — Ledger Block Generation Events (SQL 2022+)
+
+**What it means**
+`ledger_block_generated` XE events appear in the trace, confirming that SQL Server 2022 Ledger is actively generating cryptographic digests (blocks) for ledger-protected tables. A frequency exceeding 1 block per minute indicates unusually high ledger write activity.
+
+**Why it matters**
+SQL Server Ledger generates a new cryptographic block either on a configured interval or after each qualifying transaction on a ledger table. Under heavy write workloads, frequent block generation adds CPU overhead for hash computation and log writes for the block metadata. While normally modest, at very high transaction rates this can become a measurable contributor to CPU contention.
+
+**How to spot it**
+```
+event_name                count   avg_duration_ms
+ledger_block_generated      84    1.2
+```
+84 blocks generated in a trace window shorter than 84 minutes → triggers X24 (> 1/min)
+
+**Fix options**
+1. This check is primarily informational — verify via `SELECT * FROM sys.database_ledger_blocks ORDER BY block_id DESC` to confirm block generation rate and identify which ledger tables are driving activity.
+2. If Ledger overhead is contributing to CPU contention, consider whether all tables require ledger protection or whether a subset of critical tables is sufficient.
+3. No tuning knobs exist for block generation frequency — it is governed by transaction rate and the configured digest storage schedule.
+
+**Note:** X24 is SQL Server 2022+ only. `ledger_block_generated` events will not appear in traces from earlier versions.
+
+**Related checks:** X24 is version-specific; no direct sibling checks in this skill.
+
+---
+
+### X25 — ADR Version Cleaner Long-Duration Events (SQL 2019+)
+
+**What it means**
+Accelerated Database Recovery (ADR) version cleaner events — such as `pvs_garbage_collection` or similar PVS (Persistent Version Store) cleanup events — appear in the trace with duration exceeding 5,000 ms. This indicates PVS garbage collection is taking longer than expected to reclaim old row versions.
+
+**Why it matters**
+ADR maintains a Persistent Version Store in the user database to enable fast recovery and long-running reads without traditional log dependency. The version cleaner background task periodically removes old versions no longer needed by active transactions. When long-running or abandoned transactions hold version references, the cleaner stalls — PVS grows unbounded, consuming database file space and potentially degrading subsequent DML performance as version chains lengthen.
+
+**How to spot it**
+```
+event_name                  duration_ms   count
+pvs_garbage_collection        7,420          3
+pvs_garbage_collection        5,120          1
+```
+Duration > 5,000 ms → triggers X25
+
+**Fix options**
+1. Identify blocking transactions preventing PVS advancement:
+   ```sql
+   SELECT session_id, transaction_begin_time, DATEDIFF(MINUTE, transaction_begin_time, GETUTCDATE()) AS age_min
+   FROM sys.dm_tran_active_transactions
+   WHERE transaction_begin_time < DATEADD(MINUTE, -5, GETUTCDATE())
+   ORDER BY transaction_begin_time;
+   ```
+2. Commit or roll back idle long-running transactions — these are the primary cause of PVS growth.
+3. Monitor PVS size: `SELECT * FROM sys.dm_tran_persistent_version_store_stats` to track `pvs_off_row_page_skipped_low_water_mark` and `online_index_version_store_size_kb`.
+4. If a specific workload pattern consistently holds long transactions (e.g., long-running reports with READ COMMITTED), consider moving those sessions to SNAPSHOT isolation to decouple read visibility from the write transaction lifecycle.
+
+**Related checks:** X2 (long running query), V43 (ADR PVS cleanup wait in sqlwait-review)
+
+---
+
 ## How to Capture Trace Data
 
 ### Method 1 — sys.fn_trace_gettable() (existing .trc file)
@@ -743,3 +877,8 @@ ORDER BY event_time;
 | X17 | Top resource consumers (always fires) |
 | X18 | Top 3 queries > 80% of CPU |
 | X20 | ShowPlan XML events present |
+| X21 | PSP Variant Switching in Trace |
+| X22 | XE Showplan Capture Overhead > 15% |
+| X23 | Columnstore Delta Store Flush Frequency |
+| X24 | Ledger Block Generation Events |
+| X25 | ADR Version Cleaner Long-Duration Events |

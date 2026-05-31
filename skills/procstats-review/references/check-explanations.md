@@ -5,13 +5,13 @@
 - [Category 1: Top Resource Consumers (R1–R5)](#category-1-top-resource-consumers-r1r5)
 - [Category 2: Per-Execution Efficiency (R6–R10)](#category-2-per-execution-efficiency-r6r10)
 - [Category 3: Pattern Detection (R11–R15)](#category-3-pattern-detection-r11r15)
-- [Category 4: Trend Analysis (R16–R20)](#category-4-trend-analysis-r16r20)
+- [Category 4: Trend Analysis (R16–R25)](#category-4-trend-analysis-r16r25)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
 
 
-Plain-English explanations for all 20 R-checks. For check trigger conditions and thresholds,
+Plain-English explanations for all 25 R-checks. For check trigger conditions and thresholds,
 see `SKILL.md`. This file is for human reference only — it is not loaded by the skill.
 
 ---
@@ -465,7 +465,7 @@ Ran once, read ~10 GB of buffer pool, took 4.7 minutes. A full index scan on a l
 
 ---
 
-## Category 4: Trend Analysis (R16–R20)
+## Category 4: Trend Analysis (R16–R25)
 
 ### R16 — Worsening CPU Trend
 
@@ -616,6 +616,232 @@ New plan is 8× worse on CPU and 7× worse on reads. This is a plan regression.
 
 ---
 
+### R21 — Natively Compiled Proc Regression (SQL 2014+)
+
+**What it means**
+A natively compiled procedure's `avg_cpu_ms` has increased ≥ 100% across snapshots. Native
+procs are compiled directly to machine code and should run in sub-millisecond time. A CPU
+regression of this magnitude signals a schema change to the underlying memory-optimized
+table, a statistics shift affecting the compiled plan, or lock contention on memory-optimized
+table rows that forces the engine to spin-wait.
+
+**How to spot it**
+Filter proc_stats snapshots on procedures whose objects reside in memory-optimized filegroups
+(check `sys.filegroups WHERE type = 'FX'`). Compare `avg_cpu_ms` across snapshots — a
+doubling or worse across consecutive intervals triggers R21.
+
+**Example (problem)**
+```
+snapshot             object_name              avg_cpu_ms
+08:00:00             usp_InsertOrderLine      0.12
+08:05:00             usp_InsertOrderLine      0.31
+08:10:00             usp_InsertOrderLine      0.84   ← 7× from baseline
+```
+A native proc that was 0.12 ms per call is now 0.84 ms — still fast in absolute terms but
+regression of 600% indicates something changed in the memory-optimized table or its indexes.
+
+**Fix options**
+1. Recompile the native proc: `EXEC sp_recompile N'schema.proc';` — this drops and regenerates
+   the native DLL.
+2. Check for schema changes to the underlying memory-optimized table: added/removed columns,
+   index changes, or hash bucket count misconfiguration.
+3. Verify the SCHEMA_AND_DATA binding is intact:
+   ```sql
+   SELECT durability_desc, memory_optimized
+   FROM sys.tables WHERE name = 'YourTable';
+   ```
+4. Check for row-level lock contention: natively compiled procs use optimistic concurrency;
+   contention shows as elevated `avg_elapsed_ms` with `avg_cpu_ms` unchanged.
+
+**Related checks:** R16 (CPU worsening trend), R8 (parameter sniffing)
+
+---
+
+### R22 — High CLR Assembly Execution Ratio (All versions)
+
+**What it means**
+`total_clr_time_ms / total_elapsed_ms` ≥ 40% for a procedure, meaning CLR assembly code
+dominates execution time. CLR functions run outside the SQL Server query engine and cannot
+be optimized by the query processor. High CLR ratios indicate the procedure is doing
+work that may be expressible more efficiently in native T-SQL.
+
+**How to spot it**
+Calculate the CLR ratio from proc_stats output:
+```sql
+SELECT object_name,
+       total_clr_time_ms,
+       total_elapsed_ms,
+       CAST(total_clr_time_ms * 100.0 / NULLIF(total_elapsed_ms, 0) AS decimal(5,1))
+           AS clr_pct
+FROM #procstats_snapshot
+WHERE total_clr_time_ms * 100.0 / NULLIF(total_elapsed_ms, 0) >= 40;
+```
+
+**Example (problem)**
+```
+object_name          total_elapsed_ms   total_clr_time_ms   clr_pct
+usp_ParseXmlData     180,400            92,000              51.0
+```
+51% of elapsed time spent in CLR. The procedure is parsing XML inside a CLR assembly
+when `OPENXML` or `nodes()` methods in T-SQL may be sufficient.
+
+**Fix options**
+1. Profile the CLR assembly if source is available — identify which CLR method dominates.
+2. Evaluate replacing CLR logic with built-in SQL Server functions:
+   - String splitting → `STRING_SPLIT` (SQL 2016+)
+   - JSON parsing → `OPENJSON` (SQL 2016+)
+   - String aggregation → `STRING_AGG` (SQL 2017+)
+   - XML parsing → `.nodes()`, `.value()`, `.query()` methods
+3. If the CLR function performs file or network I/O, consider moving that logic to the
+   application layer and passing results in as parameters or TVPs.
+4. Check CLR assembly permissions — UNSAFE assemblies have higher overhead than SAFE ones.
+
+**Related checks:** R5 (top elapsed consumer), R6 (high avg elapsed)
+
+---
+
+### R23 — Trigger Dominating Proc Elapsed Time (All versions)
+
+**What it means**
+A trigger on a table is adding hidden overhead not visible in the procedure's own DMV entry.
+When a trigger's `total_elapsed_ms` (from `sys.dm_exec_trigger_stats`) is ≥ 50% of the
+calling DML procedure's `total_elapsed_ms`, the trigger is the dominant cost — but it
+appears as blocking or I/O wait time in the procedure's elapsed, not as CPU.
+
+**How to spot it**
+Cross-reference `sys.dm_exec_trigger_stats` with proc_stats for the same table:
+```sql
+SELECT ts.object_id, OBJECT_NAME(ts.object_id) AS trigger_name,
+       ts.total_elapsed_time / 1000.0 AS trigger_elapsed_ms
+FROM sys.dm_exec_trigger_stats ts
+WHERE ts.database_id = DB_ID();
+```
+If a trigger's elapsed is ≥ 50% of the proc that writes to its parent table, R23 fires.
+
+**Example (problem)**
+```
+object_name              total_elapsed_ms   role
+usp_InsertOrder          48,200             caller proc
+trg_Order_AfterInsert    31,400             trigger on Orders table
+```
+The trigger consumes 65% of the proc's total elapsed time. The proc looks expensive in
+procstats, but the root cause is the trigger.
+
+**Fix options**
+1. Identify all triggers on the target table:
+   ```sql
+   SELECT name, is_disabled, is_instead_of_trigger
+   FROM sys.triggers
+   WHERE parent_id = OBJECT_ID('schema.table');
+   ```
+2. Capture the trigger body and run it through `/tsql-review` to find anti-patterns.
+3. Consider moving trigger logic to the application layer (event-driven architecture)
+   or to an async process (Service Broker, queue table + background job).
+4. If the trigger does referential integrity work, evaluate whether a FK constraint
+   with cascades would be faster.
+
+**Related checks:** R5 (top elapsed consumer), R1 (top CPU consumer)
+
+---
+
+### R24 — Parallel Proc Became Serial (CPU/Elapsed Ratio Drop) (All versions)
+
+**What it means**
+The `avg_cpu_ms / avg_elapsed_ms` ratio (CPU-to-elapsed ratio) drops from ≥ 1.5 to ≤ 1.0
+across snapshots for the same procedure. A ratio above 1.5 indicates parallelism was active
+(CPU > elapsed because multiple threads run concurrently). Dropping to ≤ 1.0 means the
+procedure has become serial — elapsed time increases while CPU time drops, which is the
+unmistakable signature of lost parallelism.
+
+**How to spot it**
+Calculate CPU/elapsed ratio per snapshot from proc_stats trend data:
+```sql
+SELECT collection_time, object_name,
+       avg_cpu_ms, avg_elapsed_ms,
+       CAST(avg_cpu_ms * 1.0 / NULLIF(avg_elapsed_ms, 0) AS decimal(6,2))
+           AS cpu_elapsed_ratio
+FROM #procstats_trend
+ORDER BY object_name, collection_time;
+```
+If ratio was ≥ 1.5 in early snapshots and ≤ 1.0 in later snapshots, R24 fires.
+
+**Example (problem)**
+```
+collection_time      avg_cpu_ms   avg_elapsed_ms   cpu_elapsed_ratio
+08:00:00             18,400       4,200            4.38   ← parallel (DOP ~4)
+08:05:00             17,900       4,350            4.11
+08:10:00             6,200        8,800            0.70   ← serial (plan changed)
+08:15:00             6,100        9,100            0.67
+```
+The procedure lost its parallel plan at 08:10. Elapsed time doubled, CPU halved.
+
+**Fix options**
+1. Check Query Store for plan changes at that timestamp:
+   ```sql
+   SELECT qp.plan_id, qp.last_compile_start_time, qp.query_plan
+   FROM sys.query_store_plan qp
+   JOIN sys.query_store_query qq ON qp.query_id = qq.query_id
+   WHERE qq.object_id = OBJECT_ID('schema.proc')
+   ORDER BY qp.last_compile_start_time DESC;
+   ```
+2. Use Query Store to force the parallel plan: `sys.sp_query_store_force_plan`.
+3. Run `/sqlplan-review` on both plans to confirm DOP change (check S7 — DOP threshold,
+   N30 — parallelism suppression).
+4. Check for MAXDOP hints, Resource Governor limits, or CTFP changes that suppress parallelism.
+
+**Related checks:** R20 (plan instability trend), R16 (CPU worsening)
+
+---
+
+### R25 — QS Plan Instability Correlated to Procstats Variance (SQL 2016+)
+
+**What it means**
+A procedure appears in Query Store with ≥ 3 distinct plans AND `avg_cpu_ms` variance between
+proc_stats snapshots is ≥ 50%. The combination of multiple Query Store plans and high
+snapshot-to-snapshot variance in procstats confirms parameter-sensitive plan selection or
+plan cache churn — the optimizer is choosing different plans on different executions, causing
+unpredictable performance.
+
+**How to spot it**
+Correlate proc_stats variance with `sys.query_store_plan` plan count for the same proc:
+```sql
+-- Step 1: count Query Store plans for the proc
+SELECT qq.object_id, COUNT(DISTINCT qp.plan_id) AS plan_count
+FROM sys.query_store_plan qp
+JOIN sys.query_store_query qq ON qp.query_id = qq.query_id
+WHERE qq.object_id = OBJECT_ID('schema.proc')
+GROUP BY qq.object_id
+HAVING COUNT(DISTINCT qp.plan_id) >= 3;
+
+-- Step 2: check proc_stats avg_cpu_ms variance across snapshots
+-- R25 fires when plan_count >= 3 AND (MAX(avg_cpu_ms) - MIN(avg_cpu_ms)) / MIN(avg_cpu_ms) >= 0.50
+```
+
+**Example (problem)**
+```
+object_name          QS plan count   min avg_cpu_ms   max avg_cpu_ms   variance_pct
+usp_SearchProducts   5               85               920              982%
+```
+Five plans in Query Store, CPU ranging from 85 ms to 920 ms per execution — a 10× spread.
+
+**Fix options**
+1. Force the best plan in Query Store:
+   ```sql
+   EXEC sys.sp_query_store_force_plan @query_id = N, @plan_id = M;
+   ```
+2. Investigate why plans are changing — common causes:
+   - Ad-hoc parameter values triggering plan recompilation
+   - `WITH RECOMPILE` or `OPTION (RECOMPILE)` producing many ad-hoc plans
+   - Statistics updates during business hours causing automatic recompilation
+   - SET option mismatches (ARITHABORT, ANSI_NULLS) producing parallel plan variants
+3. Use `/query-store-review` checks Q7–Q12 for full plan instability analysis including
+   regressed query detection and forced plan health verification.
+4. Consider `OPTIMIZE FOR UNKNOWN` or local variable pattern to stabilize plan selection.
+
+**Related checks:** R20 (plan instability trend), R11 (plan instability pattern)
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Key Column(s) | Warning Threshold |
@@ -640,3 +866,8 @@ New plan is 8× worse on CPU and 7× worse on reads. This is a plan regression.
 | R18 | Trend | `avg_logical_reads` increase | > 50% oldest→newest |
 | R19 | Trend | new entry + high resources | first seen + R1/R7 threshold |
 | R20 | Trend | distinct plan_handle across time | > 1 plan in window |
+| R21 | Trend | native proc `avg_cpu_ms` increase | ≥ 100% across snapshots |
+| R22 | Trend | `total_clr_time_ms / total_elapsed_ms` | ≥ 40% |
+| R23 | Trend | trigger elapsed vs proc elapsed | trigger ≥ 50% of proc |
+| R24 | Trend | `avg_cpu_ms / avg_elapsed_ms` ratio drop | ≥ 1.5 → ≤ 1.0 |
+| R25 | Trend | QS plan count + procstats CPU variance | ≥ 3 plans + ≥ 50% variance |

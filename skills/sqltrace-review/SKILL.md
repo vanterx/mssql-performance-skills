@@ -1,6 +1,6 @@
 ---
 name: sqltrace-review
-description: Analyze SQL Server trace files and Extended Events output to identify workload-level performance patterns. Applies 20 checks (X1–X12 event-level, X13–X20 workload aggregate) covering long-running queries, high-frequency N+1 patterns, parameter sniffing signals, recompilations, lock timeouts, hash/sort warnings, and top resource consumers. Use when a user provides Profiler trace output, sys.fn_trace_gettable() results, or Extended Events session data.
+description: Analyze SQL Server trace files and Extended Events output to identify workload-level performance patterns. Applies 25 checks (X1–X12 event-level, X13–X25 workload aggregate) covering long-running queries, high-frequency N+1 patterns, parameter sniffing signals, recompilations, lock timeouts, hash/sort warnings, top resource consumers, and SQL 2019/2022 modern feature events. Use when a user provides Profiler trace output, sys.fn_trace_gettable() results, or Extended Events session data.
 triggers:
   - /sqltrace-review
   - /trace-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze workload-level diagnostic data from SQL Server Profiler traces (`.trc`), Extended Events sessions (`.xel`), `sys.fn_trace_gettable()` output, or XE session query results. Produce a ranked summary of top resource consumers and a prioritized findings report covering 20 checks (X1–X20) across event patterns and cross-event workload aggregates.
+Analyze workload-level diagnostic data from SQL Server Profiler traces (`.trc`), Extended Events sessions (`.xel`), `sys.fn_trace_gettable()` output, or XE session query results. Produce a ranked summary of top resource consumers and a prioritized findings report covering 25 checks (X1–X25) across event patterns and cross-event workload aggregates.
 
 Trace analysis reveals patterns that no single-query artifact can show: which queries run thousands of times per minute, which have wildly inconsistent durations (parameter sniffing), how many recompilations are happening globally, and whether spill or lock events correlate with slow periods.
 
@@ -136,7 +136,7 @@ Evaluate per-event rows. A check fires if any single event meets its trigger con
 
 ---
 
-## Workload-Level Checks (X13–X20)
+## Workload-Level Checks (X13–X25)
 
 Evaluate aggregated patterns across all events in the trace.
 ### X13 — High-Frequency Query (N+1 Signal)
@@ -171,6 +171,31 @@ Evaluate aggregated patterns across all events in the trace.
 - **Trigger:** Any event with class 146 (`Showplan XML`) or XE `query_post_execution_showplan`
 - **Severity:** Info
 - **Fix:** The trace captured execution plan XML inline. Extract the plan XML for the slowest queries and run `/sqlplan-review` on them directly — this is a richer artifact than trace metrics alone. Note that capturing Showplan XML for every query significantly increases trace overhead; disable this event class on production traces after initial diagnosis.
+
+### X21 — PSP Variant Switching in Trace
+- **Trigger:** The same `query_hash` appears with ≥ 2 distinct `plan_handle` values AND duration variance ratio > 5× — SQL 2022+; flag as possible PSP variant switching if `query_hash` recurrence patterns show sub-second plan handle changes
+- **Severity:** Warning — Parameter Sensitive Plan (PSP) variant switching produces multiple plans for the same query; when plans switch frequently it may signal that PSP thresholds are miscalibrated
+- **Fix:** Confirm in Query Store: `SELECT * FROM sys.query_store_plan WHERE query_id = (SELECT query_id FROM sys.query_store_query WHERE query_hash = 0x<hash>)`. If PSP variant plans are causing instability, consider `OPTION(OPTIMIZE FOR UNKNOWN)` or a Query Store hint to pin one plan.
+
+### X22 — XE Showplan Capture Overhead > 15%
+- **Trigger:** Trace duration totals show XE session events with `query_post_execution_showplan` account for > 15% of total trace event count AND the trace window has > 1,000 events per minute
+- **Severity:** Warning — Showplan XML capture at high event frequency creates observer overhead that slows the workload being diagnosed; the trace is changing the behavior it is observing
+- **Fix:** Limit Showplan XML capture to specific query hashes using XE predicates: `WHERE sqlserver.query_hash = 0x<hash>`. After capturing one representative plan per query of interest, remove the Showplan event from the session. On production, prefer capturing plans via Query Store rather than inline XE Showplan.
+
+### X23 — Columnstore Delta Store Flush Frequency
+- **Trigger:** XE `columnstore_delta_store_flush` events appear > 10 times within the trace window — SQL 2012+
+- **Severity:** Info — frequent delta store flushes indicate that the columnstore is receiving frequent small inserts or DML rather than large bulk loads; this reduces compression efficiency and increases row-mode overhead
+- **Fix:** Batch DML into larger sets (rows ≥ 102,400 per batch) to allow direct compressed segment insertion instead of delta store staging. Review the application's insert patterns. If real-time insert rate cannot be batched, enable delayed durability on the database for columnstore tables to reduce log flush overhead.
+
+### X24 — Ledger Block Generation Events
+- **Trigger:** XE `ledger_block_generated` events present in trace — SQL 2022+ only; skip if event is absent
+- **Severity:** Info — Ledger block generation events confirm that the SQL 2022 Ledger feature is active and generating cryptographic digests; the event itself is informational but high frequency (> 1/minute) may indicate unusually high ledger write activity
+- **Fix:** Ledger blocks are generated per-transaction or per configured interval. High-frequency generation is expected with high ledger write volume. Monitor: `SELECT * FROM sys.database_ledger_blocks ORDER BY block_id DESC`. No tuning action unless ledger overhead is contributing to CPU contention.
+
+### X25 — ADR Version Cleaner Long-Duration Events
+- **Trigger:** XE `hadr_db_partner_set_sync_state` or `pvs_garbage_collection` events with `duration_ms > 5000` — SQL 2019+; skip if events absent
+- **Severity:** Warning — ADR Persistent Version Store (PVS) garbage collection is taking > 5 seconds; this blocks version store space reclamation and can indicate long-running transactions preventing cleanup
+- **Fix:** Identify blocking transactions: `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_begin_time < DATEADD(MINUTE,-5,GETUTCDATE())`. Check PVS size: `SELECT * FROM sys.dm_tran_persistent_version_store_stats`. Commit or roll back idle transactions to unblock cleanup.
 
 ---
 
