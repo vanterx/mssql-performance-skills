@@ -3,7 +3,7 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [Wait Statistics Checks (V1–V43)](#wait-statistics-checks-v1v43)
+- [Wait Statistics Checks (V1–V44)](#wait-statistics-checks-v1v44)
 - [Trend Analysis Checks (V19–V26)](#trend-analysis-checks-v19v26)
 - [Operational Checks (V27–V29)](#operational-checks-v27v29)
 - [Modern Feature Checks (V30–V36)](#modern-feature-checks-v30v36)
@@ -52,7 +52,7 @@ Many wait types are normal background activity and should be excluded before ana
 
 ---
 
-## Wait Statistics Checks (V1–V43)
+## Wait Statistics Checks (V1–V44)
 
 ---
 
@@ -1382,6 +1382,43 @@ ORDER BY transaction_begin_time;
 
 ---
 
+### V44 — TempDB Metadata Latch Contention — Memory-Optimized Metadata Not Enabled (SQL 2019+)
+
+**What it means**
+`PAGELATCH_EX` or `PAGELATCH_SH` appears in the top 10 waits but the contended pages are TempDB data pages beyond the allocation bitmap pages (resource pages 4+), meaning the latch is on system catalog rows — not on allocation pages (PFS/GAM/SGAM, which are pages 1–3 and covered by V9). This pattern occurs when many concurrent sessions create, use, and drop temporary objects: temp tables, TVPs, or worktables, and their metadata rows contend on the same TempDB system pages.
+
+**Why it matters**
+TempDB system object creation serializes on catalog page latches even when TempDB has many data files (which fixes PFS/GAM contention from V9). Memory-optimized TempDB metadata, introduced in SQL 2019, moves the system object metadata for TempDB into in-memory structures, eliminating this latch class entirely without any application changes required.
+
+**How to spot it**
+```sql
+-- Identify TempDB page contention beyond allocation pages
+SELECT resource_description, wait_type, COUNT(*) AS waiters
+FROM sys.dm_os_waiting_tasks
+WHERE wait_type IN ('PAGELATCH_EX', 'PAGELATCH_SH')
+  AND resource_description LIKE '2:1:%'
+GROUP BY resource_description, wait_type
+ORDER BY waiters DESC;
+-- Pages 2:1:1, 2:1:2, 2:1:3 = PFS/GAM/SGAM (V9)
+-- Pages 2:1:4+ = system metadata pages (V44 territory)
+```
+
+**Fix options**
+1. Enable TempDB memory-optimized metadata (requires restart):
+   ```sql
+   ALTER SERVER CONFIGURATION
+   SET MEMORY_OPTIMIZED TEMPDB_METADATA = ON;
+   ```
+   Then restart the SQL Server service. After restart, verify: `SELECT * FROM sys.configurations WHERE name = 'tempdb metadata memory-optimized'`
+2. Before restarting, verify the contention is on pages > 3 using `sys.dm_os_waiting_tasks` above — page 1 (PFS), 2 (GAM), and 3 (SGAM) contention means V9 (add more TempDB files) is the right fix instead
+3. Not available on Azure SQL Database or Azure SQL Managed Instance — both platforms manage TempDB internally and the feature is not exposed to users
+4. If the environment cannot be restarted immediately: reduce concurrent temp object creation (connection pooling, reuse temp tables within sessions, use table variables for small result sets), or partition the workload to reduce peak TempDB concurrency
+5. Requires SQL Server 2019 (15.x) or later; the `ALTER SERVER CONFIGURATION` syntax for this option does not exist on SQL 2017 or earlier
+
+**Related checks:** V9 (TempDB PFS/GAM/SGAM allocation page contention — different page range), V14 (LATCH_EX/SH on non-page latches)
+
+---
+
 ## Quick Reference: Checks by Category
 
 ### Emergency / Poison (investigate immediately)
@@ -1433,6 +1470,7 @@ ORDER BY transaction_begin_time;
 | V41 | PSP Optimization Selector Wait | SQL 2022+ | Warning |
 | V42 | IQP DOP Feedback Adjustment Wait | SQL 2022+ | Info |
 | V43 | ADR PVS Cleanup Worker Wait | SQL 2019+ | Warning |
+| V44 | TempDB Metadata Latch Contention — Memory-Optimized Metadata Not Enabled | SQL 2019+ | Warning |
 
 ### Capacity bound (fix server limits)
 | Check | Wait Type | Primary Fix |

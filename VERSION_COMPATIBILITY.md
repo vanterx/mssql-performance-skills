@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 516 checks in this library apply to your SQL Server version.
+Which of the 519 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -52,15 +52,15 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 516 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 519 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **511** | 5 Azure-specific checks (I15, I17, K32, K33, E33) not applicable |
-| SQL Server 2019 | **489** | +22 SQL 2022-only checks unavailable |
-| SQL Server 2017 | **478** | +11 SQL 2019-only checks unavailable |
-| SQL Server 2016 | **468** | +10 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **443** | −25 more: all 30 Query Store checks unavailable (SQL 2016 introduced QS); minus S10, K36, P16, R25 |
+| SQL Server 2022 | **514** | 5 Azure-specific checks (I15, I17, K32, K33, E33) not applicable |
+| SQL Server 2019 | **491** | +23 SQL 2022-only checks unavailable |
+| SQL Server 2017 | **479** | +12 SQL 2019-only checks unavailable |
+| SQL Server 2016 | **468** | +11 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **443** | −25 more: all 32 Query Store checks unavailable on SQL 2014 (QS introduced SQL 2016; Q31/Q32 require SQL 2022/2017 and are also absent from SQL 2016); minus S10, K36, P16, R25 |
 | SQL Server 2012 | **442** | −1 more: R21 (In-Memory OLTP, SQL 2014+) unavailable |
 | SQL Server 2008 R2 | **383** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
 
@@ -99,10 +99,10 @@ These checks require features introduced in SQL Server 2012.
 | S10 | `sqlplan-review` | Downlevel Cardinality Estimator | Compat level 130 CE baseline (SQL 2016+) |
 | H25 | `hadr-health-review` | Parallel Redo Worker Saturation | Parallel redo for AG secondaries (SQL 2016+) |
 | K36 | `spn-review` | Distributed AG Forwarder Listener SPN Missing | Distributed Availability Groups (SQL 2016+) |
-| P16 | `sqlplan-deadlock` | Ledger / Temporal History Table Deadlock | Temporal tables (SQL 2016+); Ledger tables (SQL 2022+) |
+| P16 | `sqlplan-deadlock` | Ledger / Temporal History Table Deadlock | Temporal tables only (SQL 2016+); see SQL 2022+ for Ledger aspect |
 | R25 | `procstats-review` | QS Plan Instability Correlated to Procstats Variance | Query Store (SQL 2016+) |
 
-**Entire skill at SQL 2016+:** `query-store-review` (Q1–Q30). Query Store was introduced in SQL 2016. On SQL 2016 only Q1–Q18 and Q23–Q25 are fully active; the remaining checks require SQL 2017–2022 features (see below).
+**Entire skill at SQL 2016+:** `query-store-review` (Q1–Q32). Query Store was introduced in SQL 2016. On SQL 2016 only Q1–Q18 and Q23–Q25 are fully active; the remaining checks require SQL 2017–2022 features (see below).
 
 ### SQL Server 2017+
 
@@ -118,6 +118,7 @@ These checks require features introduced in SQL Server 2012.
 | Q20 | `query-store-review` | Lock Wait Dominant for High-Contention Queries | `sys.query_store_wait_stats` (SQL 2017+) |
 | Q21 | `query-store-review` | Parallel Execution Wait Ratio Above Threshold | `sys.query_store_wait_stats` (SQL 2017+) |
 | Q22 | `query-store-review` | Log I/O Wait Dominant for High-Write Queries | `sys.query_store_wait_stats` (SQL 2017+) |
+| Q32 | `query-store-review` | Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled | `sys.dm_db_tuning_recommendations` + `sys.database_automatic_tuning_options` (SQL 2017+) |
 
 ### SQL Server 2019+
 
@@ -134,6 +135,7 @@ These checks require features introduced in SQL Server 2012.
 | E29 | `errorlog-review` | ADR PVS Cleanup Stall | Accelerated Database Recovery (SQL 2019+) |
 | X25 | `sqltrace-review` | ADR Version Cleaner Long-Duration Events | ADR version cleaner XE events (SQL 2019+) |
 | Q29 | `query-store-review` | Memory Grant Feedback Instability | Memory Grant Feedback (batch mode SQL 2019+; row mode SQL 2022+) |
+| V44 | `sqlwait-review` | TempDB Metadata Latch Contention — Memory-Optimized Metadata Not Enabled | `ALTER SERVER CONFIGURATION SET MEMORY_OPTIMIZED TEMPDB_METADATA` (SQL 2019+) |
 
 ### SQL Server 2022+ only
 
@@ -161,6 +163,8 @@ These checks require features introduced in SQL Server 2012.
 | Q27 | `query-store-review` | CE Feedback Persistent Model Adjustment | CE Feedback in `sys.query_store_plan_feedback` (compat level 160) |
 | Q28 | `query-store-review` | DOP Feedback Applied | DOP Feedback in `sys.query_store_plan_feedback` (compat level 160) |
 | Q30 | `query-store-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2022+) |
+| P16 | `sqlplan-deadlock` | Ledger / Temporal History Table Deadlock (Ledger aspect) | Ledger tables (SQL 2022+); temporal aspect listed under SQL 2016+ |
+| Q31 | `query-store-review` | Query Store Hint Ineffective or Stale | `sys.query_store_query_hints` (SQL 2022+) |
 
 ### Windows Server Version-Gated Checks
 
@@ -203,7 +207,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**383 of 516 checks (74.2%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**383 of 519 checks (73.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
@@ -228,9 +232,9 @@ These checks analyze behaviors present since SQL Server 2008 R2:
 | "I'm on SQL…" | Run these skills without restrictions | Skip or expect partial results |
 |---|---|---|
 | **2022** | All 16 skills | 5 Azure-specific checks silently skip on-premises |
-| **2019** | All 16 skills | 22 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback) skip |
-| **2017** | All 16 skills | Above + 11 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR) skip |
-| **2016** | All 16 skills | Above + 10 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats) skip |
+| **2019** | All 16 skills | 23 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints) skip |
+| **2017** | All 16 skills | Above + 12 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata) skip |
+| **2016** | All 16 skills | Above + 11 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
 | **2014** | 15 skills (no `query-store-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
 | **2012** | 15 skills (no `query-store-review`) | Above + R21 (In-Memory OLTP not yet available) |
 | **2008 R2** | 13 skills (no `hadr-health-review`, `clusterlog-review`, `query-store-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23) |

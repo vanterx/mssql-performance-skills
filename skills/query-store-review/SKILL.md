@@ -1,6 +1,6 @@
 ---
 name: query-store-review
-description: Analyze SQL Server Query Store data to identify regressed queries, plan instability, top resource consumers, query-level wait patterns, configuration issues, and SQL 2019/2022 IQP/PSP/DOP/CE feedback signals. Applies 30 checks (Q1–Q30). Use when a user pastes Query Store DMV output or asks about workload performance trends.
+description: Analyze SQL Server Query Store data to identify regressed queries, plan instability, top resource consumers, query-level wait patterns, configuration issues, and SQL 2019/2022 IQP/PSP/DOP/CE feedback signals. Applies 32 checks (Q1–Q32). Use when a user pastes Query Store DMV output or asks about workload performance trends.
 triggers:
   - /query-store-review
   - /qs-review
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Analyze SQL Server Query Store (`sys.query_store_*` DMV) output to identify the most impactful queries in a workload, detect performance regressions, surface plan instability, flag resource hotspots, audit Query Store configuration health, and detect SQL 2019/2022 IQP/PSP/DOP/CE feedback signals. Applies 30 checks across six categories: regressed queries (Q1–Q6), plan stability (Q7–Q12), resource hotspots (Q13–Q18), query-level waits (Q19–Q22), operational health (Q23–Q25), and modern IQP/feedback checks (Q26–Q30).
+Analyze SQL Server Query Store (`sys.query_store_*` DMV) output to identify the most impactful queries in a workload, detect performance regressions, surface plan instability, flag resource hotspots, audit Query Store configuration health, and detect SQL 2019/2022 IQP/PSP/DOP/CE feedback signals. Applies 32 checks across six categories: regressed queries (Q1–Q6), plan stability (Q7–Q12), resource hotspots (Q13–Q18), query-level waits (Q19–Q22), operational health (Q23–Q25), and modern IQP/feedback checks (Q26–Q32).
 
 Query Store is the most powerful built-in monitoring tool in SQL Server 2016+. It persists query execution history, plan history, runtime statistics, and wait statistics across server restarts — enabling trend analysis without external monitoring tools. This skill is the diagnostic counterpart to `sqlplan-review`: Query Store tells you *which* queries need attention; execution plan review tells you *why*.
 
@@ -288,7 +288,7 @@ Evaluate Query Store configuration health.
 - **Severity:** Info
 - **Fix:** Query Store wait statistics capture is not enabled. Enable it with: `ALTER DATABASE CURRENT SET QUERY_STORE = ON (WAIT_STATS_CAPTURE_MODE = ON)`. This adds minor overhead (< 2%) and enables per-query wait analysis (Q19–Q22). Recommended for all production databases.
 
-## IQP, PSP, and Feedback Checks (Q26–Q30)
+## IQP, PSP, and Feedback Checks (Q26–Q32)
 
 ### Q26 — PSP Optimization Active
 - **Trigger:** `sys.query_store_plan_feedback` contains rows with `feedback_type = 'PSP'` — SQL 2022+ only; skip if the column is absent
@@ -314,6 +314,16 @@ Evaluate Query Store configuration health.
 - **Trigger:** Query Store is enabled AND the AG has readable secondaries, but `sys.query_store_replicas` returns no rows or fewer replicas than exist in the AG — SQL 2022+ only; skip if `sys.query_store_replicas` view is absent
 - **Severity:** Info — Query Store replica coverage is not capturing secondary replica workloads; read-heavy secondary workloads will not appear in the Query Store unless each replica's data is separately collected
 - **Fix:** Enable Query Store for read-only replicas: `ALTER DATABASE [db] SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO, READ_WRITE_DATABASES_ONLY = OFF)`. On SQL 2022+, verify the `query_store_capture_policy` allows read-only replica capture. Review `sys.query_store_replicas` after enabling.
+
+### Q31 — Query Store Hint Ineffective or Stale
+- **Trigger:** `sys.query_store_query_hints` contains rows where `is_disabled = 1` OR `nthint_failed_last_invocation = 1`; OR hint `query_id` not found in `sys.query_store_query` (orphaned after query eviction) — SQL 2022+ only; skip if `sys.query_store_query_hints` is absent or returns no rows
+- **Severity:** Warning — A Query Store hint is disabled, failed to apply, or is referencing a query that no longer exists in the store; the hint provides no protection and may signal a stale tuning artifact
+- **Fix:** For `nthint_failed_last_invocation = 1`: re-examine hint syntax — `sp_query_store_set_hints` accepts only a subset of `OPTION()` hints and invalid names fail silently. For orphaned hints: `EXEC sys.sp_query_store_clear_hints @query_id = <id>`. When IQP CE/DOP Feedback (Q27–Q28) is active on the same query, prefer removing the hint and letting the adaptive feedback mechanism manage the plan.
+
+### Q32 — Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled
+- **Trigger:** `sys.dm_db_tuning_recommendations` has rows with `type = 'FORCE_LAST_GOOD_PLAN'` in `state = 'Verifying'` or `state = 'Active'` AND `sys.database_automatic_tuning_options` shows `FORCE_LAST_GOOD_PLAN` is `OFF` or `INHERIT_OFF` — SQL 2017+ only; skip if `dm_db_tuning_recommendations` is absent or empty
+- **Severity:** Info — SQL Server has identified plan regression candidates eligible for auto-correction but automatic tuning is not enabled; regressions will persist until manually corrected
+- **Fix:** Enable auto-plan correction: `ALTER DATABASE [db] SET AUTOMATIC_TUNING (FORCE_LAST_GOOD_PLAN = ON)`. Requires Query Store in `READ_WRITE` mode (check Q11). Complements IQP feedback (Q26–Q30); the two mechanisms work independently. Avoid enabling alongside active Query Store Hints (Q31) targeting the same query IDs.
 
 ---
 

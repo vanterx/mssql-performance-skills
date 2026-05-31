@@ -9,7 +9,7 @@
 - [Resource Hotspots (Q13–Q18)](#resource-hotspots-q13q18)
 - [Query-Level Waits (Q19–Q22)](#query-level-waits-q19q22)
 - [Operational Health (Q23–Q25)](#operational-health-q23q25)
-- [IQP, PSP, and Feedback Checks (Q26–Q30)](#iqp-psp-and-feedback-checks-q26q30)
+- [IQP, PSP, and Feedback Checks (Q26–Q32)](#iqp-psp-and-feedback-checks-q26q32)
 - [Quick Reference](#quick-reference)
 
 ---
@@ -729,7 +729,7 @@ Query Store tracks three execution types:
 
 ---
 
-## IQP, PSP, and Feedback Checks (Q26–Q30)
+## IQP, PSP, and Feedback Checks (Q26–Q32)
 
 ### Q26 — PSP Optimization Active (SQL 2022+)
 
@@ -869,6 +869,80 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 
 ---
 
+### Q31 — Query Store Hint Ineffective or Stale (SQL 2022+)
+
+**What it means:** `sys.query_store_query_hints` contains a row that is disabled, failed to apply on the last invocation, or references a `query_id` that no longer exists in `sys.query_store_query` — the hint is a dead artifact providing no protection.
+
+**How to spot it:**
+```sql
+-- Find disabled or failed hints
+SELECT qh.query_hint_id, qh.query_id, qh.query_hint_text,
+       qh.is_disabled, qh.nthint_failed_last_invocation
+FROM sys.query_store_query_hints qh
+LEFT JOIN sys.query_store_query q ON qh.query_id = q.query_id
+WHERE qh.is_disabled = 1
+   OR qh.nthint_failed_last_invocation = 1
+   OR q.query_id IS NULL;  -- orphaned
+```
+
+**Why it matters:** `sp_query_store_set_hints` accepts only a subset of `OPTION()` hints. Invalid hint names are not validated at creation time — they fail silently on first invocation and set `nthint_failed_last_invocation = 1`. Orphaned hints accumulate when query text changes enough to evict the original query from the store, leaving the hint attached to a ghost `query_id`. Both cases mean the intended plan shape is not being enforced.
+
+**Fix options:**
+1. For `nthint_failed_last_invocation = 1`: remove the hint and re-apply with corrected syntax:
+   ```sql
+   EXEC sys.sp_query_store_clear_hints @query_id = <id>;
+   EXEC sys.sp_query_store_set_hints @query_id = <id>,
+        @query_hints = N'OPTION(RECOMPILE)';  -- or valid hint
+   ```
+2. For orphaned hints (no matching `query_id`): remove them:
+   ```sql
+   EXEC sys.sp_query_store_clear_hints @query_id = <orphaned_id>;
+   ```
+3. If IQP CE Feedback (Q27) or DOP Feedback (Q28) is active on the same query, consider removing the hint entirely and letting adaptive feedback manage the plan — manual hints block adaptive mechanisms
+4. To list all active hints: `SELECT * FROM sys.query_store_query_hints WHERE is_disabled = 0`
+5. Requires SQL Server 2022 (16.x); this DMV does not exist on earlier versions
+
+**Related checks:** Q26 (PSP optimization), Q27 (CE feedback), Q28 (DOP feedback), Q8 (forced plan failure)
+
+---
+
+### Q32 — Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled (SQL 2017+)
+
+**What it means:** SQL Server's tuning recommendations engine (`sys.dm_db_tuning_recommendations`) has identified one or more plan regression candidates with auto-correction recommended (`FORCE_LAST_GOOD_PLAN`), but automatic tuning is disabled — the recommended corrections are not being applied automatically.
+
+**How to spot it:**
+```sql
+-- Find active FORCE_LAST_GOOD_PLAN recommendations
+SELECT name, type, state, score,
+       JSON_VALUE(details, '$.implementationDetails.script') AS fix_script
+FROM sys.dm_db_tuning_recommendations
+WHERE type = 'FORCE_LAST_GOOD_PLAN'
+  AND state IN ('Verifying', 'Active');
+
+-- Check automatic tuning setting
+SELECT desired_state_desc, actual_state_desc, reason_desc
+FROM sys.database_automatic_tuning_options
+WHERE name = 'FORCE_LAST_GOOD_PLAN';
+```
+
+**Why it matters:** SQL Server detected that a query regressed (new plan is slower than a previously cached plan) and identified the "last good" plan to force — but without automatic tuning enabled, it only reports the recommendation; it never acts. Plan regressions persist until a DBA manually forces the plan via Query Store or rewrites the query. In high-churn environments (frequent statistics updates, deployments), this creates a silent backlog of unresolved regressions.
+
+**Fix options:**
+1. Enable automatic plan correction for the database:
+   ```sql
+   ALTER DATABASE [YourDatabase]
+   SET AUTOMATIC_TUNING (FORCE_LAST_GOOD_PLAN = ON);
+   ```
+2. Verify Query Store is in `READ_WRITE` mode first — required for auto-tuning to force plans (check Q11)
+3. Alternatively, manually force the recommended plan using the script from `JSON_VALUE(details, '$.implementationDetails.script')`
+4. Auto-tuning coexists with IQP feedback mechanisms (Q26–Q30); the two work independently and do not conflict
+5. Avoid enabling auto-tuning alongside active Query Store Hints (Q31) on the same query IDs — hints take precedence and may cause auto-forced plans to be silently ignored
+6. Requires SQL 2017+ and database compatibility level 140+; `dm_db_tuning_recommendations` is absent on earlier versions
+
+**Related checks:** Q8 (forced plan failure), Q11 (QS READ_WRITE mode), Q26–Q30 (IQP/feedback signals), Q31 (QS hints)
+
+---
+
 ## Quick Reference
 
 | Check | Name | Trigger |
@@ -903,3 +977,5 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 | Q28 | DOP Feedback Applied (SQL 2022+) | feedback_type = 'DOP' in sys.query_store_plan_feedback |
 | Q29 | Memory Grant Feedback Instability (SQL 2019+) | ≥ 3 MemoryGrant feedback rows for same plan_id |
 | Q30 | Query Store Replica Coverage Gap (SQL 2022+) | sys.query_store_replicas count < AG replica count |
+| Q31 | Query Store Hint Ineffective or Stale (SQL 2022+) | is_disabled=1 OR nthint_failed_last_invocation=1 OR orphaned query_id |
+| Q32 | Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled (SQL 2017+) | dm_db_tuning_recommendations has Active/Verifying rows + auto-tuning OFF |

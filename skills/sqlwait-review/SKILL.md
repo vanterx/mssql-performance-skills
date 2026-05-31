@@ -1,6 +1,6 @@
 ---
 name: sqlwait-review
-description: Analyze SQL Server wait statistics to identify why the server or a session is slow. Applies 43 checks (V1–V43) covering I/O, locks, parallelism, memory, CPU, TempDB, log I/O, network, latch contention, log space exhaustion, poison/throttle waits, backup I/O, insert hotspots, cumulative skew detection, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, forced memory grants, grant timeouts, stolen memory, file I/O latency, and SQL 2019/2022 IQP/PSP/ADR feature waits. Based on community wait statistics methodology. Use when pasting sys.dm_os_wait_stats or sys.dm_exec_requests output.
+description: Analyze SQL Server wait statistics to identify why the server or a session is slow. Applies 44 checks (V1–V44) covering I/O, locks, parallelism, memory, CPU, TempDB, log I/O, network, latch contention, log space exhaustion, poison/throttle waits, backup I/O, insert hotspots, cumulative skew detection, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, forced memory grants, grant timeouts, stolen memory, file I/O latency, SQL 2019/2022 IQP/PSP/ADR feature waits, and TempDB memory-optimized metadata contention. Based on community wait statistics methodology. Use when pasting sys.dm_os_wait_stats or sys.dm_exec_requests output.
 triggers:
   - /sqlwait-review
   - /wait-review
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Analyze SQL Server wait statistics and identify the dominant bottleneck using the **Waits and Queues** methodology. Applies 43 checks (V1–V43): V1–V18 classify each significant wait type into its root cause and produce a prioritized remediation plan; V19–V26 perform multi-snapshot trend analysis when 3+ time windows are provided — detecting worsening trends, spikes, peak periods, and emerging bottlenecks; V27–V29 cover specialized scenarios (PAGELATCH on user databases, backup I/O, cumulative skew from outlier events); V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V37–V40 add DMV-level memory and I/O detail — forced memory grants, grant timeouts, stolen memory, and file-level I/O latency (requires optional capture queries); V41–V43 cover SQL 2019/2022 IQP/PSP/ADR feature-specific wait types.
+Analyze SQL Server wait statistics and identify the dominant bottleneck using the **Waits and Queues** methodology. Applies 44 checks (V1–V44): V1–V18 classify each significant wait type into its root cause and produce a prioritized remediation plan; V19–V26 perform multi-snapshot trend analysis when 3+ time windows are provided — detecting worsening trends, spikes, peak periods, and emerging bottlenecks; V27–V29 cover specialized scenarios (PAGELATCH on user databases, backup I/O, cumulative skew from outlier events); V30–V36 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V37–V40 add DMV-level memory and I/O detail — forced memory grants, grant timeouts, stolen memory, and file-level I/O latency (requires optional capture queries); V41–V44 cover SQL 2019/2022 IQP/PSP/ADR feature-specific wait types and TempDB memory-optimized metadata contention (SQL 2019+).
 
 The Waits and Queues methodology is based on how SQL Server's thread scheduler works: threads are always in one of three states — **RUNNING** (on CPU), **RUNNABLE** (queued for CPU), or **SUSPENDED** (waiting for a resource). Every time a thread suspends, SQL Server records the wait type and duration. Analyzing the top accumulated waits reveals the dominant bottleneck — not by guessing, but by measuring exactly what the server spent its time waiting for.
 
@@ -549,7 +549,7 @@ These checks fire when wait types associated with modern SQL Server features are
 
 ---
 
-## Memory and I/O Detail Checks (V37–V43)
+## Memory and I/O Detail Checks (V37–V44)
 
 These checks require the optional Memory and I/O detail capture queries (see Input section). They complement V1 (PAGEIOLATCH) and V4 (RESOURCE_SEMAPHORE) with DMV-level detail that wait statistics alone cannot provide. Omit these checks if the optional queries were not provided — note "Cannot evaluate — Memory/I/O detail queries not provided."
 ### V37 — Forced Memory Grants
@@ -587,6 +587,12 @@ These checks require the optional Memory and I/O detail capture queries (see Inp
 - **Trigger:** `PVSVERSIONSTORE_WAIT` or `ADR_CLEANUP_WAIT` appears in wait stats with cumulative wait > 5,000 ms — SQL 2019+ only; skip if wait types absent
 - **Severity:** Warning — the ADR Persistent Version Store cleanup worker is blocked or stalled; this prevents version store space reclamation and allows PVS to grow unboundedly until tempdb or the PVS filegroup is exhausted
 - **Fix:** Find transactions blocking PVS cleanup: `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_begin_time < DATEADD(MINUTE,-5,GETUTCDATE())`. Commit or roll back long-running transactions. Monitor PVS size: `SELECT * FROM sys.dm_tran_persistent_version_store_stats`. If ADR is not required, consider: `ALTER DATABASE [db] SET ACCELERATED_DATABASE_RECOVERY = OFF`.
+
+### V44 — TempDB Metadata Latch Contention — Memory-Optimized Metadata Not Enabled
+- **Trigger:** `PAGELATCH_EX` or `PAGELATCH_SH` appears in top 10 waits AND V9 has not fired on PFS/GAM/SGAM pages (resource pages 1–3); OR `sys.dm_os_waiting_tasks` is provided with `resource_description` matching `2:1:[4-9]\d*` or `2:1:[0-9]{3,}` (TempDB data pages beyond page 3) — SQL 2019+ only; skip if `dm_os_waiting_tasks` is absent and V9 fired
+- **Severity:** Warning — PAGELATCH contention on TempDB system metadata pages (temp table catalog, TVP descriptors, worktable headers) is serializing concurrent TempDB object creation; distinct from PFS/GAM allocation contention (V9)
+- **Fix:** Enable TempDB memory-optimized metadata: `ALTER SERVER CONFIGURATION SET MEMORY_OPTIMIZED TEMPDB_METADATA = ON` (requires SQL Server service restart). Verify page type before restarting: `SELECT resource_description FROM sys.dm_os_waiting_tasks WHERE wait_type LIKE 'PAGELATCH%' AND resource_description LIKE '2:1:%'` — confirm pages are > 3. Not available on Azure SQL DB or Azure SQL MI (handled internally by the platform). Distinct from V9 (PFS/GAM/SGAM allocation pages 1–3).
+- **Related checks:** V9 (TempDB PFS/GAM/SGAM allocation contention), V14 (LATCH waits)
 
 ---
 
