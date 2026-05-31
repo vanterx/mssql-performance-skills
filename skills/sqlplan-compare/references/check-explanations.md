@@ -5,12 +5,13 @@
 - [When to Use Compare vs Review](#when-to-use-compare-vs-review)
 - [Key Concepts](#key-concepts)
 - [Comparison Checks (C1–C10)](#comparison-checks-c1c10)
+- [Regression Root Cause Checks (C11–C20)](#regression-root-cause-checks-c11c20)
 - [Reading the Output](#reading-the-output)
 
 ---
 
 
-A plain-English guide to everything the comparison skill does: when to use it, how it reads plans, and what each of the ten regression checks (C1–C10) actually means.
+A plain-English guide to everything the comparison skill does: when to use it, how it reads plans, and what each of the twenty regression checks (C1–C20) actually means.
 
 ---
 
@@ -250,3 +251,169 @@ This section lists operators and metrics that are identical in both plans. It na
 ### Recommended Fix Order
 
 Follow this order strictly — fixing C1 (seek → scan) often also resolves C6 (new spill) and C3 (inflated grant) because they share a root cause in cardinality errors.
+
+---
+
+## Regression Root Cause Checks (C11–C20)
+
+### C11 — Adaptive Join Threshold Changed
+
+**What changed:** The `AdaptiveThresholdRows` value on an Adaptive Join operator differs between baseline and new plan — SQL 2017+.
+
+**Why this matters**
+The threshold is the row count at which SQL Server switches between Nested Loops and Hash Join at runtime. If the threshold itself changed (not just which side was chosen), the cardinality estimate that sets it changed at compile time. A lower threshold makes Hash Join less likely to be chosen; a higher threshold makes it more aggressive.
+
+**Common causes**
+Statistics update changed the estimated row count for the build side; parameter sniffing caused compilation under a different row estimate; a schema change (column added/removed) affected the cost model.
+
+**Fix**
+Verify the threshold makes sense against actual row counts. If the new threshold causes the wrong join type to be chosen at runtime, the root cause is a cardinality error — fix statistics or sniffing, not the join hint. Related: C2 (join type changed), C14 (row divergence).
+
+---
+
+### C12 — Batch Mode Lost
+
+**What changed:** Baseline plan used batch-mode execution (`executionMode="Batch"` on one or more operators); the new plan executes entirely in row mode — SQL 2017+ (Columnstore), SQL 2019+ (Batch Mode on Rowstore).
+
+**Why this causes a slowdown**
+Batch mode processes 64–900 rows per CPU instruction rather than one at a time. For aggregation, sort, and hash join operators over large row sets, batch mode typically delivers 5–10× higher throughput than row mode. Losing it on a large scan or hash join can multiply elapsed time significantly.
+
+**Common causes**
+- A columnstore index was dropped (batch mode on Columnstore required it)
+- `DISABLE_BATCH_MODE_ON_ROWSTORE` hint was added (SQL 2019+)
+- Database compat level was lowered below 150, disabling Batch Mode on Rowstore
+- A scalar UDF was introduced — scalar UDFs block batch mode
+- An operator incompatible with batch mode (certain XML, spatial, or CLR operations) was added
+
+**Fix**
+Identify which compat-level or hint change disabled batch mode. If a compat level drop is responsible, restore it. If a scalar UDF is blocking, rewrite it as an inline TVF.
+
+---
+
+### C13 — New Implicit Conversion Warning
+
+**What changed:** A `PlanAffectingConvert` element appears in the new plan but was absent from the baseline. This signals that SQL Server is implicitly converting a data type, which makes an index predicate non-sargable.
+
+**Why this causes a slowdown**
+A non-sargable predicate cannot use an index seek — the engine must scan the entire index and apply the conversion row-by-row. This turns an O(log n) seek into an O(n) scan. Related: C1 (seek degraded to scan) often has C13 as its root cause.
+
+**Common causes**
+- A parameter or variable type was changed (e.g., `INT` → `VARCHAR`)
+- A column was `ALTER`ed to a different type
+- A new `CONVERT()` or `CAST()` wraps the column in the WHERE clause
+- A function was applied to the column side of a predicate
+
+**Fix**
+Match the parameter/variable type exactly to the column definition. Remove any function applied to the column in the predicate. If the column itself changed type, evaluate whether the old indexes need to be rebuilt or repopulated.
+
+---
+
+### C14 — Estimated vs Actual Row Divergence Worsened
+
+**What changed:** The maximum `actualRows / estimateRows` ratio across all plan operators (with `actualRows > 100`) increased by more than 10× between plans. Requires actual execution plans — not available on estimated plans.
+
+**Why this matters**
+Cardinality errors compound: an underestimate at one join leads to the wrong join type, which causes a spill, which triggers a serial plan. Measuring the divergence ratio across all operators reveals whether the new plan has materially worse cardinality quality than the baseline, even if individual checks (C2, C3) didn't fire.
+
+**Common causes**
+Statistics quality degraded (auto-update missed a large data change); a parameter value changed causing sniffing to compile for a skewed value; a predicate was changed to reference a correlated column pair the CE doesn't model well.
+
+**Fix**
+`UPDATE STATISTICS` with `FULLSCAN` on the tables with the highest divergence. If sniffing is suspected, add `OPTION (RECOMPILE)` temporarily — if the ratio drops, sniffing is confirmed. Related: C2, C3, C4.
+
+---
+
+### C15 — Compile CPU Regression
+
+**What changed:** The `CompileCPU` attribute in the new plan is more than 3× the baseline value.
+
+**Why this matters**
+Compile CPU is the time the optimizer spent searching for a good plan. A large increase means the optimizer is working much harder — either the query became more complex, the schema it references grew, or the optimizer is timing out and falling back to a suboptimal plan. In high-concurrency environments, excessive compile time also holds shared compile locks.
+
+**Common causes**
+- Additional joins or subqueries added to the query
+- A view was expanded and now resolves many more base tables
+- Optimizer timeout (plan complexity exceeded the cost threshold) — check `StatementOptmEarlyAbortReason="TimeOut"` in the plan XML
+
+**Fix**
+Check for `StatementOptmEarlyAbortReason="TimeOut"` — if present, the optimizer gave up early. Simplify the query, break it into stages, or use indexed views to pre-aggregate expensive joins.
+
+---
+
+### C16 — Plan Guide or Forced Plan Introduced
+
+**What changed:** A `PlanGuideName` attribute appears in the new plan, indicating a plan guide is shaping the execution plan. It was absent from the baseline.
+
+**Why this matters**
+Plan guides override the optimizer's natural choices. The forced plan may be the right fix, but it also freezes the plan shape — future statistics updates, index changes, or data growth will not improve the plan. If the forced plan itself was created during an incident and is suboptimal, this check surfaces it.
+
+**Common causes**
+A DBA applied a plan guide (`sp_create_plan_guide`) or used Query Store plan forcing after noticing a regression. The guide addresses the symptom but may not have fixed the underlying cardinality or index issue.
+
+**Fix**
+Verify the forced plan is still optimal by running the query with `OPTION (RECOMPILE)` and comparing to the forced shape. If the optimizer now finds a better plan naturally, remove the guide and fix the root cause (statistics, indexes, or type mismatch). Related: C1, C2, C13.
+
+---
+
+### C17 — New Eager Index Spool
+
+**What changed:** An `Eager Index Spool` operator appears in the new plan but was not present in the baseline.
+
+**Why this causes a slowdown**
+An Eager Index Spool materializes all input rows into a temporary index structure in TempDB before any rows are returned. It is a full blocking operator that consumes significant I/O and memory. The optimizer chooses it when no permanent index matches the query's access pattern — it's the last resort before a full scan.
+
+**Common causes**
+A permanent index that the baseline used was dropped. Alternatively, a new join or filter condition was added to the query that no existing index covers.
+
+**Fix**
+Identify the columns the spool is indexing (visible in the node's Properties tooltip). Create a permanent nonclustered index on those columns. Use `/sqlplan-index-advisor` to generate the DDL. Related: C7 (Key Lookup), C9 (Sort added).
+
+---
+
+### C18 — Partition Elimination Lost
+
+**What changed:** The new plan accesses more partitions than the baseline for the same partitioned table, despite using the same filter predicate. Applies to partitioned tables — SQL 2005+.
+
+**Why this matters**
+Partition elimination reduces I/O by scanning only the partitions that can contain matching rows. Losing it means the engine scans all partitions. On a 24-month partitioned table where the query filters on the current month, losing elimination means 24× the I/O.
+
+**Common causes**
+- The partition key column's data type was changed — the predicate no longer aligns with the partition function's input type, disabling elimination
+- A parameter type was changed, introducing an implicit conversion on the partition key (related: C13)
+- A computed partition key column was altered
+
+**Fix**
+Ensure the filter predicate's data type exactly matches the partition function's boundary type. Check for implicit conversions with C13. If the partition function itself changed, review whether the boundaries still reflect the query's filtering patterns.
+
+---
+
+### C19 — Parameter Sensitive Plan Dispatcher Added
+
+**What changed:** A `ParameterSensitivePredicate` dispatcher node appears in the new plan, indicating SQL Server 2022 PSP optimization created a dispatcher plan with multiple variants. This node was absent in the baseline — SQL 2022+ only.
+
+**Why this matters**
+PSP optimization is generally beneficial — it creates separate plans for different parameter value ranges to handle data skew. However, if the threshold boundaries are poorly calibrated, the wrong variant may be selected at runtime, producing a worse plan than the original single plan would have.
+
+**Common causes**
+SQL Server 2022 PSP optimization activated after detecting significant cardinality skew on a parameter predicate. The optimization is enabled automatically at compat level 160.
+
+**Fix**
+Verify the variant boundaries using `sys.query_store_query_variant`. If a specific parameter range is receiving the wrong variant, use Query Store hints to force a specific variant for that range, or adjust compat settings. Related: C14 (row divergence in variants).
+
+---
+
+### C20 — New Cross-Database or Linked Server Access
+
+**What changed:** The new plan references a four-part name (`server.db.schema.table`) or a linked server operator that was absent from the baseline.
+
+**Why this causes a slowdown**
+Cross-database and linked server queries cannot fully participate in local optimization. Join order, statistics, and index selection for the remote table are limited — the optimizer must often choose sub-optimal strategies because it lacks row count and distribution data for the remote object.
+
+**Common causes**
+- A view was modified to join a table in another database
+- A stored procedure was updated to call a linked server
+- The query was refactored to reference a cross-database synonym
+- A database rename or migration moved a table to a different database
+
+**Fix**
+Evaluate whether the cross-database access can be replaced with a local copy (materialized via a staging table or indexed view). If the linked server is required, ensure statistics are updated on the remote side and consider using `OPENQUERY` to push more of the filter to the remote server before joining locally.

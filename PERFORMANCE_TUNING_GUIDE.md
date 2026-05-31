@@ -15,7 +15,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 40 checks (V1–V40): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency |
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 99 checks across operators, memory, parallelism, row widths, elapsed timing |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
-| [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans to explain a regression |
+| [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
 | [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan for a deadlock graph |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
@@ -584,8 +584,8 @@ Execution Plan            │  .sqlplan XML
                           │  → ranked CREATE INDEX script
 
 /sqlplan-compare          │  Regression: what changed between two plans?
-                          │  C1–C10: seek→scan, DOP, Key Lookup,
-                          │  memory grant, cardinality model
+                          │  C1–C20: seek→scan, DOP, batch mode, implicit
+                          │  conversion, partition elimination, PSP, spool
 
 Deadlock                  │  deadlock XML / .xdl
 ──────────────────────────┼─────────────────────────────────────────
@@ -784,7 +784,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `V37–V40` | `sqlwait-review` | Memory and I/O detail: forced memory grants, grant timeouts, stolen memory, file-level I/O latency (requires optional capture queries) | 4 |
 | `S1–S33` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width | 33 |
 | `N1–N66` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation | 66 |
-| `C1–C10` | `sqlplan-compare` | Regression: what changed between two plans | 10 |
+| `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
 | `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
@@ -794,7 +794,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
 | `K1–K30` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation config, AD account sensitivity | 30 |
 
-**Total: 435 checks across all skills.**
+**Total: 445 checks across all skills.**
 
 ---
 
