@@ -6,12 +6,13 @@
 - [Category 2: Data Loss and Recovery Time (H7–H11)](#category-2-data-loss-and-recovery-time-h7h11)
 - [Category 3: Throughput and Performance (H12–H16)](#category-3-throughput-and-performance-h12h16)
 - [Category 4: Configuration (H17–H22)](#category-4-configuration-h17h22)
+- [Category 5: Modern AG Feature Checks (H23–H27)](#category-5-modern-ag-feature-checks-h23h27)
 - [Quick Reference](#quick-reference)
 
 ---
 
 
-Plain-English explanations for all 22 H-checks. For check trigger conditions and thresholds,
+Plain-English explanations for all 27 H-checks. For check trigger conditions and thresholds,
 see `SKILL.md`. This file is for human reference only — it is not loaded by the skill.
 
 ---
@@ -861,6 +862,146 @@ WHERE current_state != 'COMPLETED';
 
 ---
 
+## Category 5: Modern AG Feature Checks (H23–H27)
+
+---
+
+### H23 — Contained AG Misrouted DML
+
+**What it means**
+A Contained Availability Group (SQL 2022+) replicates its own system databases (master, msdb) to all replicas, enabling logins, SQL Agent jobs, and linked servers to exist independently of the Windows host. If a contained system database falls out of sync, operations that depend on those objects (jobs, logins, alerts) may fail on the secondary or break after failover.
+
+**How to spot it**
+```sql
+SELECT g.name AS ag_name, g.is_contained, d.database_name, d.synchronization_state_desc
+FROM sys.dm_hadr_database_replica_states d
+JOIN sys.availability_groups g ON d.group_id = g.group_id
+WHERE g.is_contained = 1 AND d.synchronization_state_desc != 'SYNCHRONIZED';
+```
+
+**Common causes**
+- DDL on contained system objects while the secondary is lagging
+- Redo queue buildup on the secondary blocking system database sync
+- Contained AG configured but the cluster was failover-tested before full sync
+
+**Fix options**
+1. Check redo queue for the contained system database replicas
+2. Resolve blocking redo by reducing transaction size on the primary
+3. Confirm intent: `SELECT * FROM sys.availability_groups WHERE is_contained = 1`
+
+**Related checks:** H10 (Redo Queue Buildup), H4 (Replica Not Synchronizing)
+
+---
+
+### H24 — Cloud Witness Inaccessible
+
+**What it means**
+Cloud Witness (Windows Server 2016+) uses an Azure Blob Storage account as the WSFC quorum witness. If the witness is unreachable, the cluster is operating without a tie-breaking vote — in a two-node cluster, a node failure means quorum is lost and the AG goes offline. This check fires when `sys.dm_hadr_cluster` shows Cloud Witness as the quorum type but quorum state is abnormal.
+
+**How to spot it**
+```sql
+SELECT quorum_type_desc, quorum_state_desc FROM sys.dm_hadr_cluster;
+-- Expected: CLOUD_WITNESS / QUORUM_IN_PROGRESS_NORMAL
+-- Problem: any other quorum_state_desc
+```
+
+**Common causes**
+- Azure Storage account access key rotated without updating the Cloud Witness configuration
+- Firewall or NSG rule change blocking outbound HTTPS to `<account>.blob.core.windows.net`
+- Storage account deleted, suspended, or in a different Azure region with intermittent latency
+
+**Fix options**
+1. `Test-NetConnection -ComputerName <storageaccount>.blob.core.windows.net -Port 443`
+2. Validate the access key in Failover Cluster Manager → Cloud Witness properties
+3. If the witness is permanently unavailable, switch to a File Share Witness temporarily while resolving the storage issue
+
+**Related checks:** H18 (No Automatic Failover Replica), H19 (Single Replica AG)
+
+---
+
+### H25 — Parallel Redo Worker Saturation
+
+**What it means**
+SQL Server 2016+ uses Parallel Redo to replay transaction log records on secondary replicas using multiple threads. When primary workload generates log faster than the secondary can redo it, the redo queue grows. This check identifies cases where redo threads are at capacity — characterized by a non-zero and growing redo queue combined with a redo rate that cannot keep up with the log send rate.
+
+**How to spot it**
+```sql
+SELECT r.replica_server_name, d.database_name,
+       d.redo_queue_size, d.redo_rate,
+       d.log_send_queue_size, d.log_send_rate
+FROM sys.dm_hadr_database_replica_states d
+JOIN sys.dm_hadr_availability_replica_states r ON d.replica_id = r.replica_id
+WHERE d.redo_queue_size > 524288  -- 512 MB
+  AND (d.redo_rate = 0 OR d.redo_rate < d.log_send_rate * 0.7);
+```
+
+**Common causes**
+- Primary running large bulk operations (index rebuild, bulk insert) that generate disproportionate log volume
+- Secondary I/O subsystem slower than primary — redo is I/O-bound
+- Insufficient CPU on the secondary limiting Parallel Redo threads
+
+**Fix options**
+1. Check active redo threads: `SELECT * FROM sys.dm_exec_requests WHERE command LIKE '%REDO%'`
+2. On primary, break large operations into smaller batches to reduce instantaneous log generation
+3. Review secondary I/O latency for the database files — redo is write-I/O-bound; SSD/NVMe can dramatically increase redo throughput
+
+**Related checks:** H10 (Redo Queue Buildup), H14 (Redo Rate / Send Rate Mismatch)
+
+---
+
+### H26 — Read-Scale Secondary Missing RCSI
+
+**What it means**
+A readable secondary replica allows read-only connections, but without Read Committed Snapshot Isolation (RCSI) enabled on the primary database, readers on the secondary acquire shared locks that can conflict with redo thread page access. This causes redo to wait on reader locks, increasing secondary lag and potentially delaying commits on sync-commit primaries.
+
+**How to spot it**
+```sql
+-- On primary: check RCSI status
+SELECT name, is_read_committed_snapshot_on
+FROM sys.databases
+WHERE name IN (SELECT database_name FROM sys.dm_hadr_database_replica_states);
+-- is_read_committed_snapshot_on = 0 with a readable secondary = problem
+```
+
+**Common causes**
+- Database created before AG was set up; RCSI was not enabled
+- DBA disabled RCSI to reduce version store overhead without knowing the AG secondary was readable
+- Migration from a non-AG environment where RCSI was not required
+
+**Fix options**
+1. Enable RCSI: `ALTER DATABASE [db] SET READ_COMMITTED_SNAPSHOT ON` — this propagates to all replicas automatically
+2. Monitor version store growth after enabling: `SELECT * FROM sys.dm_tran_version_store_space_usage`
+3. Confirm: `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = 'db'`
+
+**Related checks:** H21 (Read-Only Routing Not Configured), H9 (Secondary Lag)
+
+---
+
+### H27 — AG Without Database-Level Health Detection
+
+**What it means**
+By default, AG failover is triggered only by instance-level failures (SQL Server process dies, lease timeout). With `DB_FAILOVER = OFF`, a database that goes suspect, offline, or into recovery mode does not trigger AG failover — applications connecting through the listener will see errors until someone manually intervenes. This check identifies AGs that have not enabled database-level health detection.
+
+**How to spot it**
+```sql
+SELECT name, db_failover
+FROM sys.availability_groups
+WHERE db_failover = 0;
+```
+
+**Common causes**
+- Default AG configuration; `DB_FAILOVER` defaults to OFF in all SQL Server versions
+- DBA explicitly disabled it to avoid failovers triggered by transient database recovery events
+
+**Fix options**
+1. Enable: `ALTER AVAILABILITY GROUP [ag] SET (DB_FAILOVER = ON)`
+2. Test before enabling in production — verify that the workload does not generate transient database recovery events that would cause spurious failovers
+3. Document the decision either way; if left OFF, ensure monitoring alerts on database state changes
+
+**Related checks:** H18 (No Automatic Failover Replica), H2 (Replica in Resolving State)
+
+---
+
 ## Quick Reference
 
 | Check | Category | Severity | Key Signal |
@@ -887,3 +1028,8 @@ WHERE current_state != 'COMPLETED';
 | H20 | Configuration | Info | No listener configured |
 | H21 | Configuration | Info | `read_only_routing_url` NULL on readable secondary |
 | H22 | Configuration | Info | Automatic seeding in progress |
+| H23 | Modern — Contained AG | Warning | Contained system database not SYNCHRONIZED |
+| H24 | Modern — Cloud Witness | Critical | Cloud Witness quorum state abnormal |
+| H25 | Modern — Parallel Redo | Warning | Redo queue growing; redo rate < send rate |
+| H26 | Modern — RCSI | Warning | Readable secondary, RCSI disabled on primary |
+| H27 | Modern — DB Health | Info | `db_failover = 0` on HA-configured AG |

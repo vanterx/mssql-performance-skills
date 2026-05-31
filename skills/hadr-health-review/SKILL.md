@@ -1,6 +1,6 @@
 ---
 name: hadr-health-review
-description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 22 checks (H1–H22) covering replica connectivity, data loss risk, recovery time, throughput, and configuration.
+description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 27 checks (H1–H27) covering replica connectivity, data loss risk, recovery time, throughput, configuration, and SQL 2016–2022 modern AG features.
 triggers:
   - /hadr-health-review
   - /hadr-review
@@ -11,7 +11,7 @@ triggers:
 ## Purpose
 
 Analyze output from the `sys.dm_hadr_*` DMV family to assess the health of one or more
-Always On Availability Groups. Applies 22 checks (H1–H22) across four categories:
+Always On Availability Groups. Applies 27 checks (H1–H27) across five categories:
 
 - **H1–H6** — Replica connectivity and role: detect disconnected replicas, resolving state,
   unhealthy synchronization health, replicas not synchronizing, last-connect errors, and
@@ -24,6 +24,7 @@ Always On Availability Groups. Applies 22 checks (H1–H22) across four categori
 - **H17–H22** — Configuration: async replica in unexpected position, no automatic failover
   replica, single-replica AG, missing listener, read-only routing not configured, and
   automatic seeding in progress
+- **H23–H27** — Modern AG features: Contained AG DML misrouting, Cloud Witness inaccessible, Parallel Redo saturation, Read-Scale secondary missing RCSI, AG without database-level health detection (SQL 2012–2022+)
 
 ## Input
 
@@ -317,6 +318,33 @@ These checks surface AG topology gaps that may not cause immediate problems but 
   after adding a new replica or database to the AG. Monitor progress with:
   `SELECT * FROM sys.dm_hadr_automatic_seeding`. High network utilization is expected during
   seeding. Seeding of large databases can take hours — plan maintenance windows accordingly.
+
+## Category 5 — Modern AG Feature Checks (H23–H27)
+
+### H23 — Contained AG Misrouted DML
+- **Trigger:** AG has `is_contained = 1` in `sys.availability_groups` AND a contained system database (e.g., `master`, `msdb` within the AG) shows `synchronization_state_desc != SYNCHRONIZED` — SQL 2022+ only; skip if SQL version < 2022
+- **Severity:** Warning — Contained AG system databases are not synchronized; DML operations that depend on contained system objects (logins, jobs, agent alerts) may fail on the secondary or after failover
+- **Fix:** Investigate why the contained system database is not synchronized: `SELECT * FROM sys.dm_hadr_database_replica_states WHERE database_id = DB_ID('master')`. Resolve blocking transactions and confirm redo queue size. Review `sys.availability_groups` for `contained_system_databases` column to confirm the configuration is intentional.
+
+### H24 — Cloud Witness Inaccessible
+- **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != QUORUM_IN_PROGRESS_NORMAL` — Windows Server 2016+ (Cloud Witness requires WS2016 or later)
+- **Severity:** Critical — The Cloud Witness quorum resource is unreachable; the cluster is operating without a functioning quorum witness and is at risk of split-brain or total quorum loss
+- **Fix:** Verify connectivity to the Azure Blob Storage endpoint used as the Cloud Witness: `Test-NetConnection -ComputerName <storageaccount>.blob.core.windows.net -Port 443`. Check the Storage Account access key has not been rotated. Validate the Failover Cluster Manager shows the Cloud Witness online. If the witness is permanently unavailable, switch to a File Share Witness or another Cloud Witness account.
+
+### H25 — Parallel Redo Worker Saturation
+- **Trigger:** `sys.dm_hadr_physical_seeding_stats` or `sys.dm_exec_requests` shows redo threads at max AND `log_send_queue_size_kb` continues growing on any secondary — SQL 2016+ parallel redo; skip if SQL version < 2016
+- **Severity:** Warning — Parallel Redo workers on the secondary are saturated; the redo queue will grow until the primary throttles log send, increasing recovery time and secondary lag
+- **Fix:** Increase max worker threads for Parallel Redo via the trace flag 3468 or the server-level setting on the secondary. Check for lock contention on the secondary: `SELECT * FROM sys.dm_exec_requests WHERE command LIKE '%REDO%'`. Review large transactions on the primary that generate disproportionate redo workload and consider breaking them into smaller batches.
+
+### H26 — Read-Scale Secondary Missing RCSI
+- **Trigger:** A readable secondary exists (`secondary_role_allow_connections_desc = READ_ONLY`) AND `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE database_id = <db>` returns 0 on the primary — SQL 2012+
+- **Severity:** Warning — Readers on the secondary will encounter locking conflicts with redo threads unless RCSI is enabled; read workloads can block redo, increasing secondary lag
+- **Fix:** Enable RCSI on the primary database: `ALTER DATABASE [db] SET READ_COMMITTED_SNAPSHOT ON`. RCSI is propagated to all secondary replicas automatically. Confirm with: `SELECT name, is_read_committed_snapshot_on FROM sys.databases`.
+
+### H27 — AG Without Database-Level Health Detection
+- **Trigger:** `sys.availability_groups` shows `db_failover = 0` (DB_FAILOVER = OFF) for an AG where high availability is the stated goal — SQL 2012+
+- **Severity:** Info — Without DB_FAILOVER = ON, a database-level failure (e.g., a database going suspect or offline) will not trigger AG failover; the AG remains online with a failed database silently
+- **Fix:** Enable database-level health detection: `ALTER AVAILABILITY GROUP [ag] SET (DB_FAILOVER = ON)`. Confirm the application can tolerate transient failovers triggered by database-level failures before enabling this option.
 
 ---
 

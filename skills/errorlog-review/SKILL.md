@@ -1,6 +1,6 @@
 ---
 name: errorlog-review
-description: Analyzes SQL Server ERRORLOG files for operational issues, availability group failures, memory pressure, I/O subsystem warnings, and security events. Use this skill whenever a SQL Server instance has experienced unexpected behavior, an AG failover, memory warnings, I/O latency alerts, or abnormal shutdown, and you need a structured timeline of what SQL Server recorded. Applies 28 checks (E1–E28) covering AG health, memory/resource pressure, I/O and storage, startup/shutdown, connectivity, and configuration signals.
+description: Analyzes SQL Server ERRORLOG files for operational issues, availability group failures, memory pressure, I/O subsystem warnings, and security events. Use this skill whenever a SQL Server instance has experienced unexpected behavior, an AG failover, memory warnings, I/O latency alerts, or abnormal shutdown, and you need a structured timeline of what SQL Server recorded. Applies 33 checks (E1–E33) covering AG health, memory/resource pressure, I/O and storage, startup/shutdown, connectivity, configuration signals, and SQL 2019/2022 modern feature events.
 triggers:
   - /errorlog-review
 ---
@@ -10,14 +10,15 @@ triggers:
 ## Purpose
 
 Parse and analyze SQL Server ERRORLOG content to surface operational warnings, high-availability
-failures, resource pressure signals, security events, and configuration anomalies. Applies 28
-checks (E1–E28) across five categories:
+failures, resource pressure signals, security events, and configuration anomalies. Applies 33
+checks (E1–E33) across six categories:
 
 - **E1–E8** — AG / High Availability: failovers, lease expiry, replica state changes, synchronization errors
 - **E9–E14** — Memory and resource pressure: page allocation failures, OS paging, worker exhaustion, non-yielding schedulers
 - **E15–E19** — I/O and storage: slow I/O subsystem, corruption warnings, tempdb exhaustion, log backup gaps, VLF proliferation
 - **E20–E24** — Startup, shutdown, and connectivity: abnormal termination, restart cycling, login failure bursts, linked server errors
 - **E25–E28** — Configuration and informational: trace flags, unconfigured max memory, log rotation gaps, version end-of-support
+- **E29–E33** — SQL 2019/2022 modern features: ADR PVS cleanup stall, IQP DOP feedback, Ledger verification failure, CE feedback model change, Azure Arc agent disconnect
 
 ## Input
 
@@ -363,6 +364,33 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
   If past end-of-support (e.g., SQL 2014 EOL 2019-07-09, SQL 2016 EOL 2026-07-14), plan
   upgrade. If not on the latest CU, evaluate whether open bugs fixed in later CUs are relevant
   to the observed issues. Report the version string verbatim in the Output Summary.
+
+## SQL 2019/2022 Modern Feature Checks (E29–E33)
+
+### E29 — ADR PVS Cleanup Stall
+- **Trigger:** Log contains `Persistent Version Store cleanup` with `stall` or `unable to advance` — SQL 2019+; skip if compat level < 150
+- **Severity:** Warning — ADR (Accelerated Database Recovery) PVS is not reclaiming space; version store can grow unboundedly, consuming tempdb or the PVS filegroup
+- **Fix:** Identify long-running transactions blocking PVS cleanup: `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_begin_time < DATEADD(MINUTE,-10,GETUTCDATE())`. Commit or roll back idle transactions. If the issue recurs, verify ADR is intentional — disable with `ALTER DATABASE [db] SET ACCELERATED_DATABASE_RECOVERY = OFF` if not needed.
+
+### E30 — IQP DOP Feedback Applied
+- **Trigger:** Log contains `DOP feedback` with `adjusted` or `applied to` — SQL 2022+ only; skip if compat level < 160
+- **Severity:** Info — Intelligent Query Processing DOP Feedback has changed the degree of parallelism for a query. This is expected behavior but warrants review if performance degraded afterward.
+- **Fix:** Query `sys.query_store_plan_feedback` to see which queries received DOP adjustments and whether the feedback stabilized. If a DOP reduction caused regressions, force a plan or disable feedback for that query: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_DOP_FEEDBACK''))'`.
+
+### E31 — Ledger Verification Failure
+- **Trigger:** Log contains `Ledger verification` with `failed` or `tamper detected` — SQL 2022+ only
+- **Severity:** Critical — Ledger table hash chain verification has detected a discrepancy; data integrity of the ledger table cannot be confirmed
+- **Fix:** Run `sys.sp_verify_database_ledger` and `sys.sp_verify_database_ledger_from_digest_storage` to determine scope. Preserve the ERRORLOG and all ledger digests for forensic analysis. Do not modify the affected tables until investigation is complete. Escalate to a security incident response process.
+
+### E32 — CE Feedback Model Version Change
+- **Trigger:** Log contains `Cardinality Estimation feedback` with `model version` change message — SQL 2022+ only; skip if compat level < 160
+- **Severity:** Info — The Query Optimizer's CE feedback has promoted a learned model version for one or more queries. A sudden model-version change after a workload change can introduce plan regressions.
+- **Fix:** Correlate the timestamp of the CE feedback message with any performance degradation in Query Store. Use `sys.query_store_plan_feedback` to see affected queries. To disable CE feedback for a specific query: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_CE_FEEDBACK''))'`.
+
+### E33 — Azure Arc–Enabled SQL: Agent Disconnect
+- **Trigger:** Log contains `Arc SQL extension` with `disconnected` or `heartbeat` failure message — any SQL Server version with Azure Arc agent installed
+- **Severity:** Warning — The Arc SQL extension agent has lost contact with the Azure control plane; Arc-based features (Microsoft Defender, automated backups, best practice assessments) are not functioning
+- **Fix:** Check Arc agent health: `Get-Service -Name 'himds','ArcSqlInstanceExtension'` (Windows) or equivalent systemctl commands (Linux). Verify outbound connectivity to `*.arc.azure.com` on port 443. Restart the `ArcSqlInstanceExtension` service if it is stopped. Review Arc agent logs at `%ProgramData%\GuestConfig\arc_policy_logs\` for detailed error messages.
 
 ---
 
