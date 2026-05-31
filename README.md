@@ -150,6 +150,7 @@ For non-Claude LLMs, use `SKILL.md` alone (not `references/check-explanations.md
 
 > **Not sure which skill to use?** See [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) for symptom-based routing.
 > **Costs?** See [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md).
+> **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
 
 ---
 
