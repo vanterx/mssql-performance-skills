@@ -3500,6 +3500,114 @@ INNER HASH JOIN dbo.OrderLines ol ON ol.OrderId = o.OrderId
 
 ---
 
+### S34 — Parameter Sensitive Plan Dispatcher Detected
+
+**What it means**
+SQL Server 2022 PSP (Parameter Sensitive Plan) optimization detected significant data skew on a parameterized predicate and compiled a dispatcher plan with multiple variants — one per distinct parameter range. Each variant is a full execution plan optimized for a specific row count range (e.g., low-selectivity vs high-selectivity parameter values). SQL 2022+ with compat level 160 only.
+
+**How to spot it**
+`ParameterSensitivePredicate` element on `StmtSimple`, or `StatementType="ParameterSensitivity"` in the plan XML.
+
+**Fix**
+Check `sys.query_store_query_variant` to verify variants and their boundaries. If a boundary is poorly calibrated, use `sys.sp_query_store_set_hints` to pin a specific plan for a parameter range. Related: N68.
+
+---
+
+### S35 — ADR Long-Transaction Version Store Accumulation
+
+**What it means**
+Accelerated Database Recovery (ADR) moves the version store from the log to a Persistent Version Store (PVS) in user-defined filegroups or TempDB. Unlike the traditional version store, PVS entries do not block log truncation but they do grow continuously for the lifetime of any open transaction. A long-running transaction causes PVS to accumulate rows at the rate of all concurrent DML. SQL 2019+ only.
+
+**How to spot it**
+Long transaction duration combined with high DML activity on the database. Cross-reference `sys.dm_tran_persistent_version_store_stats` for PVS size and `E29` in errorlog-review for PVS cleanup stall messages.
+
+**Fix**
+Keep transactions short and commit promptly. Monitor PVS size with:
+```sql
+SELECT pvss_used_page_count, pvss_reserved_page_count
+FROM sys.dm_tran_persistent_version_store_stats;
+```
+
+---
+
+### S36 — Cardinality Estimation Feedback Applied
+
+**What it means**
+CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardinality estimates across executions when the CE model consistently underestimates or overestimates row counts. When `ContainsCEFeedback="true"` appears on a plan, the estimates reflect the engine's learned corrections rather than the base CE model. SQL 2022+ only.
+
+**How to spot it**
+`ContainsCEFeedback="true"` attribute on `StmtSimple` in the plan XML.
+
+**Fix**
+CE Feedback is generally beneficial. Monitor query stability using Query Store: if the plan shape or performance oscillates after feedback applies, the workload characteristics are changing too frequently for the feedback model to converge. Related: Q27 in query-store-review.
+
+---
+
+### N67 — Ordered Columnstore Scan Segment Pruning Confirmed
+
+**What it means**
+SQL Server 2022 supports ordered clustered columnstore indexes (`CREATE CLUSTERED COLUMNSTORE INDEX ... ORDER (col)`). When a query's WHERE predicate matches the ORDER column, the engine can skip entire row groups without decompressing them — segment elimination. This check fires as a positive signal when at least half the segments were pruned. SQL 2022+ only.
+
+**How to spot it**
+Columnstore Index Scan with `Ordered="true"` and `SegmentsPurged >= SegmentsTotal * 0.5` in the actual plan.
+
+**Fix**
+No fix needed when this fires — it is confirmatory. If pruning is lower than expected, verify the filter predicate matches the column in the `ORDER (...)` clause exactly (including data type). Related: N7 (segment read count for unordered CS), N50 (delta store read).
+
+---
+
+### N68 — PSP Variant Cardinality Error
+
+**What it means**
+Inside a PSP dispatcher plan, each variant is a specialized sub-plan for a particular parameter value range. If a variant still shows a large `actualRows / estimateRows` ratio, the variant's row-count boundary does not match the actual data distribution — the optimizer cut the parameter space at the wrong threshold. SQL 2022+ only.
+
+**How to spot it**
+Within a PSP plan, a variant node with `actualRows / estimateRows > 100` and `actualRows > 1,000` (requires actual plan).
+
+**Fix**
+Use `sys.query_store_query_variant` to inspect variant boundaries. Use Query Store hints (`sys.sp_query_store_set_hints`) to force the correct variant for the problem parameter range, or disable PSP for this query with `OPTION (USE HINT ('DISABLE_PARAMETER_SNIFFING'))` and fix the underlying cardinality issue instead. Related: S34.
+
+---
+
+### N69 — IQP Approximate Count Distinct Active
+
+**What it means**
+`APPROX_COUNT_DISTINCT` (SQL 2019+ IQP) computes distinct counts using HyperLogLog — much faster than `COUNT(DISTINCT)` for large datasets, with approximately 2% error. When this check fires, it confirms IQP is using HLL approximation rather than exact distinct counting. SQL 2019+ only.
+
+**How to spot it**
+`ApproxCountDistinctHll` reference or `COUNT(DISTINCT)` with `InternalInfo` showing HLL usage in the plan XML.
+
+**Fix**
+If approximate results are acceptable (dashboards, analytics), this is a positive optimization — no action needed. If exact count semantics are required (financial reconciliation, integrity validation), replace `APPROX_COUNT_DISTINCT` with `COUNT(DISTINCT col)`. Related: T84 in tsql-review.
+
+---
+
+### N70 — DOP Feedback Adjusted Plan
+
+**What it means**
+IQP DOP Feedback (SQL 2022) monitors parallel query thread utilization across executions. When a query consistently underutilizes its parallel threads, DOP Feedback reduces the degree of parallelism at compile time to free resources for other queries. The `DegreeOfParallelismFeedback` element in the plan confirms the adjustment. SQL 2022+ only.
+
+**How to spot it**
+`DegreeOfParallelismFeedback` element present in the plan XML.
+
+**Fix**
+DOP Feedback is generally beneficial. Verify the adjusted DOP is improving elapsed time and reducing CXPACKET waits. If performance worsened after adjustment, disable feedback for the specific query using `OPTION (USE HINT ('DISABLE_DOP_FEEDBACK'))`. Related: S8 (DOP forcing), S9 (DOP threshold).
+
+---
+
+### N71 — Adaptive Join Threshold Evaluation
+
+**What it means**
+An Adaptive Join operator defers the join type decision (Nested Loops vs Hash Match) until runtime, switching based on whether the build-side row count exceeds the `AdaptiveThresholdRows` threshold. This check surfaces the threshold and actual row count so you can assess whether the adaptive join is correctly switching — or whether one join type is always chosen, making the overhead unnecessary. SQL 2017+.
+
+**How to spot it**
+`physicalOp="Adaptive Join"` with `AdaptiveThresholdRows` attribute in the plan XML.
+
+**Fix**
+If `actualRows` is consistently above the threshold across all executions → Hash Match is always chosen → replace with an explicit `INNER HASH JOIN` hint to eliminate adaptive overhead. If consistently below → Nested Loops always chosen → use `INNER LOOP JOIN`. If rows straddle the threshold → the adaptive join is beneficial — leave it in place.
+
+---
+
 ## Quick Reference Tables
 
 ### Severity Levels

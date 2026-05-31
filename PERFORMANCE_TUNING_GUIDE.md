@@ -9,11 +9,11 @@ A decision guide for choosing the right skill — or combination of skills — f
 | Skill | Trigger | Input | What it does |
 |-------|---------|-------|-------------|
 | [`mssql-performance-review`](#mssql-performance-review) | `/mssql-performance-review` / `/sql-triage` | Mixed artifacts or a symptom description | Agentic offline orchestrator — routes mixed inputs to the right specialised skills, runs an adversarial root-cause check, emits a consolidated report with evidence chain, risk-rated fixes, and rollback. Dispatcher, no checks of its own. |
-| [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 78 checks for anti-patterns, security, logic bugs |
+| [`tsql-review`](#tsql-review) | `/tsql-review` | T-SQL source code | Static analysis of source code — 85 checks for anti-patterns, security, logic bugs, SQL 2017–2022 modern syntax |
 | [`sqlstats-review`](#sqlstats-review) | `/sqlstats-review` | SSMS Messages tab output | Parses `SET STATISTICS IO, TIME ON` output — 22 checks for I/O and wait patterns |
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 20 checks for N+1, sniffing, recompiles, spills, top consumers |
 | [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 40 checks (V1–V40): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency |
-| [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 99 checks across operators, memory, parallelism, row widths, elapsed timing |
+| [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 107 checks across operators, memory, parallelism, row widths, elapsed timing, IQP/PSP/ADR/CE feedback |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
 | [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
@@ -537,8 +537,9 @@ Each skill sees a different slice of query behavior. Together they give a comple
 Source Code               │  T-SQL source (.sql)
 ──────────────────────────┼─────────────────────────────────────────
 /tsql-review              │  Static: can I spot problems before running?
-                          │  78 checks: injection, predicates, cursors,
-                          │  deprecated syntax, correctness, security
+                          │  85 checks: injection, predicates, cursors,
+                          │  deprecated syntax, correctness, security,
+                          │  SQL 2017–2022 modern syntax checks
 
 Execution (no plan)       │  SSMS Messages tab
 ──────────────────────────┼─────────────────────────────────────────
@@ -576,8 +577,9 @@ Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
 Execution Plan            │  .sqlplan XML
 ──────────────────────────┼─────────────────────────────────────────
 /sqlplan-review           │  Operators: what did the optimizer choose?
-                          │  99 checks: join strategy, row estimates,
-                          │  memory grants, parallelism, spills
+                          │  107 checks: join strategy, row estimates,
+                          │  memory grants, parallelism, spills,
+                          │  IQP/PSP/ADR/CE feedback (SQL 2019–2022)
 
 /sqlplan-index-advisor    │  Indexes: what should I create?
                           │  D1–D8 derived rules + MissingIndexGroup
@@ -772,7 +774,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|
-| `T1–T78` | `tsql-review` | T-SQL source: structural, security, correctness, deprecated syntax, performance | 78 |
+| `T1–T85` | `tsql-review` | T-SQL source: structural, security, correctness, deprecated syntax, performance, SQL 2017–2022 modern syntax | 85 |
 | `I1–I15` | `sqlstats-review` | I/O metrics: logical reads, scan count, physical reads, spills, LOB, columnstore | 15 |
 | `W1–W7` | `sqlstats-review` | Time metrics: CPU vs elapsed ratio, compile overhead, long execution | 7 |
 | `X1–X12` | `sqltrace-review` | Event-level: long duration, high CPU/reads, attention, lock timeout, recompile, spill warnings | 12 |
@@ -782,8 +784,8 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `V27–V29` | `sqlwait-review` | Operational checks: PAGELATCH on user DBs (insert hotspots), BACKUPIO/BACKUPBUFFER (backup I/O), cumulative skew detection (outlier dominance) | 3 |
 | `V30–V36` | `sqlwait-review` | Modern feature wait types: In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, Parallel Redo | 7 |
 | `V37–V40` | `sqlwait-review` | Memory and I/O detail: forced memory grants, grant timeouts, stolen memory, file-level I/O latency (requires optional capture queries) | 4 |
-| `S1–S33` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width | 33 |
-| `N1–N66` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation | 66 |
+| `S1–S36` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width, PSP dispatcher, ADR version store, CE feedback | 36 |
+| `N1–N71` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes | 71 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
 | `P1–P16` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
@@ -794,7 +796,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
 | `K1–K40` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
 
-**Total: 463 checks across all skills.**
+**Total: 478 checks across all skills.**
 
 ---
 
