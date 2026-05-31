@@ -16,7 +16,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 99 checks across operators, memory, parallelism, row widths, elapsed timing |
 | [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
-| [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan for a deadlock graph |
+| [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 25 checks for regressed queries, plan instability, resource hotspots, query-level waits, and configuration health |
 | [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 20 checks (R1–R20): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis |
@@ -590,8 +590,8 @@ Execution Plan            │  .sqlplan XML
 Deadlock                  │  deadlock XML / .xdl
 ──────────────────────────┼─────────────────────────────────────────
 /sqlplan-deadlock         │  Deadlock: why are two sessions blocked?
-                          │  P1–P8 patterns: lock order, isolation,
-                          │  missing index, FK, SERIALIZABLE phantom
+                          │  P1–P16 patterns: lock order, RCSI bypass,
+                          │  MERGE, heap, TempDB, lock escalation, ledger
 
 Workload                  │  Folder of .sqlplan files
 ──────────────────────────┼─────────────────────────────────────────
@@ -786,7 +786,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `N1–N66` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation | 66 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
 | `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
-| `P1–P8` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self | 8 |
+| `P1–P16` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
 | `Q1–Q25` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health | 25 |
 | `R1–R20` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis | 20 |
 | `L1–L25` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals | 25 |
@@ -794,7 +794,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `E1–E28` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals | 28 |
 | `K1–K30` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation config, AD account sensitivity | 30 |
 
-**Total: 445 checks across all skills.**
+**Total: 453 checks across all skills.**
 
 ---
 
