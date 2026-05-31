@@ -20,7 +20,7 @@ A collection of Claude Code skills covering the full SQL Server performance tuni
 
 | Skill | Purpose |
 |-------|---------|
-| [mssql-performance-review](#mssql-performance-review) | Agentic offline orchestrator — routes mixed artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or are not sure which skill to run. |
+| [mssql-performance-review](#mssql-performance-review) | Agentic offline orchestrator — routes mixed artifacts (or a symptom description) to the right specialised skills, runs an adversarial root-cause check, and emits a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or are not sure which skill to run. Also invocable as `/sql-triage` (equal-primary alias). |
 | [tsql-review](#tsql-review) | Analyze raw T-SQL source code — 85 checks (T1–T85) — structural, security, correctness, performance, SQL 2017–2022 modern syntax |
 | [sqlstats-review](#sqlstats-review) | Parse and analyze `SET STATISTICS IO, TIME ON` output — 27 checks (I1–I18 IO, W1–W9 time) |
 | [sqltrace-review](#sqltrace-review) | Analyze Profiler trace / Extended Events output — 25 checks (X1–X12 event-level, X13–X25 workload aggregate) |
@@ -266,6 +266,32 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║  /sqlplan-batch plans/                                       ║
 ║  Aggregate dashboard — top offenders, check frequency,       ║
 ║  consolidated index script across all plans                  ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║  ENTERPRISE AVAILABILITY — failover / connectivity path      ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  SQL Server ERRORLOG (paste text or file path)               ║
+║         │                                                    ║
+║         ▼                                                    ║
+║  /errorlog-review                                            ║
+║  33 checks — AG failover events, lease expiry, memory        ║
+║  pressure, I/O slow, login burst, ADR/IQP/CE feature signals ║
+║         │ AG lease / hadr event seen?                        ║
+║         ▼                                                    ║
+║  /clusterlog-review                                          ║
+║  30 checks — WSFC lease timeouts, quorum loss, node          ║
+║  eviction, network partition, Cloud Witness, Arc agent       ║
+║         │ cluster stable, AG unhealthy?                      ║
+║         ▼                                                    ║
+║  /hadr-health-review                                         ║
+║  27 checks — replica connectivity, redo queue, data loss     ║
+║  risk, log send rate, Contained AG, parallel redo            ║
+║         │ Kerberos / auth failure in ERRORLOG?               ║
+║         ▼                                                    ║
+║  /spn-review                                                 ║
+║  40 checks — MSSQLSvc SPN, AG listener, delegation,          ║
+║  Azure AD hybrid, gMSA rollover, CNAME alias, FAST           ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```

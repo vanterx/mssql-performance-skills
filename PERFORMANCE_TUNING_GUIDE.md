@@ -387,6 +387,60 @@ Once the worst procedure is identified, pivot to `/tsql-review` on its source, `
 
 ---
 
+### "A query is fast for most parameter values but slow for specific ones"
+
+**Use: `/sqlplan-compare` (C19) → `/sqlplan-review` (S34/N68) → `/query-store-review` (Q26)**
+
+This is the parameter-sensitive plan (PSP) / parameter sniffing diagnosis path. SQL Server 2022 adds native PSP optimization; earlier versions require manual workarounds.
+
+**Step 1** — Compare a fast plan against the slow one to confirm PSP:
+```
+/sqlplan-compare fast-param.sqlplan slow-param.sqlplan
+```
+Check C19 (PSP Dispatcher Added) — if the new plan has a `ParameterSensitivePredicate` dispatcher node, PSP optimization is active (SQL 2022+). Also check C14 (row estimate divergence) and C16 (forced plan or plan guide).
+
+**Step 2** — Deep-dive the slow variant's plan:
+```
+/sqlplan-review slow-param.sqlplan
+```
+Check S34 (PSP Dispatcher Detected — SQL 2022+) and N68 (PSP Variant Cardinality Error) to confirm the slow variant has a bad cardinality estimate. Also check S1–S4 for sniffed-parameter evidence in the compiled-value attributes.
+
+**Step 3** — Check Query Store for plan instability history:
+```
+/query-store-review
+[paste sys.query_store_* DMV output for the query]
+```
+Check Q26 (PSP Optimization Active — SQL 2022+) to see if the database is already using PSP optimization, and Q5/Q6 (plan instability) for the historical pattern of plan flip-flopping.
+
+---
+
+### "The transaction log is growing despite regular log backups"
+
+**Use: `/errorlog-review` (E29) → `/sqlwait-review` (V43)**
+
+When log backups run but `log_reuse_wait_desc` stays non-zero and the log keeps growing, the cause is often ADR Persistent Version Store (PVS) cleanup lag (SQL 2019+) or an open long transaction.
+
+**Step 1** — Check the ERRORLOG for PVS cleanup stalls:
+```
+/errorlog-review
+[paste ERRORLOG text]
+```
+Check E29 (ADR PVS Cleanup Stall) — look for `PVS cleanup worker stalled` or `ADR cleanup: version store growing` messages. If E29 fires, the database has ADR enabled and the PVS cleanup thread is falling behind.
+
+**Step 2** — Confirm with wait statistics:
+```
+/sqlwait-review
+[paste sys.dm_os_wait_stats output]
+```
+Check V43 (ADR PVS Cleanup Worker Wait — SQL 2019+) — `PVSVERSIONSTORE_WAIT` or `ADR_CLEANUP_WAIT` appearing in the top waits confirms the PVS is the bottleneck, not replication (`log_reuse_wait_desc = REPLICATION`) or an open transaction.
+
+**Fix options:**
+- Increase `ADR_CLEANER_RETRY_PERSISTENT_VERSION_CLEANER_INTERVAL_SECONDS` via `sp_configure`
+- Run `sys.sp_persistent_version_cleanup '<database>'` manually to drain the backlog
+- If ADR is not required, disable it with `ALTER DATABASE SET ACCELERATED_DATABASE_RECOVERY = OFF` — commits `xtp_deltastore` cleanup before disabling
+
+---
+
 ### "I have a mix of different artifact types"
 
 ## The Standard Tuning Workflow
@@ -417,6 +471,43 @@ Step 5 — If the query regressed after a change
 Step 6 — If the query causes deadlocks
    /sqlplan-deadlock deadlock.xdl
    → Fix: add missing index, change lock order, switch isolation level
+```
+
+## Enterprise Availability Path
+
+For availability incidents (AG failovers, listener connectivity failures, Kerberos errors), work through this sequence. Each step narrows the root cause.
+
+```
+AG failover / unexpected downtime / auth failure
+         │
+         ▼
+/errorlog-review  (E1–E33)
+   Check: AG lease expiry (E1), hadr_health event (E2), I/O slow (E11–E14),
+          memory pressure (E6–E10), login failure burst (E19), ADR PVS stall (E29),
+          IQP DOP Feedback applied (E30), Ledger verification failure (E31)
+         │
+         │ AG event in ERRORLOG?
+         ▼
+/clusterlog-review  (L1–L30)
+   Check: lease timeout (L1), health check failure (L3–L4), quorum loss (L5),
+          node eviction (L6), network partition (L9), RHS crash (L14–L16),
+          Cloud Witness timeout (L26), Azure Arc disconnect (L27),
+          Contained AG system DB offline (L28)
+         │
+         │ cluster stable but AG replica unhealthy?
+         ▼
+/hadr-health-review  (H1–H27)
+   Check: replica disconnected (H1), log send rate (H5), redo queue (H6),
+          data loss risk (H7), secondary lag (H9), parallel redo saturation (H25),
+          read-scale RCSI missing (H26), Contained AG misrouted DML (H23)
+         │
+         │ Kerberos/auth error? NTLM fallback in ERRORLOG?
+         ▼
+/spn-review  (K1–K40)
+   Check: MSSQLSvc SPN missing (K1–K4), AG listener SPN (K9–K10),
+          delegation not configured (K17–K22), gMSA rollover drift (K34),
+          FCI node SPN leak (K35), Distributed AG forwarder (K36),
+          CNAME alias without SPN (K40)
 ```
 
 ---
