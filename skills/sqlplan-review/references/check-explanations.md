@@ -4,7 +4,7 @@
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
 - [Statement-Level Checks (S1–S27)](#statement-level-checks-s1s27)
-- [Node-Level Checks (N1–N60)](#node-level-checks-n1n60)
+- [Node-Level Checks (N1–N72)](#node-level-checks-n1n72)
 - [Quick Reference Tables](#quick-reference-tables)
 
 ---
@@ -3608,6 +3608,59 @@ If `actualRows` is consistently above the threshold across all executions → Ha
 
 ---
 
+### N72 — Low Statistics Sampling Percent on Hot Statistics
+
+**What it means**
+`StatisticsInfo/@SamplingPercent` is below 10% for a statistic used to compile this plan on a table with more than 100,000 actual rows. SQL Server builds histograms from a sample of the table by default. When the sample rate is very low, the histogram has fewer steps and reduced resolution — the optimizer may miss data skew, producing poor cardinality estimates even for recently updated statistics.
+
+**How to spot it**
+`StatisticsInfo` elements appear in actual execution plans only (not estimated plans). Search the plan XML for `SamplingPercent`:
+
+```xml
+<StatisticsInfo
+  LastUpdate="2026-01-15T08:30:00"
+  ModificationCount="12500"
+  SamplingPercent="3.8"
+  Statistics="[_WA_Sys_00000003_3A81B327]"
+  Table="[Orders]"
+  Schema="[dbo]"
+  Database="[AdventureWorks]" />
+```
+
+`SamplingPercent="3.8"` means only 3.8% of rows were read when building the histogram. For a 10M-row table that is 380,000 rows — plausible, but not representative of skewed distributions.
+
+In SSMS: right-click an operator → Properties → look for StatisticsInfo entries under the operator node, or open the plan XML directly and search for `SamplingPercent`.
+
+**Why it matters**
+A histogram built from 3% of rows may completely miss a value spike that accounts for 40% of actual query rows. The optimizer sees a flat distribution and underestimates rows for queries hitting that spike — leading to bad join choices, undersized memory grants, and sort/hash spills. Critically, even if `LastUpdate` is recent (yesterday), a low-sample recent update is less reliable than a full-scan from months ago for skewed columns.
+
+SQL Server's auto-update threshold (20% row modifications) triggers a re-sample — but uses the same low sample rate unless explicitly overridden. `PERSIST_SAMPLE_PERCENT = ON` locks in a higher rate across future auto-updates.
+
+**Fix options**
+1. Rebuild with a full scan — most accurate, appropriate for tables up to ~200 GB:
+   ```sql
+   UPDATE STATISTICS dbo.Orders ([_WA_Sys_00000003_3A81B327]) WITH FULLSCAN;
+   ```
+2. Lock in the rate so future auto-updates don't revert to the default (SQL 2016 SP1 CU4+, SQL 2017 SP1+, SQL 2019+, Azure SQL):
+   ```sql
+   UPDATE STATISTICS dbo.Orders ([_WA_Sys_00000003_3A81B327])
+   WITH FULLSCAN, PERSIST_SAMPLE_PERCENT = ON;
+   ```
+3. For very large tables where FULLSCAN is too slow, use a higher explicit sample:
+   ```sql
+   UPDATE STATISTICS dbo.Orders ([_WA_Sys_00000003_3A81B327])
+   WITH SAMPLE 30 PERCENT, PERSIST_SAMPLE_PERCENT = ON;
+   ```
+4. Update all statistics on the table in one pass:
+   ```sql
+   UPDATE STATISTICS dbo.Orders WITH FULLSCAN;
+   ```
+5. After updating, capture a new actual plan and confirm `SamplingPercent` rises above 10% and that N21 (bad row estimate) no longer fires on the same operators.
+
+**Related checks:** N21 (bad row estimate — the downstream symptom of low-quality stats), N11 (no statistics at all), N35 (CE default selectivity guess — also caused by absent or low-quality statistics), S36 (CE Feedback — SQL 2022 auto-correction for persistent cardinality errors)
+
+---
+
 ## Quick Reference Tables
 
 ### Severity Levels
@@ -3630,6 +3683,7 @@ If `actualRows` is consistently above the threshold across all executions → Ha
 | Table variable instead of #temp | S1, S13, S14, N21 |
 | Optimizer hints overriding choices | S19, S20, N36, N37, N40, S24 |
 | No statistics on column | N11, N35, N59 |
+| Low statistics sample rate | N72, N21, N35 |
 | Query too complex (too many joins) | S5, S6, S7, S15, N44 |
 | Heap table (no clustered index) | N5 (RID lookup), N39 |
 | Non-sargable predicate | N3, N4, N9, N43, N60, N65 |
@@ -3655,7 +3709,7 @@ If `actualRows` is consistently above the threshold across all executions → Ha
 
 These checks fire only when actual execution statistics are present (Ctrl+M in SSMS before running):
 
-S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56, N62, N63, N65, N66
+S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56, N62, N63, N65, N66, N72
 
 All other checks can fire on estimated plans.
 

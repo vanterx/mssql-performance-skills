@@ -1,6 +1,6 @@
 ---
 name: sqlplan-review
-description: Analyze SQL Server execution plans for performance anti-patterns, bottleneck identification, and actionable fix recommendations. Applies 107 checks (S1–S36 statement-level, N1–N71 node-level) covering memory grants, parallelism, cardinality errors, spills, scans, index usage, IQP/PSP features, ADR, and CE feedback. Use this skill whenever a user pastes a .sqlplan file or XML, shares an SSMS execution plan, asks why a query is slow or regressed after a deployment or stats update, mentions a specific operator (Key Lookup, Hash Match, Sort, Nested Loops, Scan), asks about memory grants, spills, compile timeout, parameter sniffing, or plan shape. Also trigger when the user uploads a .sqlplan file, describes a plan tree verbally, or asks for execution plan review, plan analysis, or query tuning help.
+description: Analyze SQL Server execution plans for performance anti-patterns, bottleneck identification, and actionable fix recommendations. Applies 108 checks (S1–S36 statement-level, N1–N72 node-level) covering memory grants, parallelism, cardinality errors, spills, scans, index usage, IQP/PSP features, ADR, and CE feedback. Use this skill whenever a user pastes a .sqlplan file or XML, shares an SSMS execution plan, asks why a query is slow or regressed after a deployment or stats update, mentions a specific operator (Key Lookup, Hash Match, Sort, Nested Loops, Scan), asks about memory grants, spills, compile timeout, parameter sniffing, or plan shape. Also trigger when the user uploads a .sqlplan file, describes a plan tree verbally, or asks for execution plan review, plan analysis, or query tuning help.
 triggers:
   - /sqlplan-review
   - /plan-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same analysis ruleset used by commercial SQL Server execution plan tools. Covers 107 checks across statement-level (S1–S36) and node-level (N1–N71) categories.
+Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same analysis ruleset used by commercial SQL Server execution plan tools. Covers 108 checks across statement-level (S1–S36) and node-level (N1–N72) categories.
 
 ## Input
 
@@ -235,7 +235,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 
 ---
 
-## Node-Level Checks (N1–N71)
+## Node-Level Checks (N1–N72)
 
 Apply these to every operator node in the plan tree.
 ### N1 — Filter Late in Plan
@@ -529,6 +529,12 @@ Apply these to every operator node in the plan tree.
 - **Trigger:** Operator `physicalOp` = Adaptive Join AND `AdaptiveThresholdRows` is present — SQL 2017+
 - **Severity:** Info
 - **Fix:** Report `AdaptiveThresholdRows` vs `actualRows` on the outer side. If `actualRows` is consistently above the threshold, the adaptive join always becomes Hash Match — consider making the Hash Match explicit. If `actualRows` is consistently below the threshold, the join always uses Nested Loops — consider removing the adaptive join overhead with a `LOOP JOIN` hint. If `actualRows` straddles the threshold across executions, the adaptive join is earning its place.
+
+### N72 — Low Statistics Sampling Percent on Hot Statistics
+- **Trigger:** `StatisticsInfo/@SamplingPercent` < 10 for any statistic whose associated table has `actualRows` > 100,000 — actual plan only; skip entirely if `StatisticsInfo` elements are absent from the plan XML
+- **Severity:** Warning — the optimizer compiled this plan using a statistic built from a very small sample; the histogram has fewer steps and reduced resolution, increasing the risk of poor cardinality estimates under data skew even when the statistic was recently updated
+- **Fix:** Rebuild the flagged statistic with a higher sample: `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN`. To prevent future auto-updates from reverting to the low rate, add `PERSIST_SAMPLE_PERCENT = ON` (SQL 2016 SP1+, Azure SQL): `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN, PERSIST_SAMPLE_PERCENT = ON`. Identify the statistic name and table from `StatisticsInfo/@Statistics` and `@Table` in the plan XML. If the table is large and FULLSCAN is too slow, use `WITH SAMPLE 30 PERCENT, PERSIST_SAMPLE_PERCENT = ON` as a compromise. Cross-reference N21 — if `actualRows` already diverges from `estimateRows`, the low sample rate is the likely root cause.
+- **Related checks:** N21 (bad row estimate — the downstream effect of low-quality stats), N11 (no statistics at all), N35 (CE default selectivity guess — also caused by absent or low-quality stats)
 
 ---
 

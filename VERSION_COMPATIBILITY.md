@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 519 checks in this library apply to your SQL Server version.
+Which of the 520 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -207,7 +207,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**383 of 519 checks (73.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**384 of 520 checks (73.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
