@@ -1,7 +1,7 @@
 # Statistics IO/Time Analysis — `stats_output.txt`
 
-> **Input:** `example/sqlstats-review/stats_output.txt`
-> Run with: `/sqlstats-review example/sqlstats-review/stats_output.txt`
+> **Input:** `skills/sqlstats-review/examples/stats_output.txt`
+> Run with: `/sqlstats-review skills/sqlstats-review/examples/stats_output.txt`
 
 ## Input Summary
 - Source: SSMS Messages tab (SET STATISTICS IO, TIME ON)

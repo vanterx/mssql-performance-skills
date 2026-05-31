@@ -502,7 +502,7 @@ Apply these to every operator node in the plan tree.
 
 ## Output Format
 
-Structure your report as follows. The reference output in `example/sqlplan-review/horrible-analysis.md`
+Structure your report as follows. The reference output in `skills/sqlplan-review/examples/horrible-analysis.md`
 demonstrates the expected quality level — reading it once shows how findings link to each other,
 how the fix sequence table resolves multiple checks, and how the Passed Checks table signals completeness.
 

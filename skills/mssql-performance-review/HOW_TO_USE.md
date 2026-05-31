@@ -237,7 +237,7 @@ All flags are optional. The orchestrator's defaults work well for most reviews.
 
 ## 7. Worked examples
 
-Three end-to-end examples showing the orchestrator in action. Sample artifacts and reference outputs ship in `example/mssql-performance-review/`.
+Three end-to-end examples showing the orchestrator in action. Sample artifacts and reference outputs ship in `skills/mssql-performance-review/examples/`.
 
 ### Example 1 — Artifact-driven review (most common path)
 
@@ -262,7 +262,7 @@ You've captured: `slow-proc.sql` (procedure source), `slow-proc.sqlplan` (actual
 
 **Total time:** ~2.5 minutes. **Total cost:** ~USD 0.21.
 
-**Reference output:** [`example/mssql-performance-review/mixed-artifacts-analysis.md`](../../example/mssql-performance-review/mixed-artifacts-analysis.md)
+**Reference output:** [`skills/mssql-performance-review/examples/mixed-artifacts-analysis.md`](examples/mixed-artifacts-analysis.md)
 
 ### Example 2 — Symptom-only triage with capture bundle
 
@@ -304,7 +304,7 @@ Users report the app is slow. You have nothing captured yet.
 
 **Total time:** ~5 minutes (mostly your time running the scripts). **Total cost:** ~USD 0.06.
 
-**Reference output:** [`example/mssql-performance-review/symptom-first-analysis.md`](../../example/mssql-performance-review/symptom-first-analysis.md) (bundle-generation response) and [`example/mssql-performance-review/capture-bundle-example/`](../../example/mssql-performance-review/capture-bundle-example/) (sample bundle contents).
+**Reference output:** [`skills/mssql-performance-review/examples/symptom-first-analysis.md`](examples/symptom-first-analysis.md) (bundle-generation response) and [`skills/mssql-performance-review/examples/capture-bundle-example/`](examples/capture-bundle-example/) (sample bundle contents).
 
 ### Example 3 — Verification after deploying a fix
 
@@ -325,7 +325,7 @@ Yesterday you ran a review and got recommendations. You deployed the top fix (a 
 5. Emits a Recommendation Status section in the new report.
 6. Appends tags to `evals/feedback.jsonl` (gitignored) for future learning.
 
-**Reference output:** [`example/mssql-performance-review/baseline-diff-analysis.md`](../../example/mssql-performance-review/baseline-diff-analysis.md)
+**Reference output:** [`skills/mssql-performance-review/examples/baseline-diff-analysis.md`](examples/baseline-diff-analysis.md)
 
 ---
 
@@ -741,7 +741,7 @@ For large outputs (especially `.sqlplan` XML), use `FILE: <path>` to reference a
 
 ### Reference
 
-Full bundle layout, manifest schema, edit-required scripts, and the resume flow: [`references/capture-bundle-spec.md`](references/capture-bundle-spec.md). Sample bundle: [`example/mssql-performance-review/capture-bundle-example/`](../../example/mssql-performance-review/capture-bundle-example/).
+Full bundle layout, manifest schema, edit-required scripts, and the resume flow: [`references/capture-bundle-spec.md`](references/capture-bundle-spec.md). Sample bundle: [`skills/mssql-performance-review/examples/capture-bundle-example/`](examples/capture-bundle-example/).
 
 ---
 
@@ -932,10 +932,10 @@ For each tier-2 and tier-3 primitive, the deep reference is in `references/`. Lo
 
 | File | Demonstrates |
 |------|--------------|
-| [`example/mssql-performance-review/mixed-artifacts-analysis.md`](../../example/mssql-performance-review/mixed-artifacts-analysis.md) | Artifact-driven review — full report with evidence chain, adversarial check, ranked fixes |
-| [`example/mssql-performance-review/symptom-first-analysis.md`](../../example/mssql-performance-review/symptom-first-analysis.md) | Symptom-only triage — hypotheses, capture suggestions, no SQL Server contact |
-| [`example/mssql-performance-review/capture-bundle-example/`](../../example/mssql-performance-review/capture-bundle-example/) | Sample capture bundle with README, manifest, paste-back template, and one SQL script |
-| [`example/mssql-performance-review/baseline-diff-analysis.md`](../../example/mssql-performance-review/baseline-diff-analysis.md) | Baseline-diff after deploy — recommendation status tags, feedback.jsonl appends |
+| [`skills/mssql-performance-review/examples/mixed-artifacts-analysis.md`](examples/mixed-artifacts-analysis.md) | Artifact-driven review — full report with evidence chain, adversarial check, ranked fixes |
+| [`skills/mssql-performance-review/examples/symptom-first-analysis.md`](examples/symptom-first-analysis.md) | Symptom-only triage — hypotheses, capture suggestions, no SQL Server contact |
+| [`skills/mssql-performance-review/examples/capture-bundle-example/`](examples/capture-bundle-example/) | Sample capture bundle with README, manifest, paste-back template, and one SQL script |
+| [`skills/mssql-performance-review/examples/baseline-diff-analysis.md`](examples/baseline-diff-analysis.md) | Baseline-diff after deploy — recommendation status tags, feedback.jsonl appends |
 
 ### Related skills
 

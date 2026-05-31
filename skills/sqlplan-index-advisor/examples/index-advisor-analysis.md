@@ -1,10 +1,10 @@
 # Index Advisor Report — `horrible.sqlplan`
 
-> **Input:** `example/sqlplan-review/horrible.sqlplan`
+> **Input:** `skills/sqlplan-review/examples/horrible.sqlplan`
 >
-> Run with: `/sqlplan-index-advisor example/sqlplan-review/horrible.sqlplan`
+> Run with: `/sqlplan-index-advisor skills/sqlplan-review/examples/horrible.sqlplan`
 >
-> *(For full output see [example/sqlplan-index-advisor/index-advisor-analysis.md](index-advisor-analysis.md) — this demonstrates the standard output format)*
+> *(For full output see [skills/sqlplan-index-advisor/examples/index-advisor-analysis.md](index-advisor-analysis.md) — this demonstrates the standard output format)*
 
 ## Input Summary
 - Plans analyzed: 1

@@ -1,7 +1,7 @@
 # Procedure Stats Analysis — Trend
 
-> **Input:** `example/procstats-review/proc_stats_trend.txt` — Q5 (Trend / Time Series)
-> Run with: `/procstats-review example/procstats-review/proc_stats_trend.txt`
+> **Input:** `skills/procstats-review/examples/proc_stats_trend.txt` — Q5 (Trend / Time Series)
+> Run with: `/procstats-review skills/procstats-review/examples/proc_stats_trend.txt`
 
 ### Input Summary
 - Source: collect.proc_stats — Q5 (Trend / Time Series) output

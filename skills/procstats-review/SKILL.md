@@ -194,7 +194,7 @@ the input does not contain multiple rows per object across different `collection
 ## Output Format
 
 Structure your report as follows. Follow every formatting rule below exactly — the reference
-output in `example/procstats-review/proc_stats_output-analysis.md` demonstrates the expected
+output in `skills/procstats-review/examples/proc_stats_output-analysis.md` demonstrates the expected
 quality level.
 
 ---

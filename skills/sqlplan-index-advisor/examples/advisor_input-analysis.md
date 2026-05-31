@@ -1,7 +1,7 @@
 # Index Advisor Report — `advisor_input.sqlplan`
 
-> **Input:** `example/sqlplan-index-advisor/advisor_input.sqlplan`
-> Run with: `/sqlplan-index-advisor example/sqlplan-index-advisor/advisor_input.sqlplan`
+> **Input:** `skills/sqlplan-index-advisor/examples/advisor_input.sqlplan`
+> Run with: `/sqlplan-index-advisor skills/sqlplan-index-advisor/examples/advisor_input.sqlplan`
 >
 > Source: Two-statement plan (`ProdDB`) — Orders+OrderLines join and Customers+Orders aggregate
 

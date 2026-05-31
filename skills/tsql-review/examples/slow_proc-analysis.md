@@ -1,7 +1,7 @@
 # T-SQL Review — `slow_proc.sql`
 
-> **Input:** `example/tsql-review/slow_proc.sql`
-> Run with: `/tsql-review example/tsql-review/slow_proc.sql`
+> **Input:** `skills/tsql-review/examples/slow_proc.sql`
+> Run with: `/tsql-review skills/tsql-review/examples/slow_proc.sql`
 
 ## Summary
 - **5 Critical** issues, **8 Warnings**, **4 Info** items

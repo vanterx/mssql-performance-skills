@@ -81,22 +81,22 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 
 | Path | What it demonstrates |
 |------|---------------------|
-| [example/sqlplan-review/horrible.sqlplan](example/sqlplan-review/horrible.sqlplan) | Reference bad plan: parameter sniffing, spills, implicit conversion, key lookups |
-| [example/sqlplan-review/horrible-analysis.md](example/sqlplan-review/horrible-analysis.md) | Reference output of `/sqlplan-review` on the above plan |
-| [example/tsql-review/](example/tsql-review/) | `slow_proc.sql` with 12 anti-patterns + expected analysis |
-| [example/sqlstats-review/](example/sqlstats-review/) | SSMS STATISTICS IO/TIME output + expected analysis |
-| [example/sqlplan-compare/](example/sqlplan-compare/) | Baseline + regression `.sqlplan` pair + diff analysis |
-| [example/sqlplan-deadlock/](example/sqlplan-deadlock/) | P1 lock-order deadlock XML + analysis |
-| [example/sqltrace-review/](example/sqltrace-review/) | `fn_trace_gettable` output with N+1, sniffing, spills + analysis |
-| [example/sqlwait-review/](example/sqlwait-review/) | `sys.dm_os_wait_stats` output with I/O, lock, memory, CXPACKET + analysis |
-| [example/sqlplan-index-advisor/](example/sqlplan-index-advisor/) | Index advisor output for `horrible.sqlplan` |
-| [example/sqlplan-batch/](example/sqlplan-batch/) | Aggregate dashboard for a 3-plan batch |
-| [example/query-store-review/](example/query-store-review/) | Query Store DMV output with plan instability, forced plan failure, N+1 + analysis |
-| [example/procstats-review/](example/procstats-review/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
-| [example/clusterlog-review/](example/clusterlog-review/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
-| [example/hadr-health-review/](example/hadr-health-review/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
-| [example/errorlog-review/](example/errorlog-review/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
-| [example/spn-review/](example/spn-review/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
+| [skills/sqlplan-review/examples/horrible.sqlplan](skills/sqlplan-review/examples/horrible.sqlplan) | Reference bad plan: parameter sniffing, spills, implicit conversion, key lookups |
+| [skills/sqlplan-review/examples/horrible-analysis.md](skills/sqlplan-review/examples/horrible-analysis.md) | Reference output of `/sqlplan-review` on the above plan |
+| [skills/tsql-review/examples/](skills/tsql-review/examples/) | `slow_proc.sql` with 12 anti-patterns + expected analysis |
+| [skills/sqlstats-review/examples/](skills/sqlstats-review/examples/) | SSMS STATISTICS IO/TIME output + expected analysis |
+| [skills/sqlplan-compare/examples/](skills/sqlplan-compare/examples/) | Baseline + regression `.sqlplan` pair + diff analysis |
+| [skills/sqlplan-deadlock/examples/](skills/sqlplan-deadlock/examples/) | P1 lock-order deadlock XML + analysis |
+| [skills/sqltrace-review/examples/](skills/sqltrace-review/examples/) | `fn_trace_gettable` output with N+1, sniffing, spills + analysis |
+| [skills/sqlwait-review/examples/](skills/sqlwait-review/examples/) | `sys.dm_os_wait_stats` output with I/O, lock, memory, CXPACKET + analysis |
+| [skills/sqlplan-index-advisor/examples/](skills/sqlplan-index-advisor/examples/) | Index advisor output for `horrible.sqlplan` |
+| [skills/sqlplan-batch/examples/](skills/sqlplan-batch/examples/) | Aggregate dashboard for a 3-plan batch |
+| [skills/query-store-review/examples/](skills/query-store-review/examples/) | Query Store DMV output with plan instability, forced plan failure, N+1 + analysis |
+| [skills/procstats-review/examples/](skills/procstats-review/examples/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
+| [skills/clusterlog-review/examples/](skills/clusterlog-review/examples/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
+| [skills/hadr-health-review/examples/](skills/hadr-health-review/examples/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
+| [skills/errorlog-review/examples/](skills/errorlog-review/examples/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
+| [skills/spn-review/examples/](skills/spn-review/examples/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
 
 ## Installing Skills
 
@@ -138,7 +138,7 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 5. Add a full `## <skill-name>` section to [README.md](README.md) with triggers, usage, and output sample
 6. Add the skill to [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) Skills at a Glance, Skill Scope Comparison, and relevant scenario sections
 7. Add the skill file size row to [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md)
-8. Add example input + analysis files to `example/<skill-name>/`
+8. Add example input + analysis files to `skills/<skill-name>/examples/`
 9. Add `tsql-review` as companion in `sqlplan-review/SKILL.md` (or the relevant existing companion)
 
 ## Git Hooks

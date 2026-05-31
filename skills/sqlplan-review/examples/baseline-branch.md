@@ -1,7 +1,7 @@
 # Branch Analysis — improve/sqlplan-review-best-practices
 # Generated: 2026-05-28 UTC
 # Skill version: skills/sqlplan-review/SKILL.md @ improve/sqlplan-review-best-practices (~682 lines)
-# Input: example/sqlplan-review/horrible.sqlplan
+# Input: skills/sqlplan-review/examples/horrible.sqlplan
 
 ## Execution Plan Analysis
 
