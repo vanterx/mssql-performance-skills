@@ -636,19 +636,19 @@ Execution (no plan)       │  SSMS Messages tab
 ──────────────────────────┼─────────────────────────────────────────
 /sqlstats-review          │  I/O: how many pages were read per table?
                           │  Time: CPU vs elapsed — compute vs wait?
-                          │  22 checks: scan count, spills, LOB, waits
+                          │  27 checks: scan count, spills, LOB, waits
 
 Trace / XE                │  Profiler .trc / XE .xel / fn_trace_gettable()
 ──────────────────────────┼─────────────────────────────────────────
 /sqltrace-review          │  Workload: which queries are worst?
                           │  N+1 patterns, parameter sniffing signals,
                           │  recompiles, spill events, top consumers
-                          │  20 checks: X1–X12 event, X13–X20 aggregate
+                          │  25 checks: X1–X12 event, X13–X25 aggregate
 
 Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
 ──────────────────────────┼─────────────────────────────────────────
 /sqlwait-review           │  Server bottleneck: why is the server slow?
-                          │  40 checks V1–V40: I/O (PAGEIOLATCH), locks (LCK_M),
+                          │  44 checks V1–V44: I/O (PAGEIOLATCH), locks (LCK_M),
                           │  parallelism (CXPACKET/HT*), memory grants (RESOURCE_SEMAPHORE),
                           │  log I/O (WRITELOG/LOGBUFFER), CPU (SOS_SCHEDULER_YIELD),
                           │  TempDB (PAGELATCH), latch contention (LATCH_EX),
@@ -660,8 +660,9 @@ Wait Statistics           │  sys.dm_os_wait_stats / sys.dm_exec_requests
                           │  V30–V36 Modern features: In-Memory OLTP (XTP*), Columnstore,
                           │  Query Store (QDS*), Transaction/DTC, Service Broker,
                           │  Full Text Search, Parallel Redo (Always On secondary)
-                          │  V37–V40 Memory/I/O detail: forced grants, grant timeouts,
-                          │  stolen memory, file-level I/O latency
+                          │  V37–V44 Memory/I/O detail: forced grants, grant timeouts,
+                          │  stolen memory, file-level I/O latency, IQP/PSP/ADR waits,
+                          │  TempDB memory-optimized metadata contention
                           │  Configuration-aware: MAXDOP, CTPfP, RCSI, TempDB files,
                           │  recovery model, delayed durability, Always On commit mode
 
@@ -689,9 +690,10 @@ Deadlock                  │  deadlock XML / .xdl
 Workload                  │  Folder of .sqlplan files
 ──────────────────────────┼─────────────────────────────────────────
 /query-store-review       │  Query Store: which queries in a workload
-                           │  need attention? 25 checks: regressions,
+                           │  need attention? 32 checks: regressions,
                            │  plan instability, resource hotspots,
-                           │  waits per query, operational health
+                           │  waits per query, operational health,
+                           │  IQP/PSP/DOP/CE feedback, QS hints, auto-tuning
                            │
 /sqlplan-batch            │  Aggregate: which queries in a workload
                            │  need attention? Dashboard + top offenders

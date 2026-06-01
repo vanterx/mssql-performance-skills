@@ -52,15 +52,15 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 519 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 520 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **514** | 5 Azure-specific checks (I15, I17, K32, K33, E33) not applicable |
+| SQL Server 2022 | **516** | 4 Azure-specific checks (I15, I17, K32, K33) not applicable; E33 and L27 apply when Azure Arc agent is installed |
 | SQL Server 2019 | **491** | +23 SQL 2022-only checks unavailable |
 | SQL Server 2017 | **479** | +12 SQL 2019-only checks unavailable |
 | SQL Server 2016 | **468** | +11 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **443** | −25 more: all 32 Query Store checks unavailable on SQL 2014 (QS introduced SQL 2016; Q31/Q32 require SQL 2022/2017 and are also absent from SQL 2016); minus S10, K36, P16, R25 |
+| SQL Server 2014 | **443** | −25 more: all Query Store checks unavailable on SQL 2014 (QS introduced SQL 2016; Q31/Q32 also absent from SQL 2016, requiring SQL 2022/2017); minus S10, H25, K36, P16, R25 |
 | SQL Server 2012 | **442** | −1 more: R21 (In-Memory OLTP, SQL 2014+) unavailable |
 | SQL Server 2008 R2 | **383** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
 
@@ -165,6 +165,7 @@ These checks require features introduced in SQL Server 2012.
 | Q30 | `query-store-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2022+) |
 | P16 | `sqlplan-deadlock` | Ledger / Temporal History Table Deadlock (Ledger aspect) | Ledger tables (SQL 2022+); temporal aspect listed under SQL 2016+ |
 | Q31 | `query-store-review` | Query Store Hint Ineffective or Stale | `sys.query_store_query_hints` (SQL 2022+) |
+| Q12 | `query-store-review` | Plan Feedback Active | Automated plan feedback via `plan_feedback` column (SQL 2022+) |
 
 ### Windows Server Version-Gated Checks
 
@@ -177,12 +178,21 @@ Two checks gate on Windows Server version rather than SQL Server version.
 
 ### Azure SQL Database / Azure SQL Managed Instance–Only Checks
 
+These checks only fire on Azure SQL Database or Azure SQL Managed Instance. They are silently skipped on on-premises SQL Server.
+
 | Check | Skill | Name | Platform |
 |-------|-------|------|----------|
 | I15 | `sqlstats-review` | Azure SQL Page Server Reads Detected | Azure SQL Hyperscale only |
 | I17 | `sqlstats-review` | Remote Page Server Reads Dominant | Azure SQL Hyperscale only |
 | K32 | `spn-review` | Entra-Only Auth With Orphaned AD SPN | Azure SQL (Entra ID / EXTERNAL_PROVIDER auth) |
 | K33 | `spn-review` | Azure SQL MI SPN for On-Premises Clients | Azure SQL Managed Instance only |
+
+### Arc-Conditional Checks (On-Premises or Cloud with Azure Arc Agent)
+
+These checks fire on **any** SQL Server instance — on-premises or cloud — that has the Azure Arc agent installed. They are skipped automatically when Arc agent events are absent from the log. They are **not** Azure-only: count them for on-premises SQL Server assessments when Arc is deployed.
+
+| Check | Skill | Name | Condition |
+|-------|-------|------|-----------|
 | E33 | `errorlog-review` | Azure Arc–Enabled SQL: Agent Disconnect | Any SQL Server with Azure Arc agent (any version) |
 | L27 | `clusterlog-review` | Azure Arc-Managed Cluster Agent Disconnect | Any SQL Server cluster with Azure Arc agent |
 

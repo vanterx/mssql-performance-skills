@@ -185,11 +185,11 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** A Query Store forced plan is overriding normal optimization. QDS-forced plans bypass the optimizer and become stale as data changes. Validate the forced plan is still beneficial and that the underlying regression (bad statistics, missing index) has been resolved. If fixed, unforce via `sys.sp_query_store_unforce_plan`.
 ### S25 — Interleaved Execution (MSTVF) Active
-- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on `StmtSimple` (SQL 2017+, compatibility level 140+)
+- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on `StmtSimple` — SQL 2017+
 - **Severity:** Info
 - **Fix:** SQL Server is using interleaved execution to feed actual row counts from multi-statement TVFs back into optimization. This is beneficial. Verify it has not been suppressed via `OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))`, which would revert to the static 1-row estimate.
 ### S26 — Batch Mode Adaptive Join Active
-- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` (SQL 2019+, compatibility level 150+)
+- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2019+
 - **Severity:** Info
 - **Fix:** SQL Server is deferring the join strategy (Hash vs Nested Loops) to runtime. This is generally good. Flag only if the `AdaptiveThresholdRows` does not match actual row distribution, indicating the threshold was calibrated on a non-representative execution.
 ### S27 — Excessive Missing Index Suggestions
@@ -446,7 +446,7 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Info
 - **Fix:** Open delta stores (not yet compressed rowgroups) are being scanned row-by-row, negating columnstore batch-mode benefits for those rows. This is expected immediately after inserts. If delta stores persist (check `sys.dm_db_column_store_row_group_physical_stats` for OPEN rowgroups with large row counts), force compression: `ALTER INDEX ... REORGANIZE WITH (COMPRESS_ALL_ROW_GROUPS = ON)`.
 ### N51 — Batch Mode on Rowstore (SQL 2019+)
-- **Trigger:** `executionMode` = Batch AND `storageType` != ColumnStore (SQL 2019+, compatibility level 150+)
+- **Trigger:** `executionMode` = Batch AND `storageType` != ColumnStore — SQL 2019+
 - **Severity:** Info
 - **Fix:** SQL Server is applying batch mode execution to a rowstore table — a SQL 2019 feature. This is beneficial and typically 2–4× faster for aggregation-heavy queries. No action required. If you see this disabled on similar queries, check for scalar UDFs or row-mode-only operators blocking batch mode propagation.
 ### N52 — Constant Scan

@@ -214,7 +214,7 @@ Evaluate whether query plans are stable or exhibiting problems.
 - **Severity:** Info
 - **Fix:** RECOMPILE is being used but the query runs infrequently and takes ≥ 100 ms — the compile overhead may be noticeable. Consider whether the parameter sniffing issue this RECOMPILE is fixing could be handled with `OPTION (OPTIMIZE FOR)` instead. For very infrequent queries (< 10 executions per day), RECOMPILE overhead is negligible.
 ### Q12 — Plan Feedback Active (SQL 2022+)
-- **Trigger:** Query Store data includes `plan_feedback` information (plan was adjusted by automated feedback)
+- **Trigger:** Query Store data includes `plan_feedback` information (plan was adjusted by automated feedback) — SQL 2022+ only
 - **Severity:** Info
 - **Fix:** SQL Server's automated plan correction (PSP optimization or memory grant feedback) has adjusted this query's plan. This is generally desirable. Monitor to confirm the adjusted plan is stable. If feedback causes a regression, disable it with `ALTER DATABASE SCOPED CONFIGURATION SET PARAMETER_SENSITIVE_PLAN_OPTIMIZATION = OFF`.
 
