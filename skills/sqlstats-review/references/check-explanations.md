@@ -3,8 +3,8 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [IO Checks (I1–I15)](#io-checks-i1i15)
-- [Time Checks (W1–W7)](#time-checks-w1w7)
+- [IO Checks (I1–I18)](#io-checks-i1i18)
+- [Time Checks (W1–W9)](#time-checks-w1w9)
 - [Quick Reference: Checks by Severity](#quick-reference-checks-by-severity)
 - [Example Input and Expected Output](#example-input-and-expected-output)
 - [Statistics IO/Time Analysis](#statistics-iotime-analysis)
@@ -13,6 +13,7 @@
 
 
 A detailed guide to every check the analyser performs on `SET STATISTICS IO, TIME ON` output.
+This guide covers 27 checks (I1–I18 IO checks, W1–W9 time checks).
 Each entry explains what the check means, why it matters, how to spot it, real-world examples, and multiple fix options ranked by impact.
 
 ---
@@ -85,7 +86,7 @@ If `CPU ≈ Elapsed`: Single-threaded execution, fully CPU-bound.
 
 ---
 
-## IO Checks (I1–I15)
+## IO Checks (I1–I18)
 
 ---
 
@@ -499,7 +500,89 @@ Table 'SalesData'. Scan count 1, logical reads 8,200, page server reads 1,840, .
 
 ---
 
-## Time Checks (W1–W7)
+### I16 — Columnstore Batch Mode I/O Absent Despite CS Index (SQL 2012+)
+
+**What it means**
+A columnstore index is being scanned in row mode instead of batch mode. Batch mode processes ~900 rows per CPU cycle using vectorized instructions; row mode processes one row at a time. The I/O volume may look reasonable but the CPU cost per row is far higher than a properly batch-mode query.
+
+**How to spot it**
+`segment reads` appears in the IO output (confirming a columnstore index is being accessed), but the companion `/sqlplan-review` output shows execution mode as row-mode (no batch-mode operators). The query does not receive the expected columnstore throughput speedup.
+
+**Common causes**
+- Database compatibility level below 130 (SQL Server 2016) — batch mode requires compat level ≥ 130
+- A scalar UDF in the SELECT list or WHERE clause forces the entire plan into row mode
+- OUTER JOIN patterns that the optimizer cannot batch-mode-ize in older compat levels
+- Row-mode-only operators in the plan path (e.g., certain XML, CLR, or cursor operations)
+
+**Fix options**
+1. Raise database compatibility level to 130 or higher: `ALTER DATABASE [db] SET COMPATIBILITY_LEVEL = 150`.
+2. Remove or replace scalar UDFs with inline table-valued functions (iTVFs) or inline expressions.
+3. On SQL Server 2019+, enable scalar UDF inlining: `ALTER DATABASE SCOPED CONFIGURATION SET TSQL_SCALAR_UDF_INLINING = ON`.
+4. Run `/sqlplan-review` to confirm check N7 (Row Mode Columnstore Scan) and identify the operator forcing row mode.
+
+**Related checks:** I10 (columnstore segment skip rate), W5 (high CPU time), sqlplan-review N7
+
+---
+
+### I17 — Azure SQL Hyperscale: Remote Page Server Reads Dominant (Hyperscale only)
+
+**What it means**
+More than 30% of I/O is coming from remote page server reads rather than the local compute node buffer pool. Page server reads traverse the network to Azure Storage, making them significantly more latency-sensitive than local buffer pool hits.
+
+**How to spot it**
+```
+Table 'SalesData'. Scan count 1, logical reads 6,800, page server reads 2,400, ...
+```
+page server reads / (logical reads + page server reads) = 2,400 / (6,800 + 2,400) = 26.1% — approaching the 30% threshold. At or above 30% triggers I17.
+
+**Common causes**
+- The local compute node buffer pool is too small to hold the working set for this query
+- The query accesses a large, infrequently-used range of data (e.g., historical range scans)
+- The table has grown beyond what the current compute tier can cache locally
+- For read-only workloads routed to a secondary replica: the secondary may have a smaller buffer pool than the primary
+
+**Fix options**
+1. Reduce total logical reads via indexing (see I1, I2) — fewer pages needed means a higher local cache hit rate.
+2. Verify the compute replica tier has enough memory for the working set; scale up to a higher vCore tier to increase the local buffer pool.
+3. For read-only reporting workloads, consider a **named replica** with a tier sized for the analytical workload.
+4. Use partition pruning or filtered indexes to limit the page range accessed.
+
+**Related checks:** I3 (physical read ratio), I15 (page server reads present), I1 (total logical reads)
+
+---
+
+### I18 — High Temp Object Write Amplification (All versions)
+
+**What it means**
+A temp table (`#table`) or `Worktable` is re-read many more times than the underlying base tables, indicating it is functioning as the inner side of a Nested Loops join. Without an index on the temp object, each outer row triggers a full scan of the temp table.
+
+**How to spot it**
+```
+Table '#StagingData'. Scan count 12,400, logical reads 620,000, ...
+Table 'Orders'. Scan count 1, logical reads 84,210, ...
+```
+Temp table logical reads (620,000) ≥ 5× base table reads (84,210 × 5 = 421,050) → triggers I18.
+
+**Common causes**
+- A temp table is inserted into, then immediately joined without creating an index on the join column
+- The optimizer cannot create a Hash or Merge join plan because of a cursor loop or RBAR pattern iterating over the temp table
+- A CTE or derived table was materialized into a Worktable internally, and that Worktable becomes the inner input of a Nested Loops join
+
+**Fix options**
+1. Add a covering index to the temp table immediately after the INSERT:
+   ```sql
+   INSERT INTO #StagingData (OrderId, CustomerId, Total) SELECT ...;
+   CREATE NONCLUSTERED INDEX IX_Staging_CustomerId ON #StagingData (CustomerId);
+   -- now the Nested Loops join can seek instead of scan
+   ```
+2. Restructure the query to use a CTE or subquery the optimizer can inline — avoiding explicit temp table materialization.
+3. If the Worktable is created by an Eager Spool, run `/sqlplan-review` to check N44 (Eager Spool) — adding an index on the source table may eliminate the spool.
+
+**Related checks:** I6 (worktable spill), I2 (excessive scan count), I7 (temp table in IO output)
+
+---
+
+## Time Checks (W1–W9)
 
 ---
 
@@ -690,7 +773,65 @@ SQL Server Execution Times: CPU time = 4,200 ms, elapsed time = 3,800 ms.
 
 ---
 
-## Quick Reference: Checks by Severity
+### W8 — Compile Time Dominates Total Elapsed Time (All versions)
+
+**What it means**
+Compilation overhead consumes more than 30% of the total elapsed time for the statement — each execution is paying a fresh compile cost rather than reusing a cached plan. For queries that run frequently, this compile tax accumulates into significant throughput loss.
+
+**How to spot it**
+```
+SQL Server parse and compile time:
+   CPU time = 280 ms, elapsed time = 520 ms.
+
+SQL Server Execution Times:
+   CPU time = 480 ms, elapsed time = 840 ms.
+```
+compile_elapsed (520) / (compile_elapsed + execution_elapsed) = 520 / 1,360 = 38.2% → triggers W8 (and execution_elapsed 840 ms ≥ 500 ms threshold).
+
+**Common causes**
+- Ad-hoc SQL with literal values instead of parameters — each unique literal produces a distinct cache entry
+- Complex query structure (deep CTEs, many joins, correlated subqueries) that takes longer for the optimizer to compile
+- Missing or stale statistics forcing the optimizer to explore more plan alternatives
+- Plan cache pressure evicting plans frequently, causing recompiles
+
+**Fix options**
+1. **Parameterize** ad-hoc SQL using `sp_executesql` with typed parameters — the same plan is reused across executions.
+2. **Use stored procedures** — the plan is compiled once and reused, with recompile only on schema change or statistics update.
+3. **Update statistics** (`UPDATE STATISTICS dbo.TableName`) — current statistics reduce optimizer search time.
+4. Enable "optimize for ad hoc workloads" at the server level to cache only a plan stub on first execution for ad-hoc queries.
+
+**Related checks:** W3 (high compile time relative to execution CPU), sqlplan-review S5 (compile timeout)
+
+---
+
+### W9 — Negative Elapsed Time (Clock Skew Artifact) (All versions)
+
+**What it means**
+A statement shows a negative elapsed time or negative compile time. This is a measurement artifact caused by NUMA node clock skew — the query started on one NUMA node's scheduler and ended on another node with a slightly different clock reading, producing an apparent negative duration.
+
+**How to spot it**
+```
+SQL Server Execution Times:
+   CPU time = 48 ms, elapsed time = -3 ms.
+```
+execution_elapsed < 0 → triggers W9. Similarly, `compile_elapsed < 0` for the parse/compile block.
+
+**Common causes**
+- Query execution migrated across NUMA nodes mid-flight, and the destination node's high-resolution timer reads lower than the source node's timer
+- The `QueryProcessingTime` counter wrapped or was sampled at an inconsistent point under heavy NUMA load
+- This is a data quality issue, not a query performance issue — the query likely ran in a few milliseconds
+
+**Fix options**
+1. **Rerun in isolation** for a clean measurement: run the query alone on a quiet system to get accurate timing.
+2. **Check NUMA topology**: `SELECT node_id, node_state_desc FROM sys.dm_os_nodes` — if there are multiple NUMA nodes, cross-node scheduling is possible.
+3. **No query tuning required** — this is a measurement artifact. Discard the negative value and use repeated executions to get a representative elapsed time.
+4. If negative elapsed times appear frequently, check for NUMA imbalance with `sys.dm_os_schedulers`.
+
+**Related checks:** W4 (long elapsed time for genuine slow queries)
+
+---
+
+## Quick Reference: Checks by Severity (I1–I18, W1–W9)
 
 ### Critical (fix before other issues)
 | Check | Issue |
@@ -726,9 +867,14 @@ SQL Server Execution Times: CPU time = 4,200 ms, elapsed time = 3,800 ms.
 | I13 | Zero rows with high reads |
 | I14 | Physical reads non-zero |
 | I15 | Azure page server reads detected |
+| I16 | Columnstore Batch Mode I/O Absent Despite CS Index |
+| I17 | Azure SQL Hyperscale: Remote Page Server Reads Dominant |
+| I18 | High Temp Object Write Amplification |
 | W2 | Parallel execution detected |
 | W6 | Multi-batch high elapsed variance |
 | W7 | High rows affected, low elapsed |
+| W8 | Compile Time Dominates Total Elapsed Time |
+| W9 | Negative Elapsed Time (Clock Skew Artifact) |
 
 ---
 

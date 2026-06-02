@@ -201,3 +201,22 @@ Living list — extend as new recommendation types are added.
 | `compatibility_level_per_db` | Compatibility level recommendations | Surface user_notes; require explicit reason |
 | `trace_flags_global` | Trace flag recommendations | Reject if already enabled |
 | `user_notes` | Any recommendation matching note context | Quote relevant note; downgrade or escalate per note content |
+| `version` | Version-gated check suppression | Suppress `NOT ASSESSED` rows for checks that require a later SQL Server version |
+
+## Version-Aware Suppression
+
+When `facts.version` is set (e.g., `"SQL Server 2016 SP3 (13.0.6435.1)"`), the orchestrator can suppress `NOT ASSESSED` findings for checks that require a later SQL Server version. This prevents noise in reports for environments where a check is structurally inapplicable rather than unevaluated.
+
+**Source of version gates:** `VERSION_COMPATIBILITY.md` in the repository root is the authoritative mapping of which checks require which minimum SQL Server version. The orchestrator reads it on demand (not loaded at skill invocation) when version-aware suppression is needed.
+
+**Practical example:** on SQL Server 2016, suppress `NOT ASSESSED` rows for:
+- V41–V44 (`sqlwait-review`): PSP selector wait, DOP Feedback wait, ADR PVS, TempDB metadata — all SQL 2019+/2022+
+- S34–S36, N67–N70 (`sqlplan-review`): PSP dispatcher, CE Feedback, ADR, DOP feedback nodes — all SQL 2019+/2022+
+- Q26–Q32 (`query-store-review`): IQP/PSP/DOP/CE feedback, QS hints, auto-tuning — SQL 2017–2022
+- E29–E32 (`errorlog-review`): ADR PVS, DOP feedback, Ledger verification, CE feedback — SQL 2019+/2022+
+- H23 (`hadr-health-review`): Contained AG — SQL 2022+
+- L28 (`clusterlog-review`): Contained AG system DB offline — SQL 2022+
+
+**Suppression behaviour:** change the row status from `NOT ASSESSED` to `SKIP (version)` in the Check Evaluation Log when `--verbose` is requested. Omit suppressed rows entirely from the standard (non-verbose) report. Do not suppress `NOT ASSESSED` rows caused by missing input data — only suppress when the check version gate exceeds `facts.version`.
+
+**Parsing `facts.version`:** extract the build number (e.g., `13.0.6435.1`) or the version string prefix (`SQL Server 2016`) to determine the major version. The version integer thresholds are: 2008 R2 = 10.5, 2012 = 11, 2014 = 12, 2016 = 13, 2017 = 14, 2019 = 15, 2022 = 16.

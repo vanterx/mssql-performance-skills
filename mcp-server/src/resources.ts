@@ -4,7 +4,8 @@ import type { SkillMeta } from "./skill-loader.js";
 export function registerResources(
   server: McpServer,
   skills: SkillMeta[],
-  guideContent: string
+  guideContent: string,
+  vcContent: string = ""
 ): void {
   server.resource(
     "skills-index",
@@ -61,6 +62,20 @@ export function registerResources(
       },
       async () => ({
         contents: [{ uri: "mssql://guide", mimeType: "text/markdown", text: guideContent }],
+      })
+    );
+  }
+
+  if (vcContent) {
+    server.resource(
+      "version-compat",
+      "mssql://version-compat",
+      {
+        mimeType: "text/markdown",
+        description: "Version-gated check catalog — which checks require SQL Server 2016, 2017, 2019, 2022+",
+      },
+      async () => ({
+        contents: [{ uri: "mssql://version-compat", mimeType: "text/markdown", text: vcContent }],
       })
     );
   }

@@ -19,50 +19,51 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | File | Purpose |
 |------|---------|
 | [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
-| [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 78 checks (T1–T78) — structural, correctness, security, deprecated syntax, performance smells |
-| [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 22 checks (I1–I15 IO, W1–W7 time), per-statement tables, grand totals |
-| [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 20 checks (X1–X12 event-level, X13–X20 workload aggregate), top-consumer tables |
-| [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 40 checks (V1–V40) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency |
-| [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 99 checks (S1–S33, N1–N66), thresholds, output format |
-| [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C10) |
+| [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 85 checks (T1–T85) — structural, correctness, security, deprecated syntax, performance smells, SQL 2017–2022 modern syntax |
+| [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
+| [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
+| [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 44 checks (V1–V44) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency, IQP/PSP/ADR waits, TempDB metadata |
+| [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 108 checks (S1–S36, N1–N72), thresholds, output format |
+| [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C20) |
 | [skills/sqlplan-index-advisor/SKILL.md](skills/sqlplan-index-advisor/SKILL.md) | Index recommendations: `sqlplan-index-advisor`. Derive indexes from operator patterns (D1–D8) + optimizer suggestions |
-| [skills/sqlplan-deadlock/SKILL.md](skills/sqlplan-deadlock/SKILL.md) | Deadlock analysis: `sqlplan-deadlock`. 8 patterns (P1–P8), lock cycle extraction, remediation |
+| [skills/sqlplan-deadlock/SKILL.md](skills/sqlplan-deadlock/SKILL.md) | Deadlock analysis: `sqlplan-deadlock`. 16 patterns (P1–P16), lock cycle extraction, remediation |
 | [skills/sqlplan-batch/SKILL.md](skills/sqlplan-batch/SKILL.md) | Batch workload: `sqlplan-batch`. Aggregate dashboard across many `.sqlplan` files |
-| [skills/query-store-review/SKILL.md](skills/query-store-review/SKILL.md) | Query Store analysis: `query-store-review`. 25 checks (Q1–Q25) — regressed queries, plan instability, resource hotspots, query waits, operational health |
-| [skills/procstats-review/SKILL.md](skills/procstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `procstats-review`. 20 checks (R1–R20) — top consumers, per-execution efficiency, pattern detection, trend analysis |
-| [skills/clusterlog-review/SKILL.md](skills/clusterlog-review/SKILL.md) | WSFC cluster log analysis: `clusterlog-review`. 25 checks (L1–L25) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
-| [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 22 checks (H1–H22) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
-| [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 28 checks (E1–E28) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
-| [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 30 checks (K1–K30) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
+| [skills/query-store-review/SKILL.md](skills/query-store-review/SKILL.md) | Query Store analysis: `query-store-review`. 32 checks (Q1–Q32) — regressed queries, plan instability, resource hotspots, query waits, operational health, IQP/PSP/DOP/CE feedback, QS hints, auto-tuning |
+| [skills/procstats-review/SKILL.md](skills/procstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `procstats-review`. 25 checks (R1–R25) — top consumers, per-execution efficiency, pattern detection, trend analysis |
+| [skills/clusterlog-review/SKILL.md](skills/clusterlog-review/SKILL.md) | WSFC cluster log analysis: `clusterlog-review`. 30 checks (L1–L30) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
+| [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 27 checks (H1–H27) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
+| [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 33 checks (E1–E33) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
+| [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
 | File | Purpose |
 |------|---------|
 | [skills/mssql-performance-review/references/check-explanations.md](skills/mssql-performance-review/references/check-explanations.md) | Methodology reference for the orchestrator: dispatch heuristics, symptom-to-probe-sequence map, hypothesis classes, recommendation conflict catalogue, and rationale for the standard analysis order |
-| [skills/tsql-review/references/check-explanations.md](skills/tsql-review/references/check-explanations.md) | Plain-English explanation of all 78 T-checks with SQL examples, fix recipes, and Quick Reference table |
-| [skills/sqlstats-review/references/check-explanations.md](skills/sqlstats-review/references/check-explanations.md) | Plain-English explanation of all 22 I/W checks with IO output examples and fix recipes |
-| [skills/sqltrace-review/references/check-explanations.md](skills/sqltrace-review/references/check-explanations.md) | Plain-English explanation of all 20 X-checks with trace output examples, capture how-tos, and quick reference |
-| [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 29 V-checks with wait type descriptions, capture queries, and category quick reference |
-| [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 99 S/N checks with XML examples and fix recipes |
-| [skills/sqlplan-compare/references/check-explanations.md](skills/sqlplan-compare/references/check-explanations.md) | C1–C10 regression checks explained — what each change means and why it causes a slowdown |
+| [skills/tsql-review/references/check-explanations.md](skills/tsql-review/references/check-explanations.md) | Plain-English explanation of all 85 T-checks with SQL examples, fix recipes, and Quick Reference table |
+| [skills/sqlstats-review/references/check-explanations.md](skills/sqlstats-review/references/check-explanations.md) | Plain-English explanation of all 27 I/W checks with IO output examples and fix recipes |
+| [skills/sqltrace-review/references/check-explanations.md](skills/sqltrace-review/references/check-explanations.md) | Plain-English explanation of all 25 X-checks with trace output examples, capture how-tos, and quick reference |
+| [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 44 V-checks with wait type descriptions, capture queries, and category quick reference |
+| [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 108 S/N checks with XML examples and fix recipes |
+| [skills/sqlplan-compare/references/check-explanations.md](skills/sqlplan-compare/references/check-explanations.md) | C1–C20 regression checks explained — what each change means and why it causes a slowdown |
 | [skills/sqlplan-index-advisor/references/check-explanations.md](skills/sqlplan-index-advisor/references/check-explanations.md) | Merge rules, Impact score, ranking formula, width check, and output guide |
-| [skills/sqlplan-deadlock/references/check-explanations.md](skills/sqlplan-deadlock/references/check-explanations.md) | P1–P8 deadlock patterns, lock concepts, how to capture XML |
+| [skills/sqlplan-deadlock/references/check-explanations.md](skills/sqlplan-deadlock/references/check-explanations.md) | P1–P16 deadlock patterns, lock concepts, how to capture XML |
 | [skills/sqlplan-batch/references/check-explanations.md](skills/sqlplan-batch/references/check-explanations.md) | How to read each dashboard section, prioritisation guide, next-step workflow |
-| [skills/query-store-review/references/check-explanations.md](skills/query-store-review/references/check-explanations.md) | Plain-English explanation of all 25 Q-checks with Query Store DMV examples and fix recipes |
-| [skills/procstats-review/references/check-explanations.md](skills/procstats-review/references/check-explanations.md) | Plain-English explanation of all 20 R-checks with collection table examples and fix recipes |
-| [skills/clusterlog-review/references/check-explanations.md](skills/clusterlog-review/references/check-explanations.md) | Plain-English explanation of all 25 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
-| [skills/hadr-health-review/references/check-explanations.md](skills/hadr-health-review/references/check-explanations.md) | Plain-English explanation of all 22 H-checks with DMV examples, fix recipes, and Quick Reference table |
-| [skills/errorlog-review/references/check-explanations.md](skills/errorlog-review/references/check-explanations.md) | Plain-English explanation of all 28 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
-| [skills/spn-review/references/check-explanations.md](skills/spn-review/references/check-explanations.md) | Plain-English explanation of all 30 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
+| [skills/query-store-review/references/check-explanations.md](skills/query-store-review/references/check-explanations.md) | Plain-English explanation of all 32 Q-checks with Query Store DMV examples and fix recipes |
+| [skills/procstats-review/references/check-explanations.md](skills/procstats-review/references/check-explanations.md) | Plain-English explanation of all 25 R-checks with collection table examples and fix recipes |
+| [skills/clusterlog-review/references/check-explanations.md](skills/clusterlog-review/references/check-explanations.md) | Plain-English explanation of all 30 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
+| [skills/hadr-health-review/references/check-explanations.md](skills/hadr-health-review/references/check-explanations.md) | Plain-English explanation of all 27 H-checks with DMV examples, fix recipes, and Quick Reference table |
+| [skills/errorlog-review/references/check-explanations.md](skills/errorlog-review/references/check-explanations.md) | Plain-English explanation of all 33 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
+| [skills/spn-review/references/check-explanations.md](skills/spn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
 | [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 16 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 231-check ID reference |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 520-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
+| [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 516 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
 | [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 16 SKILL.md files are discovered by the plugin system |
@@ -212,6 +213,7 @@ Then run `bash scripts/verify-docs.sh` to confirm Check 1 passes.
 | Architectural patterns, conventions, design decisions | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) |
 | Scenario-based skill selection, symptom routing | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) |
 | Token costs and cost control strategies | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) |
+| SQL Server version compatibility matrix | [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) |
 | Skill usage, triggers, input/output examples | [README.md](README.md) |
 | All check triggers, thresholds, fix logic | Each skill's `SKILL.md` — see Key Files table above |
 | Plain-English check explanations with examples | Each skill's `references/check-explanations.md` — see Key Files table above |

@@ -1,6 +1,6 @@
 ---
 name: clusterlog-review
-description: Analyzes Windows Server Failover Cluster (WSFC) CLUSTER.LOG files for Always On Availability Group root-cause diagnosis. Use this skill when an availability group has gone offline, a failover occurred unexpectedly, or a node was evicted, and you need to identify the WSFC-level cause that SQL Server DMVs cannot see. Applies 25 checks (L1–L25) covering lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, and AG resource transitions.
+description: Analyzes Windows Server Failover Cluster (WSFC) CLUSTER.LOG files for Always On Availability Group root-cause diagnosis. Use this skill when an availability group has gone offline, a failover occurred unexpectedly, or a node was evicted, and you need to identify the WSFC-level cause that SQL Server DMVs cannot see. Applies 30 checks (L1–L30) covering lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions, Cloud Witness, Azure Arc, and Contained AG.
 triggers:
   - /clusterlog-review
 ---
@@ -11,7 +11,7 @@ triggers:
 
 Analyze Windows Server Failover Cluster (WSFC) CLUSTER.LOG files to diagnose Always On
 Availability Group failures at the cluster level — the layer below SQL Server DMVs. Applies
-25 checks (L1–L25) across four categories:
+30 checks (L1–L30) across five categories:
 
 - **L1–L8** — File-wide patterns: lease timeouts, health check failures, RHS crashes, error
   bursts, repeated failover cycling, quorum loss, node eviction, log time gaps
@@ -22,6 +22,8 @@ Availability Group failures at the cluster level — the layer below SQL Server 
   witness failure, node isolation
 - **L23–L25** — Configuration signals: VerboseLogging=0, SeparateMonitor absent, incomplete
   node coverage
+- **L26–L30** — Modern cluster features: Cloud Witness timeout, Azure Arc agent disconnect,
+  Contained AG system database offline, cross-subnet probe failure, sp_server_diagnostics warning
 
 ## Input
 
@@ -186,6 +188,33 @@ These checks fire on SQL Server AG-specific resource events within the WSFC log 
 - **Trigger:** Log entries reference nodes or IP addresses not seen in the file-wide node list, or the expected number of cluster nodes (from `[NODE]` membership entries) is greater than the number of distinct node identifiers that appear as log entry sources
 - **Severity:** Info — incomplete node coverage means the analysis cannot rule out failures on uncovered nodes
 - **Fix:** CLUSTER.LOG is per-node — each node writes its own log. Collect logs from all cluster nodes for the same time window: `Get-ClusterLog -Node * -Destination C:\ClusterLogs -TimeSpan 60`. Without logs from all nodes, an isolated node failure or network partition seen only from the failing node's perspective may not be visible. State which nodes are covered in the analysis summary.
+
+## Modern Cluster Feature Checks (L26–L30)
+
+### L26 — Cloud Witness Repeated Timeout
+- **Trigger:** Log contains `CloudWitness` entries with `Timeout` or `Unable to reach` repeated ≥ 3 times in any 10-minute window — Windows Server 2016+ (Cloud Witness requires WS2016 or later)
+- **Severity:** Critical — repeated Cloud Witness timeouts indicate the Azure Blob Storage endpoint is intermittently or persistently unreachable; in a two-node cluster, witness unavailability means quorum is at risk
+- **Fix:** Check outbound HTTPS to `<storageaccount>.blob.core.windows.net:443`. Verify no firewall or NSG change was made. Rotate or re-enter the access key in Failover Cluster Manager. If the witness is in a different Azure region than the cluster, consider a witness in the nearest region or fail over to a File Share Witness during the outage.
+
+### L27 — Azure Arc-Managed Cluster Agent Disconnect
+- **Trigger:** Log contains `ArcSqlExtension` or `HybridConnectivity` entries with `disconnected` or `heartbeat failure` — any SQL Server version with Azure Arc agent installed on cluster nodes
+- **Severity:** Warning — the Azure Arc agent on one or more cluster nodes has lost contact with the Azure control plane; Arc-based management features (policy, Defender, automated backups) are not functioning on those nodes
+- **Fix:** On each cluster node: `Get-Service -Name 'himds','ArcSqlInstanceExtension'`. Check for service restarts in the Windows Event Log. Verify outbound connectivity to `*.arc.azure.com:443`. Re-run `azcmagent connect` if the MSI certificate has expired.
+
+### L28 — Contained AG: Contained System Database Offline
+- **Trigger:** Log contains entries showing a Contained AG's contained system database resource (typically named `<ag_name>_master`) in `FAILED` or `OFFLINE` state — SQL 2022+ only
+- **Severity:** Critical — a Contained AG system database offline means the contained logins, SQL Agent jobs, and linked servers for that AG are unavailable; applications depending on contained system objects will fail
+- **Fix:** Check the resource state in Failover Cluster Manager. Attempt to bring the resource online: `Start-ClusterResource -Name '<ag_name>_master'`. If it fails, check SQL Server ERRORLOG for the contained system database for corruption or I/O errors. Correlate with `/hadr-health-review` (H23) and `/errorlog-review` (E31).
+
+### L29 — Cross-Subnet Probe Failure
+- **Trigger:** Log contains `CrossSubnet` probe entries with `FAILED` or `No response` — indicates cross-subnet heartbeat connectivity loss between cluster nodes in different subnets or sites
+- **Severity:** Critical — cross-subnet probe failure means nodes cannot verify each other's health across a WAN or site boundary; this is a direct precursor to node isolation and quorum loss
+- **Fix:** Verify UDP port 3343 (cluster communication) is open between subnets. Check network routing between sites. Review firewall rules for changes made near the incident time. For multisite clusters, confirm the `RouteHistoryLength` parameter is set appropriately and that multisite DNS resolution is functioning.
+
+### L30 — sp_server_diagnostics Component Warning
+- **Trigger:** Log contains `[RHS] Resource 'SQL Server' IsAlive check failed` or `sp_server_diagnostics` output showing `state=WARNING` or `state=ERROR` for any component — SQL 2012+
+- **Severity:** Warning (`WARNING`); Critical (`ERROR`) — `sp_server_diagnostics` is the health check procedure SQL Server uses to report its own health to the WSFC; component warnings often precede lease timeouts and AG failovers
+- **Fix:** The component field identifies the failing subsystem: `system` (scheduler/I/O non-yielding), `resource` (memory pressure), `query_processing` (blocking/deadlock/spinlock), `io_subsystem` (I/O errors), or `events` (recent critical events). Each maps to a specific diagnosis path: `query_processing` warnings → `/sqlwait-review`; `io_subsystem` warnings → `/errorlog-review` (E15–E19); `resource` warnings → `/errorlog-review` (E9–E14). Capture the full `sp_server_diagnostics` output: `EXEC sys.sp_server_diagnostics`.
 
 ---
 

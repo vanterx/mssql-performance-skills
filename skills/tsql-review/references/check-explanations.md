@@ -2825,6 +2825,132 @@ WHERE c2 > @threshold AND EventDate > @since AND Amount <= @roundedHigh;
 
 ---
 
+## SQL Server 2017–2022 Modern Syntax Checks (T79–T85)
+
+### T79 — Scalar UDF Inlining Blocked — Blocking Construct Identified
+
+**What it means**
+SQL Server 2019 introduced Scalar UDF Inlining, which rewrites scalar UDFs into relational expressions, enabling parallelism and removing the per-row execution penalty. However, certain constructs in the UDF body prevent inlining. T79 fires when both a scalar UDF call and a blocking construct are present.
+
+**How to spot it**
+Scalar UDF call in query (T8) AND one of: `WHILE`, `CURSOR`, `TRY/CATCH`, `@@ROWCOUNT` check after a non-trivial statement in the UDF body, or `EXTERNAL_ACCESS` clause.
+
+**Fix options**
+1. Rewrite `WHILE` loops as set-based CTEs or recursive CTEs.
+2. Move `TRY/CATCH` to the calling stored procedure; UDF callers can handle errors at the proc level.
+3. If the UDF cannot be inlined, convert it to an inline table-valued function and use `CROSS APPLY`:
+```sql
+CREATE FUNCTION dbo.fn_score(@id INT) RETURNS TABLE AS RETURN
+    (SELECT score FROM dbo.ScoreTable WHERE id = @id);
+
+SELECT o.id, s.score FROM dbo.Orders o CROSS APPLY dbo.fn_score(o.id) s;
+```
+**Related checks:** T8 (scalar UDF use), T52 (scalar UDF in WHERE)
+
+---
+
+### T80 — Ledger Table DML Without Version Column Awareness
+
+**What it means**
+Ledger tables (`CREATE TABLE ... LEDGER = ON`) maintain a tamper-evident audit trail through hidden ledger columns. Append-only ledger tables reject UPDATE and DELETE entirely. Updatable ledger tables manage `ledger_start_transaction_id` and related columns automatically — explicit DML against them raises an error. SQL 2022+ only.
+
+**How to spot it**
+INSERT, UPDATE, or DELETE targeting a table identified as a ledger table, or a reference to ledger hidden column names in the DML.
+
+**Fix options**
+1. For append-only ledger tables: remove all UPDATE and DELETE — only INSERT is permitted.
+2. For updatable ledger tables: ensure DML never explicitly references the hidden ledger columns; let the engine manage them.
+3. Use `sys.tables WHERE ledger_type != 0` to identify all ledger tables in the database.
+
+**Related checks:** T2 (unbounded DELETE), T80 is standalone for ledger semantics
+
+---
+
+### T81 — JSON_OBJECT or JSON_ARRAY Below SQL 2022 Compat Level
+
+**What it means**
+`JSON_OBJECT(...)` and `JSON_ARRAY(...)` are ISO SQL 2023 standard functions introduced in SQL Server 2022 (compat level 160). They do not exist in compat level 150 or below — the function calls will fail at runtime with a function-not-found error on older compat levels. SQL 2022+ only.
+
+**How to spot it**
+`JSON_OBJECT(key:value, ...)` or `JSON_ARRAY(val, ...)` syntax in the code.
+
+**Fix options**
+1. Check compat level: `SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()`
+2. If below 160, replace `JSON_OBJECT(key: value)` with `(SELECT [key] = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)`.
+3. Replace `JSON_ARRAY(a, b, c)` with `(SELECT a UNION ALL SELECT b UNION ALL SELECT c FOR JSON PATH)`.
+
+**Related checks:** T51 (FOR JSON usage), T50 (JSON functions)
+
+---
+
+### T82 — STRING_AGG Without Deterministic Ordering
+
+**What it means**
+`STRING_AGG(col, separator)` concatenates rows into a single string. Without `WITHIN GROUP (ORDER BY col)`, the concatenation order is non-deterministic — the database engine can return rows in any order. SQL 2017+.
+
+**How to spot it**
+`STRING_AGG(...)` without a `WITHIN GROUP (ORDER BY ...)` clause.
+
+**Fix options**
+1. If callers depend on sorted output, add `WITHIN GROUP (ORDER BY col ASC)`.
+2. If order is genuinely irrelevant, document it with a comment — `STRING_AGG(col, ',') /* order intentionally non-deterministic */`.
+3. Do not replace non-determinism with `ORDER BY` on the outer query — the outer ORDER BY applies to rows, not the concatenated string content.
+
+**Related checks:** T70 (STUFF + FOR XML PATH pre-2017 pattern), T82 is the modern equivalent
+
+---
+
+### T83 — TRIM Misses Non-Space Whitespace
+
+**What it means**
+`TRIM(col)` without an explicit characters argument only removes ASCII space (CHAR(32)) from both ends. It does not remove tab (`CHAR(9)`), carriage return (`CHAR(13)`), or newline (`CHAR(10)`). Data imported from CSV files, APIs, or user input commonly contains these characters. SQL 2017+.
+
+**How to spot it**
+`TRIM(col)` or `LTRIM(RTRIM(col))` on columns that may contain imported or user-entered text.
+
+**Fix options**
+1. In SQL 2022+: `TRIM(CHAR(9) + CHAR(13) + CHAR(10) + ' ' FROM col)` removes all four whitespace characters.
+2. In SQL 2017–2019: `LTRIM(RTRIM(REPLACE(REPLACE(REPLACE(col, CHAR(9), ''), CHAR(13), ''), CHAR(10), '')))`.
+3. For bulk-imported data, handle whitespace normalization at the ETL layer before loading.
+
+**Related checks:** T47 (string functions on large rowsets)
+
+---
+
+### T84 — APPROX_COUNT_DISTINCT Used for Exact Counting
+
+**What it means**
+`APPROX_COUNT_DISTINCT(col)` uses the HyperLogLog algorithm and returns an approximate result with up to 2% error by design. The function is significantly faster than `COUNT(DISTINCT col)` on large datasets, but the result is not exact. Using it where exact counts are required (financial reports, audit logs, constraint enforcement) produces incorrect results. SQL 2019+.
+
+**How to spot it**
+`APPROX_COUNT_DISTINCT(...)` in queries involving totals, balances, reconciliation, or any context where precision is documented as required.
+
+**Fix options**
+1. Replace with `COUNT(DISTINCT col)` where exact semantics are required.
+2. If approximate results are acceptable, add a comment documenting that fact: `APPROX_COUNT_DISTINCT(UserId) /* ~2% error acceptable for dashboard */`.
+3. Test accuracy: for most analytical dashboards the 2% error is invisible to users; for financial systems it is unacceptable.
+
+**Related checks:** N69 (IQP approximate count distinct at plan level)
+
+---
+
+### T85 — IS DISTINCT FROM Below SQL 2022 Compat Level
+
+**What it means**
+`IS DISTINCT FROM` and `IS NOT DISTINCT FROM` are ISO standard null-safe comparison operators introduced in SQL Server 2022 (compat level 160). They treat NULL as a comparable value, so `NULL IS NOT DISTINCT FROM NULL` is TRUE. In compat levels below 160 these operators are not recognized — the query fails to parse. SQL 2022+ only.
+
+**How to spot it**
+`IS DISTINCT FROM` or `IS NOT DISTINCT FROM` in WHERE, HAVING, or ON clauses.
+
+**Fix options**
+1. Verify compat level: if below 160, replace `a IS DISTINCT FROM b` with `NOT (a = b OR (a IS NULL AND b IS NULL))`.
+2. Replace `a IS NOT DISTINCT FROM b` with `(a = b OR (a IS NULL AND b IS NULL))`.
+3. If raising compat level to 160 is planned, leave the modern syntax and add a compatibility note.
+
+**Related checks:** T16 (NULL comparison using = NULL), T15 (ISNULL/COALESCE anti-pattern)
+
+---
+
 ## Quick Reference: Checks by Severity
 
 ### Critical (fix before merge)
@@ -2916,3 +3042,10 @@ WHERE c2 > @threshold AND EventDate > @since AND Amount <= @roundedHigh;
 | T72 | Missing SET NOCOUNT ON |
 | T73 | Variable-length type of size 1 or 2 |
 | T78 | Deterministic function call on value side of WHERE |
+| T79 | Scalar UDF Inlining Blocked — Blocking Construct Identified |
+| T80 | Ledger Table DML Without Version Column Awareness |
+| T81 | JSON_OBJECT/JSON_ARRAY Below SQL 2022 Compat Level |
+| T82 | STRING_AGG Without Deterministic Ordering |
+| T83 | TRIM Misses Non-Space Whitespace |
+| T84 | APPROX_COUNT_DISTINCT Used for Exact Counting |
+| T85 | IS DISTINCT FROM Below SQL 2022 Compat Level |

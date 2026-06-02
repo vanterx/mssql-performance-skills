@@ -1,6 +1,6 @@
 ---
 name: sqlstats-review
-description: Parse and analyze SQL Server SET STATISTICS IO, TIME ON output. Extracts per-table IO metrics and per-statement CPU/elapsed times, computes % logical read share, detects 22 performance patterns (I1–I15 IO checks, W1–W7 time checks). Use when a user pastes SSMS statistics output or asks why a query does too much I/O.
+description: Parse and analyze SQL Server SET STATISTICS IO, TIME ON output. Extracts per-table IO metrics and per-statement CPU/elapsed times, computes % logical read share, detects 27 performance patterns (I1–I18 IO checks, W1–W9 time checks). Use when a user pastes SSMS statistics output or asks why a query does too much I/O.
 triggers:
   - /sqlstats-review
   - /stats-review
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Parse raw `SET STATISTICS IO, TIME ON` output from SQL Server Management Studio and produce a structured report of I/O activity and timing per statement. Applies 22 checks across IO patterns (I1–I15) and time patterns (W1–W7) to surface performance concerns that the raw output obscures.
+Parse raw `SET STATISTICS IO, TIME ON` output from SQL Server Management Studio and produce a structured report of I/O activity and timing per statement. Applies 27 checks across IO patterns (I1–I18) and time patterns (W1–W9) to surface performance concerns that the raw output obscures.
 
 This is the IO/time complement to `sqlplan-review`. Run it when you have STATISTICS output but no execution plan, or alongside the plan to cross-reference what actually happened at the I/O layer.
 
@@ -102,7 +102,7 @@ Completion time: 2025-05-27T10:32:37.8122685-04:00
 
 ---
 
-## IO Checks (I1–I15)
+## IO Checks (I1–I18)
 
 Evaluate per-statement and per-table IO metrics.
 ### I1 — High Logical Read Count
@@ -166,9 +166,24 @@ Evaluate per-statement and per-table IO metrics.
 - **Severity:** Info
 - **Fix:** Running on Azure SQL Hyperscale — page server reads are reads from remote storage (page server), not the local buffer pool. Similar in impact to physical reads. Optimize by reducing total logical reads to improve local cache hit rate.
 
+### I16 — Columnstore Batch Mode I/O Absent Despite CS Index
+- **Trigger:** Columnstore segment reads > 0 AND no Worktable/Workfile in the statement AND `SET STATISTICS IO` shows only row-store style output (no `segment reads` line) — indicates row-mode execution against a columnstore index — SQL 2012+
+- **Severity:** Warning — row-mode execution on a columnstore index loses batch-mode vectorization; I/O and CPU throughput may be 5–10× lower than expected
+- **Fix:** Diagnose with `/sqlplan-review` — check N7 (Row Mode Columnstore Scan). Common causes: scalar UDF in SELECT list (blocking batch mode until SQL 2019 UDF inlining), OUTER JOIN patterns, or compat level < 130. On SQL 2019+, ensure compat level 150 and Batch Mode on Rowstore is enabled.
+
+### I17 — Azure SQL Hyperscale: Remote Page Server Reads Dominant
+- **Trigger:** `page server reads / (logical reads + page server reads) ≥ 30%` for any table — applies to Azure SQL Hyperscale only; skip if `page server reads` column is absent
+- **Severity:** Warning — a high fraction of remote page server reads indicates the local buffer pool is not caching the working set; repeated execution will be slower than on-premises equivalents
+- **Fix:** Reduce total logical reads (index tuning, predicate pushdown). Verify the Hyperscale replica tier has sufficient memory for the working set. For read-only workloads, route to a Hyperscale named replica with its own independent buffer pool.
+
+### I18 — High Temp Object Write Amplification
+- **Trigger:** A `#temp` or `Worktable` entry has `logical reads ≥ 5× the total logical reads` of the underlying base tables feeding it — signals repeated re-reads of a temp table rather than one-time write/read
+- **Severity:** Warning — repeated re-reads of a temp object indicate it is used as a loop-join inner side; add a covering index to the temp table or consider a table variable with a primary key
+- **Fix:** Add an index to the temp table after population: `CREATE INDEX ix_tmp ON #temp(join_col)`. Alternatively, evaluate whether the temp table can be replaced by a CTE or subquery that the optimizer can inline. Check `/sqlplan-review` for Nested Loops with the temp table on the inner side.
+
 ---
 
-## Time Checks (W1–W7)
+## Time Checks (W1–W9)
 
 Evaluate CPU and elapsed time metrics per statement.
 ### W1 — I/O or Lock Wait Dominant (CPU << Elapsed)
@@ -199,6 +214,16 @@ Evaluate CPU and elapsed time metrics per statement.
 - **Trigger:** `rows_affected > 1,000,000` AND `execution_elapsed < 10,000 ms`
 - **Severity:** Info
 - **Fix:** Query modified > 1 million rows very quickly. Verify this was intentional. Large-volume DML may: fill the transaction log, cause long-running lock hold, or affect downstream replication. Consider batching (e.g., `TOP 10000` in a loop).
+
+### W8 — Compile Time Dominates Total Elapsed Time
+- **Trigger:** `compile_elapsed > 30% of execution_elapsed` AND `execution_elapsed ≥ 500 ms`
+- **Severity:** Warning — compilation overhead is consuming a disproportionate share of each execution's elapsed time; each execution is paying a fresh compile cost rather than reusing a cached plan
+- **Fix:** Common causes: ad-hoc SQL not parameterized (use sp_executesql with parameters), optimizer timeout on very complex queries (simplify or use Query Store hints), statistics out of date forcing recompile. Add `OPTION (RECOMPILE)` only when the compile cost is intentional (e.g., parameter-sensitive queries where a fresh plan is always better than a stale cached one).
+
+### W9 — Negative Elapsed Time (Clock Skew Artifact)
+- **Trigger:** Any statement shows `execution_elapsed < 0` or `compile_elapsed < 0`
+- **Severity:** Info — negative elapsed time is a measurement artifact from STATISTICS TIME using the QueryProcessingTime counter which can wrap or be skewed by NUMA clock sources; the data for this statement should be treated as unreliable
+- **Fix:** Rerun the query in isolation to get a clean measurement. If the issue persists, check for NUMA clock skew: `SELECT node_id, online_scheduler_count FROM sys.dm_os_nodes`. On multi-NUMA systems, ensure the Windows High Performance power plan is active and that processor clock synchronization is functioning. This is a data quality issue only — no query tuning action required.
 
 ---
 

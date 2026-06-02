@@ -1,6 +1,6 @@
 ---
 name: spn-review
-description: Analyzes SQL Server SPN (Service Principal Name) configuration and Kerberos delegation settings to diagnose authentication failures, NTLM fallback, and double-hop connectivity problems. Use this skill when users receive Kerberos errors, linked servers fall back to NTLM, AG listener connections fail, or constrained delegation is needed for a middle-tier application, and you need to identify missing, duplicate, or misconfigured SPNs and delegation settings. Applies 30 checks (K1–K30) covering SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, and AD account sensitivity.
+description: Analyzes SQL Server SPN (Service Principal Name) configuration and Kerberos delegation settings to diagnose authentication failures, NTLM fallback, and double-hop connectivity problems. Use this skill when users receive Kerberos errors, linked servers fall back to NTLM, AG listener connections fail, or constrained delegation is needed for a middle-tier application, and you need to identify missing, duplicate, or misconfigured SPNs and delegation settings. Applies 40 checks (K1–K40) covering SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity, Azure AD hybrid, and advanced gMSA/FCI/delegation scenarios.
 triggers:
   - /spn-review
 ---
@@ -11,7 +11,7 @@ triggers:
 
 Analyze SQL Server SPN configuration and Active Directory delegation attributes to surface
 Kerberos authentication failures, NTLM fallback causes, and double-hop connectivity problems.
-Applies 30 checks (K1–K30) across six categories:
+Applies 40 checks (K1–K40) across seven categories:
 
 - **K1–K6** — MSSQLSvc SPN presence: default instance, named instance, FQDN variant,
   short-hostname variant, port mismatch, and FCI Virtual Network Name
@@ -26,6 +26,10 @@ Applies 30 checks (K1–K30) across six categories:
 - **K26–K30** — AD account and computer sensitivity: AccountNotDelegated on end-user, Protected
   Users membership on end-user, computer account SPN conflict, computer account unconstrained
   delegation, service account in Protected Users
+- **K31–K40** — Azure AD / hybrid and advanced scenarios: Entra ID hybrid SPN gap, Entra-only
+  auth with orphaned AD SPN, Azure SQL MI on-premises SPN, gMSA rollover drift, FCI node SPN
+  leak, distributed AG forwarder SPN, S4U2Proxy without protocol transition, Kerberos FAST
+  incompatibility, AdminSDHolder SPN write block, DNS CNAME alias without SPN
 
 ## Input
 
@@ -215,6 +219,50 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 - **Trigger:** The SQL Server service account is a member of the Protected Users security group — see Thresholds Reference
 - **Severity:** Critical
 - **Fix:** Remove the SQL service account from Protected Users immediately; Protected Users disables delegation, RC4, and DES encryption, and may prevent Kerberos authentication from working for the service at all
+
+---
+
+## Azure AD / Hybrid and Advanced Checks (K31–K40)
+### K31 — Azure AD Hybrid Join SPN Gap
+- **Trigger:** SQL Server instance is in an Entra ID (Azure AD) hybrid-joined environment but no `MSSQLSvc/<host>:<port>` SPN is registered in the on-premises AD for the SQL instance
+- **Severity:** Critical
+- **Fix:** Register the SPN in on-premises AD (`setspn -S MSSQLSvc/<host>:<port> DOMAIN\sqlsvc`); Entra Kerberos for hybrid-joined devices still resolves SPNs through on-premises AD for SQL Server targets — the SPN must exist on both legs
+### K32 — Entra-Only Auth With Orphaned AD SPN
+- **Trigger:** SQL Server is configured for Azure AD–only authentication (`CREATE LOGIN ... FROM EXTERNAL PROVIDER`) but `setspn -L` shows a traditional AD `MSSQLSvc` SPN still registered on the service account — SQL 2022+ / Azure SQL
+- **Severity:** Warning
+- **Fix:** Remove the orphaned SPN (`setspn -D MSSQLSvc/<host>:<port> DOMAIN\sqlsvc`) to avoid confusing on-premises clients that attempt Kerberos against a SQL instance that no longer accepts Windows-integrated logins
+### K33 — Azure SQL Managed Instance SPN for On-Premises Clients
+- **Trigger:** An Azure SQL Managed Instance hostname is referenced in the input but no `MSSQLSvc/<mi-hostname>:1433` SPN is registered in the on-premises AD — Azure SQL MI only
+- **Severity:** Critical
+- **Fix:** Register the SPN for the MI private endpoint hostname in on-premises AD; on-premises applications connecting to MI via VPN or ExpressRoute need the SPN for Kerberos ticket issuance
+### K34 — gMSA Password Rollover SPN Drift
+- **Trigger:** SQL Server runs as a group Managed Service Account (gMSA) and the SPN list returned by `setspn -L` differs from the `ServicePrincipalNames` attribute in `Get-ADServiceAccount` output for the same gMSA
+- **Severity:** Warning
+- **Fix:** Re-register the missing SPNs manually; gMSA automatic password rollover can occasionally cause SPN registration to lag behind; verify with `Test-ADServiceAccount` and `setspn -L`
+### K35 — FCI Node-Specific SPN Leak
+- **Trigger:** Physical node hostnames of a Failover Cluster Instance (FCI) appear in `setspn -Q MSSQLSvc/*` results alongside the Virtual Network Name (VNN) SPN
+- **Severity:** Warning
+- **Fix:** Remove SPNs registered against physical node names (`setspn -D MSSQLSvc/<node-name>:<port> DOMAIN\sqlsvc`); clients connecting to the physical node name may succeed with Kerberos while VNN connections fail, creating intermittent authentication failures after failover
+### K36 — Distributed AG Forwarder Listener SPN Missing
+- **Trigger:** A Distributed Availability Group (DAG) is described and the forwarder replica's listener name has no `MSSQLSvc/<forwarder-listener>:<port>` SPN registered — SQL 2016+
+- **Severity:** Critical
+- **Fix:** Register `setspn -S MSSQLSvc/<forwarder-listener-name>:<port> DOMAIN\sqlsvc` on each replica's service account; the forwarder introduces a second AG whose listener is an additional Kerberos target distinct from either underlying AG's listener
+### K37 — S4U2Proxy Without Protocol Transition
+- **Trigger:** Resource-based Constrained Delegation (RBCD) is configured (`msDS-AllowedToActOnBehalfOfOtherIdentity` present on target) but the initiating service account lacks `TrustedToAuthForDelegation` (S4U2Self / protocol transition not enabled)
+- **Severity:** Warning
+- **Fix:** Enable "Use any authentication protocol" on the initiating service account (`Set-ADUser <account> -TrustedToAuthForDelegation $true`); S4U2Proxy (forwarding a ticket to the target) requires S4U2Self to first obtain a forwardable service ticket for the user
+### K38 — Kerberos FAST Armoring Incompatibility
+- **Trigger:** Domain controllers enforce Kerberos FAST armoring (Flexible Authentication Secure Tunneling) via policy and the SQL Server service account's `msDS-SupportedEncryptionTypes` attribute does not include AES keys — Windows Server 2012+
+- **Severity:** Warning
+- **Fix:** Add AES 128/256 encryption type support to the service account (`Set-ADUser <sqlsvc> -KerberosEncryptionType AES128,AES256`); RC4-only accounts cannot authenticate under FAST policy, causing silent fallback to NTLM
+### K39 — Write-SPN Blocked by AdminSDHolder
+- **Trigger:** The SQL Server service account's `ServicePrincipalName` attribute shows `DENY` on `Write ServicePrincipalName` or the account is a member of a privileged AD group (Domain Admins, Enterprise Admins, etc.) — AdminSDHolder resets ACLs hourly via SDProp
+- **Severity:** Warning
+- **Fix:** Move the SQL Server service account out of privileged AD groups (use a dedicated low-privilege domain account for SQL services); SDProp only resets ACLs on accounts in adminCount=1 groups; a dedicated service account is not subject to AdminSDHolder
+### K40 — DNS CNAME Alias Without SPN
+- **Trigger:** The connection string or client configuration references a DNS CNAME alias that resolves to the SQL Server host's A record, but no `MSSQLSvc/<cname>:<port>` SPN is registered for the alias name
+- **Severity:** Critical
+- **Fix:** Register `setspn -S MSSQLSvc/<cname>:<port> DOMAIN\sqlsvc`; Kerberos ticket requests use the name from the client connection string, not the resolved A record; a CNAME alias requires its own SPN entry independent of the host's SPN
 
 ---
 

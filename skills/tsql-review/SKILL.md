@@ -1,6 +1,6 @@
 ---
 name: tsql-review
-description: Analyze raw T-SQL source code for anti-patterns, security risks, and static performance smells. Applies 78 checks (T1–T78) across structural, correctness, security, deprecated syntax, and performance categories. Use this skill whenever a user pastes a stored procedure, function, view, trigger, or ad-hoc SQL and asks for a review; asks if code is safe, correct, or optimized; mentions implicit conversions, missing indexes, SET options, or cursor usage; or wants a code review before deploying to production. No execution plan required — trigger for any T-SQL review request.
+description: Analyze raw T-SQL source code for anti-patterns, security risks, and static performance smells. Applies 85 checks (T1–T85) across structural, correctness, security, deprecated syntax, performance, and SQL 2017–2022 modern syntax categories. Use this skill whenever a user pastes a stored procedure, function, view, trigger, or ad-hoc SQL and asks for a review; asks if code is safe, correct, or optimized; mentions implicit conversions, missing indexes, SET options, or cursor usage; or wants a code review before deploying to production. No execution plan required — trigger for any T-SQL review request.
 triggers:
   - /tsql-review
   - /sql-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze T-SQL source code — stored procedures, ad-hoc queries, scripts, migration files — for anti-patterns that are detectable without running the query or capturing an execution plan. Covers 78 checks (T1–T78) across five categories: structural anti-patterns, correctness and logic, security and dynamic SQL, deprecated and non-idiomatic syntax, and performance smells.
+Analyze T-SQL source code — stored procedures, ad-hoc queries, scripts, migration files — for anti-patterns that are detectable without running the query or capturing an execution plan. Covers 85 checks (T1–T85) across six categories: structural anti-patterns, correctness and logic, security and dynamic SQL, deprecated and non-idiomatic syntax, performance smells, and SQL Server 2017–2022 modern syntax checks.
 
 This is the "shift-left" complement to `sqlplan-review`. Run it during code review to catch problems before they reach production. Run `sqlplan-review` on the resulting execution plan to catch what only surfaces at runtime.
 
@@ -395,6 +395,36 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 - **Trigger:** A function call in a `WHERE`, `HAVING`, or `JOIN ON` clause where the argument is a variable or literal (not a column reference) and the function's result is constant for the entire query execution: `WHERE col > ABS(@param)`, `WHERE EventDate > DATEADD(DAY, -@n, GETDATE())`, `WHERE Amount < ROUND(@threshold, 2)`
 - **Severity:** Info
 - **Fix:** Pre-compute the constant expression into a variable before the query: `SET @threshold = ABS(@param); ... WHERE col > @threshold`. This eliminates per-row evaluation of a value that is identical for every row and makes the query plan more stable.
+
+## SQL Server 2017–2022 Modern Syntax Checks (T79–T85)
+### T79 — Scalar UDF Inlining Blocked — Blocking Construct Identified
+- **Trigger:** A scalar user-defined function call is detected in the query (T8) AND the function body contains a construct that prevents SQL Server 2019+ Scalar UDF Inlining: `WHILE`, `CURSOR`, `TRY/CATCH`, `@@ROWCOUNT` check after a non-trivial statement, or any external access clause — SQL 2019+ only
+- **Severity:** Warning
+- **Fix:** Identify the specific blocking construct and rewrite the UDF. `WHILE` loops can be replaced with set-based CTEs. `TRY/CATCH` for error checking can move to the caller. If inlining is not achievable, convert the scalar UDF to a multi-statement table-valued function and cross-apply it — this also enables parallelism in SQL 2019+.
+### T80 — Ledger Table DML Without Version Column Awareness
+- **Trigger:** `INSERT`, `UPDATE`, or `DELETE` targeting a table whose DDL or user description identifies it as a ledger table (`LEDGER = ON`) — SQL 2022+ only
+- **Severity:** Warning
+- **Fix:** Ledger append-only tables reject `UPDATE` and `DELETE` by design — only `INSERT` is permitted. For updatable ledger tables, do not explicitly reference the hidden ledger columns (`ledger_start_transaction_id`, `ledger_end_transaction_id`, `ledger_start_sequence_number`) in DML — they are system-managed. Attempts to write to them raise an error.
+### T81 — JSON_OBJECT or JSON_ARRAY Used Below SQL 2022 Compat Level
+- **Trigger:** `JSON_OBJECT(...)` or `JSON_ARRAY(...)` function call detected — SQL 2022+ (compat level 160) only; these functions do not exist in compat level 150 or below
+- **Severity:** Warning
+- **Fix:** Verify the target database compat level: `SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()`. If below 160, replace `JSON_OBJECT(key: value)` with `(SELECT key = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)` pattern. For JSON_ARRAY, use `(SELECT val FROM ... FOR JSON PATH)`.
+### T82 — STRING_AGG Without Deterministic Ordering
+- **Trigger:** `STRING_AGG(col, separator)` without a `WITHIN GROUP (ORDER BY ...)` clause where the query context implies a sorted result is expected — SQL 2017+
+- **Severity:** Info
+- **Fix:** `STRING_AGG` without ordering produces non-deterministic concatenation order — the output row order is undefined per SQL standard. Add `WITHIN GROUP (ORDER BY col)` if callers expect a sorted list. If order is genuinely irrelevant, document it as intentional.
+### T83 — TRIM Misses Non-Space Whitespace
+- **Trigger:** `TRIM(col)` or `TRIM(' ' FROM col)` where the column may contain tab (`CHAR(9)`), carriage return (`CHAR(13)`), or newline (`CHAR(10)`) characters — SQL 2017+
+- **Severity:** Info
+- **Fix:** Bare `TRIM()` removes only ASCII space (CHAR(32)). To remove all whitespace characters: `LTRIM(RTRIM(REPLACE(REPLACE(REPLACE(col, CHAR(9), ''), CHAR(13), ''), CHAR(10), '')))`. In SQL 2022+, `TRIM(CHAR(9) + CHAR(13) + CHAR(10) + ' ' FROM col)` removes all four in one call.
+### T84 — APPROX_COUNT_DISTINCT Used for Exact Counting
+- **Trigger:** `APPROX_COUNT_DISTINCT(col)` in a context that implies exact counts are required: financial calculations, audit queries, referential integrity checks, or output labeled as exact — SQL 2019+
+- **Severity:** Warning
+- **Fix:** `APPROX_COUNT_DISTINCT` uses HyperLogLog and returns an approximate result with up to 2% error by design. Replace with `COUNT(DISTINCT col)` where exact semantics are required. Reserve `APPROX_COUNT_DISTINCT` for dashboard aggregations or analytics where approximation is acceptable.
+### T85 — IS DISTINCT FROM Used Below SQL 2022 Compat Level
+- **Trigger:** `IS DISTINCT FROM` or `IS NOT DISTINCT FROM` predicate detected — SQL 2022+ (compat level 160) only; these ISO standard operators are not recognized in compat level 150 or below
+- **Severity:** Warning
+- **Fix:** Verify the database compat level. If below 160, replace `a IS DISTINCT FROM b` with the equivalent null-safe comparison: `NOT (a = b OR (a IS NULL AND b IS NULL))`. For `IS NOT DISTINCT FROM`: `(a = b OR (a IS NULL AND b IS NULL))`.
 
 ---
 

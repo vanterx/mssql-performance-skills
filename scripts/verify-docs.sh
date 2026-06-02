@@ -21,6 +21,7 @@ echo "==================================================="
 echo ""
 echo "[ 1 ] Total check count"
 actual=$(grep -h "^### [A-Z][0-9]" skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+total_checks="$actual"
 expected=$(grep "Total:.*checks across all skills" PERFORMANCE_TUNING_GUIDE.md 2>/dev/null \
            | grep -o '[0-9]*' | head -1)
 if [ -z "$expected" ]; then
@@ -679,6 +680,97 @@ for skill_file in skills/*/SKILL.md; do
     done <<< "$prefixes"
 done
 [ "$check33_ok" -eq 1 ] && pass "All per-prefix check upper bounds match PERFORMANCE_TUNING_GUIDE.md reference table"
+
+# ---------------------------------------------------------------------------
+# Check 34: VERSION_COMPATIBILITY.md catalog IDs exist in their SKILL.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[34 ] VERSION_COMPATIBILITY.md catalog IDs exist in their SKILL.md"
+check34_ok=1
+declare -A P2S=(
+    [I]="sqlstats-review" [W]="sqlstats-review"
+    [X]="sqltrace-review" [V]="sqlwait-review"
+    [S]="sqlplan-review"  [N]="sqlplan-review"
+    [T]="tsql-review"     [Q]="query-store-review"
+    [R]="procstats-review" [H]="hadr-health-review"
+    [L]="clusterlog-review" [E]="errorlog-review"
+    [K]="spn-review"      [C]="sqlplan-compare"
+    [P]="sqlplan-deadlock" [D]="sqlplan-index-advisor"
+)
+while IFS='|' read -r _ id _rest; do
+    id="${id// /}"
+    [[ "$id" =~ ^[A-Z][0-9]+$ ]] || continue
+    prefix="${id:0:1}"
+    skill="${P2S[$prefix]}"
+    if [ -z "$skill" ]; then
+        warn "34: Unknown prefix '$prefix' (check $id)"
+        continue
+    fi
+    if ! grep -q "^### ${id} " "skills/${skill}/SKILL.md" 2>/dev/null; then
+        fail "34: $id in VERSION_COMPATIBILITY.md not found in skills/${skill}/SKILL.md"
+        check34_ok=0
+    fi
+done < <(grep -E '^\| [A-Z][0-9]+' VERSION_COMPATIBILITY.md)
+[ "$check34_ok" -eq 1 ] && pass "All VERSION_COMPATIBILITY.md catalog IDs exist in their SKILL.md"
+
+# ---------------------------------------------------------------------------
+# Check 35: Version-tagged SKILL.md checks (trigger-line version gates) appear
+#           in VERSION_COMPATIBILITY.md. Only looks at the Trigger: line to
+#           avoid false positives from version mentions in Fix text.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[35 ] Version-tagged SKILL.md checks appear in VERSION_COMPATIBILITY.md"
+check35_ok=1
+for skill_file in skills/*/SKILL.md; do
+    current_id=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^###\ ([A-Z][0-9]+)\ — ]]; then
+            current_id="${BASH_REMATCH[1]}"
+        elif [ -n "$current_id" ] && [[ "$line" =~ \*\*Trigger:\*\* ]]; then
+            # Only flag if the Trigger line itself carries a version gate suffix
+            if echo "$line" | grep -qE '(SQL 20[0-9][0-9]\+[^;]*only|SQL 20[0-9][0-9]\+ only)'; then
+                if ! grep -q "| ${current_id} |" VERSION_COMPATIBILITY.md; then
+                    fail "35: $current_id has SQL version gate in Trigger line but absent from VERSION_COMPATIBILITY.md"
+                    check35_ok=0
+                fi
+            fi
+            current_id=""
+        fi
+    done < "$skill_file"
+done
+[ "$check35_ok" -eq 1 ] && pass "All version-tagged SKILL.md checks appear in VERSION_COMPATIBILITY.md"
+
+# ---------------------------------------------------------------------------
+# Check 36: No cross-version contamination in VERSION_COMPATIBILITY.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[36 ] No cross-version contamination in VERSION_COMPATIBILITY.md"
+check36_ok=1
+pre2016_qs=$(awk '/^### SQL Server 2016\+/,0{exit} /^\| Q[0-9]/{print}' VERSION_COMPATIBILITY.md)
+if [ -n "$pre2016_qs" ]; then
+    fail "36: Query Store checks (Q prefix) appear before SQL 2016+ section: $pre2016_qs"
+    check36_ok=0
+fi
+pre2012_hl=$(awk '/^### SQL Server 2012\+/,0{exit} /^\| [HL][0-9]/{print}' VERSION_COMPATIBILITY.md)
+if [ -n "$pre2012_hl" ]; then
+    fail "36: HADR/Cluster checks appear before SQL 2012+ section: $pre2012_hl"
+    check36_ok=0
+fi
+[ "$check36_ok" -eq 1 ] && pass "No cross-version contamination in VERSION_COMPATIBILITY.md"
+
+# ---------------------------------------------------------------------------
+# Check 37: VERSION_COMPATIBILITY.md total check count matches actual
+# ---------------------------------------------------------------------------
+echo ""
+echo "[37 ] VERSION_COMPATIBILITY.md total check count matches actual"
+vc_total=$(grep -oE '[0-9]+ checks' VERSION_COMPATIBILITY.md | head -1 | grep -oE '[0-9]+')
+if [ -z "$vc_total" ]; then
+    fail "37: Cannot find 'N checks' in VERSION_COMPATIBILITY.md"
+elif [ "$vc_total" = "$total_checks" ]; then
+    pass "VERSION_COMPATIBILITY.md total ($vc_total) matches actual check count"
+else
+    fail "VERSION_COMPATIBILITY.md says $vc_total checks but actual SKILL.md count is $total_checks"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -1,4 +1,4 @@
-# WSFC Cluster Log — Checks Explained (L1–L25)
+# WSFC Cluster Log — Checks Explained (L1–L30)
 
 ## Contents
 
@@ -6,6 +6,7 @@
 - [AG Resource Checks (L9–L17)](#ag-resource-checks-l9l17)
 - [Network and Node Checks (L18–L22)](#network-and-node-checks-l18l22)
 - [Configuration Signal Checks (L23–L25)](#configuration-signal-checks-l23l25)
+- [Modern Cluster Feature Checks (L26–L30)](#modern-cluster-feature-checks-l26l30)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -1029,6 +1030,265 @@ Get-ClusterLog -Node * -Destination C:\ClusterLogs -TimeSpan 60
 
 ---
 
+## Modern Cluster Feature Checks (L26–L30)
+
+### L26 — Cloud Witness Repeated Timeout (Windows Server 2016+)
+
+**What it means:**
+Cloud Witness uses Azure Blob Storage as the quorum witness for WSFC clusters. It is the
+recommended witness type for clusters that span availability zones or Azure regions, replacing
+the traditional disk or file share witness. When CLUSTER.LOG shows repeated CloudWitness
+timeout or connectivity failure entries — three or more within a 10-minute window — the
+cluster is running without a functional quorum witness. In an even-node cluster, losing the
+witness means a single node failure can cause quorum loss and a complete cluster outage.
+
+**How to spot it:**
+```
+00002cc4.00001282::2026/03/10-09:12:01.001 ERR  [CloudWitness] Unable to reach Azure Blob Storage.
+Timeout after 30000 ms. Account: myclusterwitness.blob.core.windows.net
+00002cc4.00001283::2026/03/10-09:14:30.001 ERR  [CloudWitness] Timeout — CloudWitness vote unavailable.
+00002cc4.00001284::2026/03/10-09:16:45.001 ERR  [CloudWitness] Timeout — CloudWitness vote unavailable.
+```
+Search for `CloudWitness` combined with `Timeout`, `Unable to reach`, or `vote unavailable`.
+Three or more occurrences in 10 minutes trigger this check.
+
+**Example:**
+
+Problem — outbound HTTPS blocked after firewall policy change:
+```
+09:12:01 ERR  [CloudWitness] Unable to reach myclusterwitness.blob.core.windows.net:443.
+              Timeout after 30000 ms. Error: WINHTTP_ERROR_TIMEOUT
+09:14:30 ERR  [CloudWitness] CloudWitness vote unavailable (attempt 2 of 3 in last 10 min)
+09:16:45 ERR  [CloudWitness] CloudWitness vote unavailable (attempt 3 of 3) — check network
+```
+
+Fix — test outbound HTTPS connectivity to the storage endpoint:
+```powershell
+# Test connectivity from each cluster node:
+Test-NetConnection -ComputerName myclusterwitness.blob.core.windows.net -Port 443
+# If connectivity passes but auth fails, regenerate the storage account access key in
+# Failover Cluster Manager: Cluster Core Resources > Cloud Witness > Properties
+```
+
+**Fix options:**
+1. Test outbound TCP 443 from each cluster node to `<storageaccount>.blob.core.windows.net` — firewall rules often block this after patch-Tuesday policy pushes.
+2. Verify the storage account access key in Failover Cluster Manager (Cloud Witness properties) — keys may have been rotated without updating the cluster configuration.
+3. Check whether the Azure Storage account has a firewall or virtual network rule that excludes the cluster nodes' public IP addresses.
+4. If the Cloud Witness storage account is permanently unavailable, configure an alternative witness: `Set-ClusterQuorum -FileShareWitness \\server\share` or a replacement Azure storage account.
+
+**Related checks:** L4 (quorum loss), L22 (witness failure)
+
+---
+
+### L27 — Azure Arc-Managed Cluster Agent Disconnect (Any version with Arc)
+
+**What it means:**
+Azure Arc extends Azure management capabilities (Defender for SQL, automated backups, Azure
+Policy, monitoring) to SQL Server instances running outside of Azure. The Arc agent (himds)
+and its extensions (ArcSqlInstanceExtension, HybridConnectivity) run as Windows services on
+each cluster node. When CLUSTER.LOG records Arc agent disconnection or heartbeat failure
+events, the node has lost contact with the Azure control plane. While Arc disconnect does not
+directly cause SQL Server or AG outages, it means Defender for SQL threat detection, automated
+backup policies, and compliance enforcement are silently not functioning.
+
+**How to spot it:**
+```
+00002cc4.00001285::2026/03/10-10:05:00.001 WARN [ArcSqlExtension] Heartbeat failure.
+Agent has not reached Azure control plane in 15 minutes.
+00002cc4.00001286::2026/03/10-10:07:30.001 ERR  [HybridConnectivity] Agent disconnected.
+Last successful contact: 2026/03/10-09:50:00.
+```
+Search for `ArcSqlExtension`, `HybridConnectivity`, or `himds` combined with `disconnected`,
+`heartbeat failure`, or `unable to reach`.
+
+**Example:**
+
+Problem — Arc agent services stopped after Windows update reboot:
+```
+10:05:00 WARN [ArcSqlExtension] Heartbeat failure — Azure control plane unreachable.
+10:05:00 WARN [HybridConnectivity] Agent disconnected. Last seen: 09:50:00.
+10:07:30 ERR  [ArcSqlExtension] Agent offline. Defender for SQL telemetry paused.
+```
+
+Fix — check Arc service status and outbound connectivity:
+```powershell
+# Check service health on each node:
+Get-Service -Name 'himds','ArcSqlInstanceExtension' | Select Name, Status, StartType
+# Restart if stopped:
+Start-Service himds; Start-Service ArcSqlInstanceExtension
+# Verify outbound HTTPS to Arc endpoints:
+Test-NetConnection -ComputerName management.azure.com -Port 443
+Test-NetConnection -ComputerName eas.his.arc.azure.com -Port 443
+```
+
+**Fix options:**
+1. Check service status for `himds` and `ArcSqlInstanceExtension` on each node — services may have failed to restart after a Windows update reboot.
+2. Review Windows Event Log (Application) for Arc extension crash events or installation errors.
+3. Verify outbound connectivity to `*.arc.azure.com:443` and `*.his.arc.azure.com:443` — proxy settings or firewall rules may block Arc endpoints.
+4. If the agent is repeatedly disconnecting, review the Arc extension version and apply available updates via Azure Portal > Arc-enabled SQL Server > Extensions.
+
+**Related checks:** L1 (error burst), L8 (log time gap)
+
+---
+
+### L28 — Contained AG: Contained System Database Offline (SQL 2022+)
+
+**What it means:**
+Contained Availability Groups (introduced in SQL Server 2022) maintain a contained version
+of the system databases — including a contained `master` and `msdb` — within the AG itself.
+These contained system databases carry AG-scoped logins, SQL Agent jobs, linked server
+definitions, and maintenance plans, making them portable across replicas without manual
+synchronization. When the cluster log shows a contained system database resource (named
+`<ag_name>_master` or similar) in FAILED or OFFLINE state, those AG-scoped objects become
+unavailable on the current primary — SQL Agent jobs stop running, linked server queries fail,
+and logins defined in the contained master cannot authenticate.
+
+**How to spot it:**
+```
+00002cc4.00001287::2026/03/10-11:30:00.001 ERR  [RCM] Resource 'ContainedAG1_master':
+TransitionToState(Online-->Offline) OfflineCallIssued. Reason: resource failure.
+00002cc4.00001288::2026/03/10-11:30:00.100 ERR  [RES] ContainedAG1_master: database offline.
+```
+Search for the contained system database resource name (`<ag_name>_master`, `<ag_name>_msdb`)
+in OFFLINE or FAILED transition entries in `[RCM]` or `[RES]`.
+
+**Example:**
+
+Problem — contained master database went offline due to I/O error on primary:
+```
+11:30:00 ERR  [RCM] Resource 'ContainedAG1_master' transitioning: Online-->Offline
+11:30:00 ERR  [RES] ContainedAG1_master: database unavailable. Check SQL ERRORLOG.
+11:30:01 WARN [hadrag] AG ContainedAG1: contained system database failure — some features
+              unavailable (SQL Agent, linked servers, contained logins).
+```
+
+Fix — attempt to bring the contained system database resource online:
+```powershell
+# Attempt to bring the resource online:
+Start-ClusterResource -Name 'ContainedAG1_master'
+# Check for errors:
+Get-ClusterResourceState -Name 'ContainedAG1_master'
+```
+
+**Fix options:**
+1. Attempt `Start-ClusterResource -Name '<ag_name>_master'` — if it fails immediately, the SQL ERRORLOG on the primary will contain the database-level error (corruption, I/O failure).
+2. Correlate with `/hadr-health-review` H23 (contained system database check) and `/errorlog-review` E15–E19 (I/O error checks) for the underlying cause.
+3. If the contained system database is corrupt, restore it from the most recent AG-consistent backup. For contained AGs, back up the contained system databases as part of the regular backup schedule.
+4. Review the data volume's I/O health — contained system database failures are often caused by the same I/O issues that affect user databases (L1 root cause chain).
+
+**Related checks:** L9 (AG offline transition), L10 (SQL connectivity loss)
+
+---
+
+### L29 — Cross-Subnet Probe Failure (All versions)
+
+**What it means:**
+In multi-site or multi-subnet WSFC configurations, nodes in different subnets communicate
+via cross-subnet heartbeat probes (UDP port 3343). These probes are separate from the
+intra-subnet heartbeat and use different threshold settings (`CrossSubnetThreshold`,
+`CrossSubnetDelay`). When CLUSTER.LOG records repeated cross-subnet probe failures — showing
+`FAILED` or `No response` for a remote subnet node — the cluster has lost its inter-site
+heartbeat path. This is a direct precursor to node isolation and quorum loss for any node
+that cannot reach a majority across subnets, and is often caused by inter-site routing
+changes, firewall rule drift, or WAN link degradation.
+
+**How to spot it:**
+```
+00002cc4.00001289::2026/03/10-12:00:01.001 WARN [NODE] CrossSubnet probe to NODE3 (10.2.0.5): FAILED.
+00002cc4.00001290::2026/03/10-12:00:03.001 WARN [NODE] CrossSubnet probe to NODE3 (10.2.0.5): No response.
+00002cc4.00001291::2026/03/10-12:00:05.001 ERR  [NODE] CrossSubnet probe to NODE3: threshold reached.
+```
+Search for `CrossSubnet` combined with `FAILED`, `No response`, or `probe` in `[NODE]` entries.
+
+**Example:**
+
+Problem — new inter-site firewall rule blocking UDP 3343 after network refresh:
+```
+12:00:01 WARN [NODE] CrossSubnet probe to NODE3 (10.2.0.5) FAILED (attempt 1)
+12:00:03 WARN [NODE] CrossSubnet probe to NODE3 (10.2.0.5) FAILED (attempt 2)
+12:00:05 WARN [NODE] CrossSubnet probe to NODE3 (10.2.0.5) FAILED (attempt 3)
+12:00:05 ERR  [NODE] CrossSubnetThreshold (3) reached — NODE3 declared unreachable.
+12:00:06 ERR  [NODE] NODE3 removed from cluster membership.
+```
+
+Fix — verify UDP 3343 between subnets and check routing:
+```powershell
+# Test UDP reachability between subnets (use PortQry or a custom UDP probe):
+# PortQry -n 10.2.0.5 -e 3343 -p UDP
+# Check current cross-subnet cluster settings:
+(Get-Cluster).CrossSubnetThreshold
+(Get-Cluster).CrossSubnetDelay
+# Temporarily raise threshold to allow time for routing fix:
+(Get-Cluster).CrossSubnetThreshold = 10
+```
+
+**Fix options:**
+1. Verify UDP port 3343 is open bidirectionally between all subnet pairs — this port must be allowed through all firewalls and security groups on the inter-site path.
+2. Check routing between sites for recent changes — an asymmetric route or missing route can cause one-way UDP failure that appears as probe failures only in one direction.
+3. Review Windows Firewall rules on the nodes in the remote subnet — a GPO-pushed rule may have blocked inbound UDP 3343.
+4. Confirm multisite DNS resolution is functioning correctly — cross-subnet probes use node names, not just IPs; a stale DNS entry pointing to a retired IP can cause failures.
+5. Increase `CrossSubnetThreshold` temporarily while the network issue is being resolved to prevent spurious node evictions during the fix window.
+
+**Related checks:** L18 (partition/split-brain), L21 (heartbeat timeout)
+
+---
+
+### L30 — sp_server_diagnostics Component Warning (SQL 2012+)
+
+**What it means:**
+`sp_server_diagnostics` is the health check stored procedure that SQL Server uses to report
+its internal subsystem status to WSFC. It is called by hadrres.dll as part of the IsAlive
+check and returns a component state for five subsystems: `system` (scheduler and I/O
+non-yielding), `resource` (memory pressure), `query_processing` (blocking, deadlock,
+spinlock), `io_subsystem` (I/O errors and latency), and `events` (critical ring buffer
+events). When CLUSTER.LOG shows `IsAlive check failed` or `sp_server_diagnostics` returning
+WARNING or ERROR for any component, it means SQL Server's own health monitor has detected a
+problem severe enough to report to WSFC. Depending on the AG's `FailureConditionLevel`,
+WARNING or ERROR states can trigger automatic AG failover. These signals are direct diagnostic
+pointers to the SQL Server subsystem that is in distress.
+
+**How to spot it:**
+```
+00002cc4.00001292::2026/03/10-14:31:58.001 ERR  [hadrag] IsAlive check failed.
+sp_server_diagnostics returned state=WARNING for component: query_processing.
+Details: 3 sessions with wait > 30 seconds, 1 non-yielding scheduler detected.
+```
+Search for `IsAlive check failed`, `sp_server_diagnostics`, `state=WARNING`, or
+`state=ERROR` in `[hadrag]` or `[RES]` entries. Note the `component` field — it
+identifies which SQL Server subsystem is in distress.
+
+**Example:**
+
+Problem — query processing component warning due to non-yielding scheduler:
+```
+14:31:50 WARN [hadrag] sp_server_diagnostics: component=query_processing state=WARNING
+              non_yielding_scheduler_count=1 pending_tasks=847
+14:31:55 WARN [hadrag] sp_server_diagnostics: component=query_processing state=ERROR
+              non_yielding_scheduler_count=1 (escalated after 2 consecutive warnings)
+14:31:58 ERR  [hadrag] IsAlive check failed. HealthCheckTimeout exceeded.
+14:32:01 ERR  [RCM]   AG1 transitioning: Online-->Offline
+```
+
+Fix — map the component to the appropriate specialist skill:
+```sql
+-- Run manually to reproduce the health state:
+EXEC sp_server_diagnostics 5;
+-- Returns one row per component with state (1=clean, 2=warning, 3=error, 4=failure)
+-- and component-specific XML details.
+```
+
+**Fix options:**
+1. `query_processing` WARNING/ERROR → run `/sqlwait-review` on `sys.dm_os_wait_stats` output and `/tsql-review` on blocking queries; check for non-yielding schedulers in ERRORLOG.
+2. `io_subsystem` WARNING/ERROR → run `/errorlog-review` checks E15–E19 (I/O slow, stalled scheduler); measure disk latency with `sys.dm_io_virtual_file_stats`.
+3. `resource` WARNING/ERROR → run `/errorlog-review` checks E9–E14 (memory pressure); check `sys.dm_os_memory_clerks` for clerks consuming abnormal page counts.
+4. `system` WARNING/ERROR → investigate non-yielding schedulers in the SQL ERRORLOG (search for `non-yielding`); may require a SQL Server service restart if a scheduler is permanently stuck.
+5. `events` WARNING/ERROR → check SQL ERRORLOG and `sys.dm_os_ring_buffers` for critical events logged in the window before the health check failure.
+6. Raise `FailureConditionLevel` from default 3 to 4 or 5 to prevent WARNING-level component states from triggering automatic failover if the underlying condition is known and non-critical.
+
+**Related checks:** L1 (error burst), L2 (health check failure)
+
+---
+
 ## Quick Reference Table
 
 | ID | Name | Category | Severity |
@@ -1058,3 +1318,8 @@ Get-ClusterLog -Node * -Destination C:\ClusterLogs -TimeSpan 60
 | L23 | VerboseLogging = 0 | Configuration | Info |
 | L24 | SeparateMonitor Not Set | Configuration | Info |
 | L25 | Missing Node Coverage | Configuration | Info |
+| L26 | Cloud Witness Repeated Timeout | Modern | Critical |
+| L27 | Azure Arc Agent Disconnect | Modern | Warning |
+| L28 | Contained AG System Database Offline | Modern | Critical |
+| L29 | Cross-Subnet Probe Failure | Modern | Critical |
+| L30 | sp_server_diagnostics Component Warning | Modern | Warning/Critical |

@@ -7,12 +7,13 @@
 - [Category 3 — I/O and Storage (E15–E19)](#category-3--io-and-storage-e15e19)
 - [Category 4 — Startup, Shutdown, and Connectivity (E20–E24)](#category-4--startup-shutdown-and-connectivity-e20e24)
 - [Category 5 — Configuration and Informational (E25–E28)](#category-5--configuration-and-informational-e25e28)
+- [Category 6 — SQL 2019/2022 Modern Feature Checks (E29–E33)](#category-6--sql-20192022-modern-feature-checks-e29e33)
 - [Quick Reference](#quick-reference)
 
 ---
 
 
-Plain-English explanations of all 28 checks (E1–E28) with examples, fix recipes, and a Quick Reference table.
+Plain-English explanations of all 33 checks (E1–E33) with examples, fix recipes, and a Quick Reference table.
 
 ---
 
@@ -1096,6 +1097,132 @@ Fix — apply the latest CU for the major version:
 
 ---
 
+## Category 6 — SQL 2019/2022 Modern Feature Checks (E29–E33)
+
+---
+
+### E29 — ADR PVS Cleanup Stall
+
+**What it means**
+Accelerated Database Recovery (ADR) uses a Persistent Version Store (PVS) to hold row versions needed for long transactions and to support rapid rollback. When long-running transactions block PVS cleanup, the version store grows without bound — consuming tempdb space or the dedicated PVS filegroup — and the ERRORLOG records stall messages.
+
+**How to spot it**
+```
+Persistent Version Store cleanup stall detected on database '<db>'. Unable to advance the min_required_lsn.
+```
+
+**Common causes**
+- An idle or long-running transaction holding an open snapshot
+- Batch import jobs that run for hours without committing
+- Distributed transactions left open across linked servers
+
+**Fix options**
+1. Find blocking transactions: `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_begin_time < DATEADD(MINUTE,-10,GETUTCDATE())`
+2. Commit or roll back the offending transaction
+3. If ADR is not needed: `ALTER DATABASE [db] SET ACCELERATED_DATABASE_RECOVERY = OFF`
+4. Monitor PVS size: `SELECT * FROM sys.dm_tran_persistent_version_store_stats`
+
+**Related checks:** E9 (memory pressure), E17 (TempDB space exhaustion)
+
+---
+
+### E30 — IQP DOP Feedback Applied
+
+**What it means**
+Intelligent Query Processing (IQP) DOP Feedback (SQL 2022+) adjusts the degree of parallelism for repeated queries based on observed overhead. The ERRORLOG records when feedback has been applied or when a DOP adjustment has stabilized. This is expected behavior but can cause regressions if the DOP reduction is too aggressive.
+
+**How to spot it**
+```
+DOP feedback adjusted query plan for query_hash = 0x<hash>. New DOP = <n>.
+```
+
+**Common causes**
+- Queries with high CXPACKET / CXCONSUMER waits where parallelism overhead exceeds benefit
+- IQP learning phase: the first several executions after feedback activation may see transient DOP changes
+
+**Fix options**
+1. Review adjustments: `SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'DOP'`
+2. If a DOP reduction caused regressions, disable for the query: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_DOP_FEEDBACK''))'`
+3. Disable globally (SQL 2022): `ALTER DATABASE SCOPED CONFIGURATION SET DOP_FEEDBACK = OFF`
+
+**Related checks:** E32 (CE Feedback model change)
+
+---
+
+### E31 — Ledger Verification Failure
+
+**What it means**
+SQL Server Ledger (SQL 2022+) maintains a cryptographic hash chain for append-only or updatable ledger tables. Verification compares stored digests against recomputed hashes. A failure means the data has been modified outside normal DML paths — a potential security incident.
+
+**How to spot it**
+```
+Ledger verification failed for database '<db>'. Tamper detected in ledger table '<schema>.<table>'.
+```
+
+**Common causes**
+- Direct page manipulation or storage-level corruption
+- Backup/restore of a ledger table without restoring its digest history
+- Third-party tools that bypass SQL Server's write path
+
+**Fix options**
+1. Preserve all evidence before any further access: `BACKUP DATABASE [db] TO DISK = '...'`
+2. Run `sys.sp_verify_database_ledger` and `sys.sp_verify_database_ledger_from_digest_storage` for full scope
+3. Escalate to security incident response; do not modify the affected tables
+4. Restore from a verified backup if data integrity cannot be established
+
+**Related checks:** E16 (Database Corruption Warning)
+
+---
+
+### E32 — CE Feedback Model Version Change
+
+**What it means**
+Cardinality Estimation (CE) Feedback (SQL 2022+) persistently refines the CE model for individual queries over time. When the feedback system promotes a new model version, it records a message in the ERRORLOG. Sudden model-version changes after workload shifts can cause plan regressions for queries that relied on the previous model.
+
+**How to spot it**
+```
+Cardinality Estimation feedback applied new model version <n> for query_hash = 0x<hash>.
+```
+
+**Common causes**
+- Workload pattern change: new parameter values, data distribution shift, statistics update
+- CU upgrade that recalibrates the CE feedback engine
+
+**Fix options**
+1. Correlate timestamp with Query Store performance: check `sys.query_store_query` for plan regression near the event time
+2. Inspect feedback: `SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'CE'`
+3. Disable CE feedback for a specific query: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_CE_FEEDBACK''))'`
+4. Disable globally: `ALTER DATABASE SCOPED CONFIGURATION SET CE_FEEDBACK = OFF`
+
+**Related checks:** E30 (DOP Feedback)
+
+---
+
+### E33 — Azure Arc–Enabled SQL: Agent Disconnect
+
+**What it means**
+Azure Arc extends Azure management capabilities to on-premises and multicloud SQL Server instances. When the Arc agent (Azure Connected Machine agent / himds service) or the Arc SQL extension loses connectivity to the Azure control plane, Arc-dependent features — Microsoft Defender for SQL, automated backups, best practice assessments, Azure Policy enforcement — stop functioning.
+
+**How to spot it**
+```
+Arc SQL extension disconnected. Last heartbeat: <timestamp>. Unable to reach Azure Arc endpoint.
+```
+
+**Common causes**
+- Outbound HTTPS (port 443) to `*.arc.azure.com` blocked by firewall rule change
+- Azure Connected Machine agent service stopped or crashed
+- MSI token renewal failure (managed identity certificate expired)
+
+**Fix options**
+1. Check agent status: `Get-Service -Name 'himds','ArcSqlInstanceExtension'` (Windows); `systemctl status himds` (Linux)
+2. Verify connectivity: `Test-NetConnection -ComputerName guestnotificationservice.azure.com -Port 443`
+3. Restart the extension service if stopped; review `%ProgramData%\GuestConfig\arc_policy_logs\` for error details
+4. Re-onboard the machine if the MSI certificate is expired: `azcmagent disconnect && azcmagent connect`
+
+**Related checks:** E20 (Abnormal Shutdown), E21 (Repeated Restarts)
+
+---
+
 ## Quick Reference
 
 | ID | Name | Category | Severity |
@@ -1128,3 +1255,8 @@ Fix — apply the latest CU for the major version:
 | E26 | Max Server Memory Default | Config | Info |
 | E27 | ERRORLOG Rotation Gap | Config | Info |
 | E28 | SQL Server Version | Config | Info |
+| E29 | ADR PVS Cleanup Stall | Modern (SQL 2019+) | Warning |
+| E30 | IQP DOP Feedback Applied | Modern (SQL 2022+) | Info |
+| E31 | Ledger Verification Failure | Modern (SQL 2022+) | Critical |
+| E32 | CE Feedback Model Version Change | Modern (SQL 2022+) | Info |
+| E33 | Azure Arc Agent Disconnect | Modern (Arc-enabled) | Warning |

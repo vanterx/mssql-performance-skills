@@ -1,6 +1,6 @@
 ---
 name: sqlplan-compare
-description: Diff two SQL Server execution plans (baseline vs regression) to identify what changed — join strategies, memory grants, operator topology, new warnings, and missing indexes. Use when a query regressed after a deployment, statistics update, or schema change.
+description: Diff two SQL Server execution plans (baseline vs regression) to identify what changed — join strategies, memory grants, operator topology, new warnings, and missing indexes. Applies 20 checks (C1–C20). Use when a query regressed after a deployment, statistics update, schema change, or SQL Server version upgrade.
 triggers:
   - /sqlplan-compare
   - /plan-compare
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Identify what changed between two execution plans for the same query — one known-good (baseline) and one regressed (new). Produce a side-by-side diff that explains why the query is slower and what to fix.
+Identify what changed between two execution plans for the same query — one known-good (baseline) and one regressed (new). Produce a side-by-side diff that explains why the query is slower and what to fix. Applies 20 regression checks (C1–C20).
 
 ## Input
 
@@ -62,7 +62,7 @@ Compare these for each plan:
 
 ---
 
-## Comparison Checks
+## Comparison Checks (C1–C20)
 ### C1 — Seek Degraded to Scan
 - **Trigger:** A table that had a Seek operator in the baseline now has a Scan in the new plan
 - **Severity:** Critical
@@ -109,6 +109,56 @@ Compare these for each plan:
 - **Severity:** Warning
 - **Report:** Old version, new version
 - **Likely causes:** Database compatibility level was lowered, or plan was compiled under a different database context
+### C11 — Adaptive Join Threshold Changed
+- **Trigger:** `AdaptiveThresholdRows` attribute on an Adaptive Join operator differs between plans — SQL 2017+
+- **Severity:** Warning
+- **Report:** Node ID, baseline threshold rows, new threshold rows, join type chosen in each plan
+- **Likely causes:** Cardinality estimate for the build side changed (statistics update, parameter sniffing); the threshold is set at compile time from the optimizer's row count estimate
+### C12 — Batch Mode Lost
+- **Trigger:** Baseline has operators with `executionMode="Batch"`; new plan has only `executionMode="Row"` — SQL 2017+ (Columnstore), SQL 2019+ (Rowstore)
+- **Severity:** Warning
+- **Report:** Count of batch-mode operators in baseline vs new plan; first operator that lost batch mode
+- **Likely causes:** Columnstore index dropped; `DISABLE_BATCH_MODE_ON_ROWSTORE` hint added; compat level dropped below 150; scalar UDF or incompatible operator introduced
+### C13 — New Implicit Conversion Warning
+- **Trigger:** `PlanAffectingConvert` element present in new plan but absent from baseline
+- **Severity:** Warning
+- **Report:** Column and expression affected; from/to data types; whether seeks are impacted
+- **Likely causes:** Parameter or variable type changed; column altered to a different type; a new function call wraps a column making the predicate non-sargable
+### C14 — Estimated vs Actual Row Divergence Worsened
+- **Trigger:** Maximum `actualRows / estimateRows` ratio across all operators (with `actualRows > 100`) increased by > 10× between plans — requires actual execution plans
+- **Severity:** Warning
+- **Report:** Operator with highest ratio in each plan; node ID; estimated vs actual rows; ratio
+- **Likely causes:** Statistics quality degraded; parameter sniffing changed compiled estimates; a predicate was added or removed that shifted cardinality
+### C15 — Compile CPU Regression
+- **Trigger:** `CompileCPU` in new plan > baseline `CompileCPU` × 3
+- **Severity:** Info
+- **Report:** Baseline compile CPU (ms), new compile CPU (ms), ratio
+- **Likely causes:** Schema became more complex (more joins, views resolved); optimizer timeout extended; query gained additional joins or subqueries
+### C16 — Plan Guide or Forced Plan Introduced
+- **Trigger:** `PlanGuideName` attribute present in new plan but absent from baseline
+- **Severity:** Warning
+- **Report:** Plan guide name; type (SQL, OBJECT, TEMPLATE); operator shape it forced
+- **Likely causes:** A DBA applied a plan guide or Query Store forcing after the regression — the forced plan may itself be suboptimal
+### C17 — New Eager Index Spool
+- **Trigger:** `Eager Index Spool` operator present in new plan but absent from baseline
+- **Severity:** Critical
+- **Report:** Node ID, estimated rows, cost percent
+- **Likely causes:** A permanent index was dropped; the optimizer is now building a temporary runtime index to compensate — this is expensive and signals a missing permanent index
+### C18 — Partition Elimination Lost
+- **Trigger:** New plan accesses more partitions than baseline for the same partitioned table with an identical filter predicate — SQL 2005+ (partitioning)
+- **Severity:** Warning
+- **Report:** Table name, partition count baseline vs new plan
+- **Likely causes:** Data type or collation change on the partition key column broke elimination; parameter type changed making the predicate non-sargable against the partition function
+### C19 — Parameter Sensitive Plan Dispatcher Added
+- **Trigger:** `ParameterSensitivePredicate` dispatcher node present in new plan but absent from baseline — SQL 2022+ only
+- **Severity:** Info
+- **Report:** PSP predicate column, threshold rows, number of variants
+- **Likely causes:** SQL 2022 PSP optimization activated after a data-skew threshold was met; generally beneficial but variant boundaries should be verified against actual data distribution
+### C20 — New Cross-Database or Linked Server Access
+- **Trigger:** New plan references a four-part name (`server.db.schema.table`) or a linked server operator absent from baseline
+- **Severity:** Warning
+- **Report:** Remote server or database name; operator type; estimated rows
+- **Likely causes:** A view was modified to reference a linked server; a stored procedure was updated to query a different database; query was rewritten to join across database boundaries
 
 ---
 

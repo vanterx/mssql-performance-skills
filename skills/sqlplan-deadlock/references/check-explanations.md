@@ -6,12 +6,13 @@
 - [How to Get the Deadlock XML](#how-to-get-the-deadlock-xml)
 - [Lock Concepts](#lock-concepts)
 - [Deadlock Patterns (P1–P8)](#deadlock-patterns-p1p8)
+- [Extended Patterns (P9–P16)](#extended-patterns-p9p16)
 - [Reading the Output](#reading-the-output)
 
 ---
 
 
-A plain-English guide to SQL Server deadlocks: what they are, how to capture the XML, what the lock concepts mean, and a full explanation of each pattern (P1–P8) the skill detects.
+A plain-English guide to SQL Server deadlocks: what they are, how to capture the XML, what the lock concepts mean, and a full explanation of each of the 16 patterns (P1–P16) the skill detects.
 
 ---
 
@@ -285,6 +286,112 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 - Replace cursor-based row-by-row processing with a set-based UPDATE
 - Review MERGE statements: ensure each target row can only be matched by one source row (add a uniqueness guarantee on the source)
 - Check for loopback linked server usage
+
+---
+
+## Extended Patterns (P9–P16)
+
+### P9 — RCSI Reader Deadlock Despite RCSI Enabled
+
+**What gives it away:** The database has `READ_COMMITTED_SNAPSHOT` ON, yet the deadlock XML shows a reader (S lock) and a writer (X lock) in a cycle.
+
+**Why it happens:** RCSI only eliminates shared locks for sessions running at READ COMMITTED isolation. Sessions explicitly using REPEATABLE READ, SERIALIZABLE, or `WITH (HOLDLOCK)` / `WITH (UPDLOCK)` hints continue to acquire shared locks even under RCSI. The deadlock occurs because these sessions hold their S locks for the full transaction duration while a writer needs X on the same resource.
+
+**Fix:**
+- Identify the reader's `isolationlevel` attribute in the process XML. If REPEATABLE READ or SERIALIZABLE is not required, change the application to use READ COMMITTED.
+- Remove unnecessary `WITH (HOLDLOCK)` hints — they escalate lock hold time for no benefit in most cases.
+- If the higher isolation level is legitimately required, use SNAPSHOT isolation instead: it provides the same consistency guarantees as REPEATABLE READ without taking shared locks.
+
+---
+
+### P10 — MERGE Statement Deadlock
+
+**What gives it away:** One or more processes has a MERGE statement in its `<executionStack>` as the outermost or active frame.
+
+**Why it happens:** SQL Server's MERGE operator must apply Halloween Protection — it reads all matching target rows into a spool before performing any writes, to prevent updates from interfering with the scan used to find update targets. This two-phase (read-then-write) lock acquisition pattern can cycle with concurrent MERGE or DML on the same rows. SQL Server KB articles document multiple MERGE deadlock edge cases.
+
+**Fix:**
+- Replace MERGE with explicit INSERT/UPDATE/DELETE statements where possible. This eliminates the Halloween Protection spool and allows more predictable lock ordering.
+- If MERGE is required, use `WITH (TABLOCK)` on the target as a short-term serialization guard (at the cost of concurrency).
+- Stage source data into a temp table and process in batches to reduce per-MERGE lock scope.
+
+---
+
+### P11 — Heap Table RID Lock Deadlock
+
+**What gives it away:** The resource list contains `ridlock` entries. RID (Row Identifier) locks are used exclusively on heap tables.
+
+**Why it happens:** Heap tables store rows without any ordering. SQL Server tracks each row by its physical location (File:Page:Slot = RID). RID locks have the same S/U/X hierarchy as key locks but are bound to a physical page slot. Under concurrent inserts, two sessions can acquire RID locks in different orders across pages, forming a cycle.
+
+**Fix:**
+- Add a clustered index to the table. The heap becomes a B-tree, row-level `keylock` entries replace `ridlock` entries, and lock ordering becomes more predictable.
+- Use `/sqlplan-index-advisor` to identify the best clustering key based on the deadlocked queries' access patterns.
+
+---
+
+### P12 — Distributed Transaction Deadlock
+
+**What gives it away:** One or more process entries has `transactionname` containing "Distributed Transaction" or shows `dtcState` attributes.
+
+**Why it happens:** MS DTC coordinates a two-phase commit protocol across multiple resource managers (SQL Server instances, MSMQ, etc.). During Phase 1 (prepare), all participants hold locks. Phase 2 (commit) releases them. The total lock hold time spans both phases — often several seconds — vs milliseconds for a local transaction. This extended hold time dramatically increases the window during which another session can form a deadlock cycle.
+
+**Fix:**
+- Eliminate distributed transactions by co-locating dependent data on a single SQL Server instance.
+- If DTC is required, minimize transaction scope — commit or roll back as quickly as possible before acquiring locks on the next resource.
+- Review DTC timeout settings; an artificially extended timeout means locks are held longer before DTC aborts a participant.
+
+---
+
+### P13 — Multiple Deadlock Graphs: Shared Root Cause
+
+**What gives it away:** Multiple deadlock XML graphs are provided and they all reference the same `objectname` or `indexname` in their resource lists.
+
+**Why it happens:** This is not a set of independent deadlocks — it is one recurring concurrency pattern on a single table. The application or workload executes a consistent access pattern that guarantees a deadlock cycle whenever two instances overlap.
+
+**Fix:**
+- Identify which single deadlock type (P1–P12) applies to each graph — they will all be the same type.
+- Apply one fix to the shared table. A single index addition, isolation level change, or access-order fix will resolve all graphs simultaneously.
+- Monitor for recurrence after the fix; if a different table appears in subsequent graphs, a second unrelated hotspot may exist.
+
+---
+
+### P14 — TempDB Resource Deadlock
+
+**What gives it away:** `objectname` in the resource list references a tempdb object — a user temp table (`tempdb.dbo.#SessionState`), a work table, or a system allocation page (GAM, PFS, SGAM, DIFF_MAP).
+
+**Why it happens:** Two distinct scenarios:
+1. **Allocation page contention:** High-concurrency workloads with frequent temp table CREATE/DROP operations fight over PFS and GAM pages in tempdb. Multiple sessions create objects simultaneously and take X locks on the same allocation pages in different orders.
+2. **User temp table DML:** Two sessions share a temp table (via a global temp table `##name` or SPID-scoped temp table used by nested procedures) and DML from one session deadlocks with another.
+
+**Fix:**
+- For allocation page contention: add tempdb data files (one per CPU up to 8), enable trace flag 1118 on SQL Server 2014 and earlier, or ensure `tempdb` is using the default SQL Server 2016+ configuration.
+- For user temp table DML deadlocks: apply the same lock-order fix as P1 (ensure consistent row access order), or convert the shared global temp table to a dedicated permanent staging table with tighter concurrency control.
+
+---
+
+### P15 — Lock Escalation Deadlock
+
+**What gives it away:** The resource list contains an `objectlock` entry (table-level lock, granularity = Object) alongside `keylock` or `ridlock` entries on the same table, held by different sessions.
+
+**Why it happens:** SQL Server escalates row-level locks to a table lock when a single transaction holds more than 5,000 locks on a table (or exceeds a memory threshold). The escalated table lock (IS → X) conflicts with row-level locks already held by another concurrent session, forming a deadlock cycle between the escalating session and the row-level holder.
+
+**Fix:**
+- Prevent escalation with `ALTER TABLE dbo.YourTable SET (LOCK_ESCALATION = DISABLE)` — this stops escalation on that table. Use only when RCSI or SNAPSHOT isolation is also enabled, otherwise the lock count can grow unbounded.
+- Reduce transaction batch size so the 5,000-lock threshold is never reached in a single transaction.
+- Enable RCSI to eliminate S locks from readers, reducing total lock count and making escalation less likely.
+
+---
+
+### P16 — Ledger or Temporal History Table Deadlock
+
+**What gives it away:** `objectname` references a ledger history table (name starts with `MSSQL_LedgerHistoryFor_`) or a temporal period history table. Applies to SQL 2016+ (temporal tables) and SQL 2022+ (ledger tables).
+
+**Why it happens:** Both ledger and system-versioned temporal tables automatically insert history rows on UPDATE and DELETE operations. The history insert is performed by the SQL Server engine as part of the DML — the user transaction holds locks on both the base table and the history table simultaneously. If another session accesses the history table in a different order (e.g., a direct query against the history table while the base table is being updated), a deadlock cycle can form.
+
+**Fix:**
+- Keep base table DML transactions short — history row insertion is proportional to the number of rows updated/deleted per transaction.
+- Route queries against the history table to a readable secondary replica (Always On) to separate read traffic from write traffic.
+- Avoid explicit DML on the history table from application code; let the engine manage it.
 
 ---
 

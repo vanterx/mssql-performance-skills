@@ -10,12 +10,13 @@
 - [SQL Server ERRORLOG SPN Signals](#sql-server-errorlog-spn-signals)
 - [setspn -A vs -S: Avoiding Duplicate SPNs](#setspn--a-vs--s-avoiding-duplicate-spns)
 - [Loopback Connections and Kerberos](#loopback-connections-and-kerberos)
-- [Quick Reference — All K1–K30 Checks](#quick-reference--all-k1k30-checks)
+- [Azure AD / Hybrid and Advanced Checks (K31–K40)](#azure-ad--hybrid-and-advanced-checks-k31k40)
+- [Quick Reference — All K1–K40 Checks](#quick-reference--all-k1k40-checks)
 
 ---
 
 
-Plain-English explanations for all 30 K-checks (K1–K30) in `/spn-review`.
+Plain-English explanations for all 40 K-checks (K1–K40) in `/spn-review`.
 
 ---
 
@@ -957,7 +958,180 @@ Get-ADGroupMember "Protected Users" | Where-Object { $_.Name -eq "sqlsvc" }
 
 ---
 
-## Quick Reference — All K1–K30 Checks
+## Azure AD / Hybrid and Advanced Checks (K31–K40)
+
+### K31 — Azure AD Hybrid Join SPN Gap
+
+**What it means:** In a hybrid Azure AD (Entra ID) joined environment, clients that authenticate via Kerberos still resolve SPNs through on-premises AD. If the SQL Server instance has no `MSSQLSvc/<host>:<port>` SPN in on-premises AD, hybrid-joined clients cannot obtain a Kerberos ticket for SQL Server.
+
+**How to spot it:** Client receives "The target principal name is incorrect" or falls back to NTLM on a device that is Entra-hybrid joined; `setspn -Q MSSQLSvc/<host>:<port>` returns no results.
+
+**Example:**
+```powershell
+setspn -Q MSSQLSvc/SQLNODE1:1433
+# No results — SPN missing; hybrid-joined clients cannot authenticate with Kerberos
+```
+
+**Fix options:**
+1. Register the SPN in on-premises AD: `setspn -S MSSQLSvc/SQLNODE1:1433 DOMAIN\sqlsvc` and `setspn -S MSSQLSvc/SQLNODE1.domain.com:1433 DOMAIN\sqlsvc`
+2. Verify the on-premises AD is synced to Entra ID via Azure AD Connect — the SPN registration only needs to exist in on-premises AD for Kerberos to work on hybrid-joined devices
+
+**Related checks:** K1, K3, K7
+
+---
+
+### K32 — Entra-Only Auth With Orphaned AD SPN
+
+**What it means:** The SQL Server instance is configured for Azure AD–only authentication (no Windows logins), but a traditional Active Directory `MSSQLSvc` SPN still exists on the service account. This creates confusion — on-premises clients that attempt Kerberos will successfully obtain a ticket but then fail at the SQL Server login step because Windows authentication is disabled.
+
+**How to spot it:** SQL Server configured with `EXTERNAL_PROVIDER`-only logins, yet `setspn -L DOMAIN\sqlsvc` shows `MSSQLSvc` SPNs.
+
+**Fix options:**
+1. Remove the orphaned SPN: `setspn -D MSSQLSvc/<host>:<port> DOMAIN\sqlsvc`
+2. Document that the instance is Azure AD–only to prevent support teams from wasting time debugging Kerberos for Windows logins that cannot succeed regardless of SPN state
+
+**Related checks:** K1, K7, K20
+
+---
+
+### K33 — Azure SQL Managed Instance SPN for On-Premises Clients
+
+**What it means:** Azure SQL Managed Instance uses a private endpoint hostname for on-premises connectivity (via VPN or ExpressRoute). On-premises applications connecting via Windows-integrated authentication need a `MSSQLSvc/<mi-private-hostname>:1433` SPN registered in on-premises AD to obtain a Kerberos ticket.
+
+**How to spot it:** Application receives Kerberos error when connecting to MI from on-premises; `setspn -Q MSSQLSvc/<mi-endpoint>:1433` returns no results.
+
+**Fix options:**
+1. Identify the MI private endpoint DNS name (visible in Azure Portal → SQL Managed Instance → Properties)
+2. Register the SPN: `setspn -S MSSQLSvc/<mi-private-endpoint>:1433 DOMAIN\sqlsvc`
+3. Ensure DNS resolution for the MI endpoint works from on-premises via the private DNS zone
+
+**Related checks:** K1, K12
+
+---
+
+### K34 — gMSA Password Rollover SPN Drift
+
+**What it means:** Group Managed Service Accounts (gMSA) automatically rotate their passwords, and in the process, Active Directory updates `ServicePrincipalNames` on the gMSA object. Occasionally, the automatic SPN re-registration after a rollover misses one variant (typically the FQDN form), causing Kerberos failures for clients that use the FQDN in their connection string.
+
+**How to spot it:** SPN list from `setspn -L gMSA$` differs from `Get-ADServiceAccount gMSA -Properties ServicePrincipalNames`.
+
+**Example:**
+```powershell
+setspn -L DOMAIN\sqlgMSA$
+# Shows: MSSQLSvc/SQLNODE1:1433 only
+
+Get-ADServiceAccount sqlgMSA -Properties ServicePrincipalNames
+# Shows: MSSQLSvc/SQLNODE1:1433 AND MSSQLSvc/SQLNODE1.domain.com:1433
+# Discrepancy — one form is present in AD but not registered
+```
+
+**Fix options:**
+1. Re-register the missing SPN: `setspn -S MSSQLSvc/SQLNODE1.domain.com:1433 DOMAIN\sqlgMSA$`
+2. Run `Test-ADServiceAccount sqlgMSA` to verify the gMSA is functioning correctly
+3. Trigger a manual SPN refresh: `Install-ADServiceAccount sqlgMSA` on a host that uses the gMSA
+
+**Related checks:** K3, K4, K11
+
+---
+
+### K35 — FCI Node-Specific SPN Leak
+
+**What it means:** A Failover Cluster Instance (FCI) presents to clients under its Virtual Network Name (VNN), not the physical node names. If physical node-specific `MSSQLSvc/<node>:<port>` SPNs exist alongside the VNN SPN, clients connecting to a physical node name may authenticate with Kerberos while VNN connections fail (or vice versa), creating inconsistent authentication behaviour after a failover.
+
+**How to spot it:** `setspn -Q MSSQLSvc/*` shows both `MSSQLSvc/<VNN>:1433` and `MSSQLSvc/<NodeA>:1433` / `MSSQLSvc/<NodeB>:1433`.
+
+**Fix options:**
+1. Remove SPNs for physical node names: `setspn -D MSSQLSvc/<NodeA>:1433 DOMAIN\sqlsvc` and `setspn -D MSSQLSvc/<NodeB>:1433 DOMAIN\sqlsvc`
+2. Keep only the VNN SPN (K6) — the VNN is the sole name clients should use
+3. After failover, the VNN follows the active node; physical node SPNs are always wrong for FCI connectivity
+
+**Related checks:** K6, K8, K9
+
+---
+
+### K36 — Distributed AG Forwarder Listener SPN Missing
+
+**What it means:** A Distributed Availability Group (DAG) introduces a middle-tier AG whose listener is distinct from either underlying AG's listener. Clients connecting to the global primary listener of the outer AG need the forwarder AG's listener to have its own SPN registered — otherwise the cross-AG traffic uses NTLM rather than Kerberos. Applies to SQL Server 2016+.
+
+**How to spot it:** DAG topology described in input; `setspn -Q MSSQLSvc/<forwarder-listener>:1433` returns no results.
+
+**Fix options:**
+1. Identify the forwarder replica's listener name from `sys.availability_group_listeners`
+2. Register `setspn -S MSSQLSvc/<forwarder-listener>:1433 DOMAIN\sqlsvc` on each replica's service account
+3. Verify with `setspn -Q MSSQLSvc/<forwarder-listener>:1433` from each replica
+
+**Related checks:** K12, K16, K6
+
+---
+
+### K37 — S4U2Proxy Without Protocol Transition
+
+**What it means:** Resource-based Constrained Delegation (RBCD) requires two steps: S4U2Self (the initiating service obtains a service ticket for the user) followed by S4U2Proxy (forwarding the ticket to the target). S4U2Self only produces a forwardable ticket if the initiating service account has `TrustedToAuthForDelegation` enabled. Without it, the ticket obtained by S4U2Self is non-forwardable and S4U2Proxy fails silently.
+
+**How to spot it:** RBCD is configured (`msDS-AllowedToActOnBehalfOfOtherIdentity` present on target) but the initiating service account lacks `TrustedToAuthForDelegation = True`.
+
+**Fix options:**
+1. Enable "Use any authentication protocol" on the initiating service account in AD Users and Computers → Delegation tab
+2. Via PowerShell: `Set-ADUser sqlsvc -TrustedToAuthForDelegation $true`
+3. Note: protocol transition elevates the service account's privilege level — restrict the delegation targets in `msDS-AllowedToDelegateTo` to only the required SPNs
+
+**Related checks:** K23, K24, K21
+
+---
+
+### K38 — Kerberos FAST Armoring Incompatibility
+
+**What it means:** Kerberos Flexible Authentication Secure Tunneling (FAST), also called Kerberos armoring, protects pre-authentication exchanges by requiring the client to prove its identity before the KDC issues a ticket. When enforced via Group Policy (`KDCArmorPolicy = Required`), accounts that only support RC4 encryption (no AES keys) fail to authenticate because FAST requires AES. SQL Server service accounts running without AES encryption types fail silently to NTLM. Applies to domain controllers running Windows Server 2012+.
+
+**How to spot it:** Domain policy shows FAST/armoring required; `Get-ADUser sqlsvc -Properties KerberosEncryptionType` shows only RC4 or `DES` — no AES128 or AES256.
+
+**Fix options:**
+1. Add AES support to the service account: `Set-ADUser sqlsvc -KerberosEncryptionType AES128,AES256`
+2. Update the service account's password after changing encryption types (forces the KDC to issue AES keys)
+3. Restart the SQL Server service so it picks up the new Kerberos session key
+
+**Related checks:** K27, K30, K19
+
+---
+
+### K39 — Write-SPN Blocked by AdminSDHolder
+
+**What it means:** Active Directory's `AdminSDHolder` mechanism periodically (every 60 minutes by default) resets the ACL of any account that is a member of a privileged group (Domain Admins, Schema Admins, Enterprise Admins, etc.) to match the AdminSDHolder template. If the SQL Server service account is — or was — a member of such a group, its `Write ServicePrincipalName` permission is removed by SDProp. This silently prevents automatic or self-service SPN registration.
+
+**How to spot it:** Service account has `adminCount = 1` attribute; `Get-ADUser sqlsvc -Properties adminCount` returns `1`. Or SPN registration attempts fail with "Insufficient access rights" even when run as the service account itself.
+
+**Fix options:**
+1. Move the SQL Server service account out of all privileged AD groups — it should be a dedicated low-privilege domain account
+2. Clear the `adminCount` attribute (requires Domain Admin): `Set-ADUser sqlsvc -Clear adminCount`
+3. Manually reset the ACL on the service account to restore `Write ServicePrincipalName`; SDProp will keep resetting it as long as the account is in a protected group
+
+**Related checks:** K18, K7
+
+---
+
+### K40 — DNS CNAME Alias Without SPN
+
+**What it means:** When a client uses a DNS CNAME alias in its SQL Server connection string (e.g., `sql-prod` resolving to `SQLNODE1.domain.com`), Kerberos constructs the SPN from the alias name — not the resolved hostname. A SPN registered only for the actual hostname (`MSSQLSvc/SQLNODE1:1433`) does not satisfy a Kerberos request for `MSSQLSvc/sql-prod:1433`. The client falls back to NTLM even though a correct SPN exists for the physical host.
+
+**How to spot it:** Connection string uses a CNAME alias; `setspn -Q MSSQLSvc/<cname>:1433` returns no results; `setspn -Q MSSQLSvc/<real-hostname>:1433` returns results.
+
+**Example:**
+```powershell
+setspn -Q MSSQLSvc/sql-prod:1433    # No results — alias has no SPN
+setspn -Q MSSQLSvc/SQLNODE1:1433    # Returns DOMAIN\sqlsvc — real host SPN exists
+# Kerberos fails for connections using "sql-prod" despite the host SPN being correct
+```
+
+**Fix options:**
+1. Register a SPN for the CNAME alias: `setspn -S MSSQLSvc/sql-prod:1433 DOMAIN\sqlsvc`
+2. Add both short and FQDN variants of the alias if clients use both: `setspn -S MSSQLSvc/sql-prod.domain.com:1433 DOMAIN\sqlsvc`
+3. Alternatively, change the connection string to use the physical hostname or VNN — this avoids maintaining alias SPNs but may require application configuration changes
+
+**Related checks:** K1, K3, K7, K8
+
+---
+
+## Quick Reference — All K1–K40 Checks
 
 | Check | Name | AD Object Type | Severity |
 |-------|------|---------------|---------|
@@ -991,3 +1165,13 @@ Get-ADGroupMember "Protected Users" | Where-Object { $_.Name -eq "sqlsvc" }
 | K28 | Computer Account SPN Conflict | Computer account | Warning |
 | K29 | Computer Account Unconstrained Delegation | Computer account | Critical |
 | K30 | Service Account in Protected Users | Service account | Critical |
+| K31 | Azure AD Hybrid Join SPN Gap | Service account (on-premises AD) | Critical |
+| K32 | Entra-Only Auth With Orphaned AD SPN | Service account | Warning |
+| K33 | Azure SQL MI SPN for On-Premises Clients | Service account (on-premises AD) | Critical |
+| K34 | gMSA Password Rollover SPN Drift | gMSA account | Warning |
+| K35 | FCI Node-Specific SPN Leak | Service account | Warning |
+| K36 | Distributed AG Forwarder Listener SPN Missing | Service account | Critical |
+| K37 | S4U2Proxy Without Protocol Transition | Initiating service account | Warning |
+| K38 | Kerberos FAST Armoring Incompatibility | Service account | Warning |
+| K39 | Write-SPN Blocked by AdminSDHolder | Service account (AD ACL) | Warning |
+| K40 | DNS CNAME Alias Without SPN | Service account | Critical |

@@ -1,6 +1,6 @@
 ---
 name: sqlplan-review
-description: Analyze SQL Server execution plans for performance anti-patterns, bottleneck identification, and actionable fix recommendations. Applies all 99 checks (S1–S33 statement-level, N1–N66 node-level) covering memory grants, parallelism, cardinality errors, spills, scans, and index usage. Use this skill whenever a user pastes a .sqlplan file or XML, shares an SSMS execution plan, asks why a query is slow or regressed after a deployment or stats update, mentions a specific operator (Key Lookup, Hash Match, Sort, Nested Loops, Scan), asks about memory grants, spills, compile timeout, parameter sniffing, or plan shape. Also trigger when the user uploads a .sqlplan file, describes a plan tree verbally, or asks for execution plan review, plan analysis, or query tuning help.
+description: Analyze SQL Server execution plans for performance anti-patterns, bottleneck identification, and actionable fix recommendations. Applies 108 checks (S1–S36 statement-level, N1–N72 node-level) covering memory grants, parallelism, cardinality errors, spills, scans, index usage, IQP/PSP features, ADR, and CE feedback. Use this skill whenever a user pastes a .sqlplan file or XML, shares an SSMS execution plan, asks why a query is slow or regressed after a deployment or stats update, mentions a specific operator (Key Lookup, Hash Match, Sort, Nested Loops, Scan), asks about memory grants, spills, compile timeout, parameter sniffing, or plan shape. Also trigger when the user uploads a .sqlplan file, describes a plan tree verbally, or asks for execution plan review, plan analysis, or query tuning help.
 triggers:
   - /sqlplan-review
   - /plan-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same analysis ruleset used by commercial SQL Server execution plan tools. Covers 99 checks across statement-level (S1–S33) and node-level (N1–N66) categories.
+Analyze a SQL Server execution plan for performance anti-patterns and produce a prioritized, actionable report. Based on the same analysis ruleset used by commercial SQL Server execution plan tools. Covers 108 checks across statement-level (S1–S36) and node-level (N1–N72) categories.
 
 ## Input
 
@@ -185,11 +185,11 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** A Query Store forced plan is overriding normal optimization. QDS-forced plans bypass the optimizer and become stale as data changes. Validate the forced plan is still beneficial and that the underlying regression (bad statistics, missing index) has been resolved. If fixed, unforce via `sys.sp_query_store_unforce_plan`.
 ### S25 — Interleaved Execution (MSTVF) Active
-- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on `StmtSimple` (SQL 2017+, compatibility level 140+)
+- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on `StmtSimple` — SQL 2017+
 - **Severity:** Info
 - **Fix:** SQL Server is using interleaved execution to feed actual row counts from multi-statement TVFs back into optimization. This is beneficial. Verify it has not been suppressed via `OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))`, which would revert to the static 1-row estimate.
 ### S26 — Batch Mode Adaptive Join Active
-- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` (SQL 2019+, compatibility level 150+)
+- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2019+
 - **Severity:** Info
 - **Fix:** SQL Server is deferring the join strategy (Hash vs Nested Loops) to runtime. This is generally good. Flag only if the `AdaptiveThresholdRows` does not match actual row distribution, indicating the threshold was calibrated on a non-representative execution.
 ### S27 — Excessive Missing Index Suggestions
@@ -220,10 +220,22 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Trigger:** `StatementSetOptions` element on `StmtSimple` has `QuotedIdentifier="false"` OR `AnsiNulls="false"` OR `AnsiWarnings="false"`
 - **Severity:** Info
 - **Fix:** The plan was compiled with non-standard SET options — usually because the application sets `SET ANSI_NULLS OFF` or `SET QUOTED_IDENTIFIER OFF`. This creates a separate plan cache entry from SSMS-compiled plans (SSMS always uses standard options), causing plan cache bloat. It also affects query semantics: `SET ANSI_NULLS OFF` changes how NULL comparisons work, and `SET QUOTED_IDENTIFIER OFF` allows double-quoted strings. Align application connection options with SQL Server defaults.
+### S34 — Parameter Sensitive Plan Dispatcher Detected
+- **Trigger:** `ParameterSensitivePredicate` element or `StatementType="ParameterSensitivity"` present on `StmtSimple` — SQL 2022+ (compat level 160) only
+- **Severity:** Info
+- **Fix:** SQL Server 2022 PSP optimization created a dispatcher plan with multiple sub-plans for different parameter value ranges. Verify each variant is healthy by checking `sys.query_store_query_variant`. If a specific parameter range selects the wrong variant, use Query Store hints (`sys.sp_query_store_set_hints`) to override variant selection for that range. Related: N68.
+### S35 — ADR Long-Transaction Version Store Accumulation
+- **Trigger:** Accelerated Database Recovery (ADR) is active on the database (inferred from plan XML DB context or user description) AND `logused` or transaction duration signals a long-running transaction — SQL 2019+ only
+- **Severity:** Warning
+- **Fix:** ADR moves the persistent version store (PVS) to TempDB. Long-running transactions under ADR cause PVS to grow continuously until the transaction commits or rolls back. Keep transactions short and monitor PVS size with `sys.dm_tran_persistent_version_store_stats`. Cross-reference E29 in errorlog-review.
+### S36 — Cardinality Estimation Feedback Applied
+- **Trigger:** `ContainsCEFeedback="true"` attribute on `StmtSimple` — SQL 2022+ only
+- **Severity:** Info
+- **Fix:** The CE model was automatically adjusted by feedback across prior executions. This is generally beneficial but means the plan's cardinality estimates no longer reflect the base CE model. Monitor stability: if query performance fluctuates across executions after CE feedback applies, the feedback model may be oscillating. Use Query Store to track plan history. Related: Q27 in query-store-review.
 
 ---
 
-## Node-Level Checks (N1–N66)
+## Node-Level Checks (N1–N72)
 
 Apply these to every operator node in the plan tree.
 ### N1 — Filter Late in Plan
@@ -434,7 +446,7 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Info
 - **Fix:** Open delta stores (not yet compressed rowgroups) are being scanned row-by-row, negating columnstore batch-mode benefits for those rows. This is expected immediately after inserts. If delta stores persist (check `sys.dm_db_column_store_row_group_physical_stats` for OPEN rowgroups with large row counts), force compression: `ALTER INDEX ... REORGANIZE WITH (COMPRESS_ALL_ROW_GROUPS = ON)`.
 ### N51 — Batch Mode on Rowstore (SQL 2019+)
-- **Trigger:** `executionMode` = Batch AND `storageType` != ColumnStore (SQL 2019+, compatibility level 150+)
+- **Trigger:** `executionMode` = Batch AND `storageType` != ColumnStore — SQL 2019+
 - **Severity:** Info
 - **Fix:** SQL Server is applying batch mode execution to a rowstore table — a SQL 2019 feature. This is beneficial and typically 2–4× faster for aggregation-heavy queries. No action required. If you see this disabled on similar queries, check for scalar UDFs or row-mode-only operators blocking batch mode propagation.
 ### N52 — Constant Scan
@@ -497,6 +509,32 @@ Apply these to every operator node in the plan tree.
 - **Trigger:** `PhysicalOp` = Nested Loops AND `ActualRebinds` > `EstimateRebinds` × 10 AND `ActualRebinds` > 1,000 (requires actual execution plan)
 - **Severity:** Warning
 - **Fix:** The Nested Loops operator executed far more inner-side iterations than the optimizer estimated at compile time. `EstimateRebinds` comes from the outer side cardinality estimate; when the actual outer side is much larger, every under-estimated join drives N66. This is a complement to N16 (Busy Loop based on estimates alone) that fires on actual execution evidence. Fix: correct the cardinality error on the outer side of the join (statistics update, parameter sniffing fix), or force a Hash Match join that is less sensitive to outer cardinality: `INNER HASH JOIN`.
+### N67 — Ordered Columnstore Scan Segment Pruning Confirmed
+- **Trigger:** Operator contains `physicalOp` = Columnstore Index Scan AND `Ordered="true"` AND `SegmentsPurged` ≥ `SegmentsTotal` × 0.5 — SQL 2022+ (ordered columnstore index, `CREATE INDEX ... ORDER (col)`)
+- **Severity:** Info
+- **Fix:** The ordered columnstore index is working as intended — at least 50% of segments were eliminated. Report the pruning ratio (`SegmentsPurged / SegmentsTotal`) as a positive signal. If pruning is lower than expected, verify the ORDER column in the index matches the query's filter predicate column.
+### N68 — PSP Variant Cardinality Error
+- **Trigger:** Inside a PSP dispatcher plan, an individual variant node has `actualRows / estimateRows` > 100 AND `actualRows` > 1,000 — SQL 2022+ only; requires actual plan
+- **Severity:** Warning
+- **Fix:** A PSP variant has a severe cardinality error despite being specialized for a parameter range. The variant's threshold boundary does not match the actual data skew. Use `sys.query_store_query_variant` to inspect variant boundaries and adjust using Query Store hints or by disabling PSP for this query with `DISABLE_PARAMETER_SNIFFING` hint.
+### N69 — IQP Approximate Count Distinct Active
+- **Trigger:** Operator references `ApproxCountDistinctHll` or `COUNT(DISTINCT)` with `InternalInfo` indicating HyperLogLog usage — SQL 2019+ IQP feature
+- **Severity:** Info
+- **Fix:** IQP Approximate Count Distinct is in use, producing an estimate within approximately 2% of the true distinct count. Confirm with the query author that approximate results are acceptable. If exact count semantics are required (financial reconciliation, constraint validation), remove `APPROX_COUNT_DISTINCT` or add `OPTION (USE HINT('DISABLE_APPROXIMATE_QUERY'))`.
+### N70 — DOP Feedback Adjusted Plan
+- **Trigger:** `DegreeOfParallelismFeedback` element present in the plan — SQL 2022+ IQP DOP Feedback feature
+- **Severity:** Info
+- **Fix:** IQP DOP Feedback automatically reduced this query's degree of parallelism based on observed thread utilization. The adjusted DOP should improve CPU efficiency and reduce CXPACKET waits. Monitor for stability: if DOP feedback oscillates between values across executions, the workload arrival pattern is irregular and the feedback model may not stabilize.
+### N71 — Adaptive Join Threshold Evaluation
+- **Trigger:** Operator `physicalOp` = Adaptive Join AND `AdaptiveThresholdRows` is present — SQL 2017+
+- **Severity:** Info
+- **Fix:** Report `AdaptiveThresholdRows` vs `actualRows` on the outer side. If `actualRows` is consistently above the threshold, the adaptive join always becomes Hash Match — consider making the Hash Match explicit. If `actualRows` is consistently below the threshold, the join always uses Nested Loops — consider removing the adaptive join overhead with a `LOOP JOIN` hint. If `actualRows` straddles the threshold across executions, the adaptive join is earning its place.
+
+### N72 — Low Statistics Sampling Percent on Hot Statistics
+- **Trigger:** `StatisticsInfo/@SamplingPercent` < 10 for any statistic whose associated table has `actualRows` > 100,000 — actual plan only; skip entirely if `StatisticsInfo` elements are absent from the plan XML
+- **Severity:** Warning — the optimizer compiled this plan using a statistic built from a very small sample; the histogram has fewer steps and reduced resolution, increasing the risk of poor cardinality estimates under data skew even when the statistic was recently updated
+- **Fix:** Rebuild the flagged statistic with a higher sample: `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN`. To prevent future auto-updates from reverting to the low rate, add `PERSIST_SAMPLE_PERCENT = ON` (SQL 2016 SP1+, Azure SQL): `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN, PERSIST_SAMPLE_PERCENT = ON`. Identify the statistic name and table from `StatisticsInfo/@Statistics` and `@Table` in the plan XML. If the table is large and FULLSCAN is too slow, use `WITH SAMPLE 30 PERCENT, PERSIST_SAMPLE_PERCENT = ON` as a compromise. Cross-reference N21 — if `actualRows` already diverges from `estimateRows`, the low sample rate is the likely root cause.
+- **Related checks:** N21 (bad row estimate — the downstream effect of low-quality stats), N11 (no statistics at all), N35 (CE default selectivity guess — also caused by absent or low-quality stats)
 
 ---
 
