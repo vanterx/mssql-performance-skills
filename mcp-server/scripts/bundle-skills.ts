@@ -75,12 +75,17 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
 const guidePath = join(repoRoot, "PERFORMANCE_TUNING_GUIDE.md");
 const guideContent = existsSync(guidePath) ? readFileSync(guidePath, "utf-8") : "";
 
+const vcPath = join(repoRoot, "VERSION_COMPATIBILITY.md");
+const vcContent = existsSync(vcPath) ? readFileSync(vcPath, "utf-8") : "";
+
 const output = `// AUTO-GENERATED — do not edit. Run: npm run bundle
 import type { SkillMeta } from "./skill-loader.js";
 
 export const SKILLS: SkillMeta[] = ${JSON.stringify(skills, null, 2)};
 
 export const GUIDE_CONTENT: string = ${JSON.stringify(guideContent)};
+
+export const VERSION_COMPAT_CONTENT: string = ${JSON.stringify(vcContent)};
 `;
 
 const outPath = join(__dirname, "../src/skills-data.ts");

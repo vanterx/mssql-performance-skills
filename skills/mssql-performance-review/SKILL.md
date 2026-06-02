@@ -149,6 +149,19 @@ Rank 1 — REJECTED: facts.json says maxdop already = 8
 - Replacement recommendation: [next-best, or "no MAXDOP action needed"]
 ```
 
+## Version-Aware Check Suppression
+
+When `facts.version` is set (e.g. `"version": "SQL Server 2017"`), apply version-gating before emitting the report:
+
+1. Read `VERSION_COMPATIBILITY.md` from the repo root (or `~/.claude/skills/VERSION_COMPATIBILITY.md` if installed globally). If the file is unavailable, skip suppression silently — do not error.
+2. Parse the version-gated check catalog sections (e.g. `## SQL Server 2022+ Only Checks`, `## SQL Server 2019+ Only Checks`). Each section lists check IDs and the minimum SQL Server version required.
+3. For every check whose minimum version exceeds `facts.version`, treat it as `SKIP (version)`:
+   - **Verbose mode:** Show the row as `SKIP (version: requires SQL 20XX+, instance is SQL 20YY)` in the Check Evaluation Log.
+   - **Standard report:** Omit the row entirely — do not surface a finding that cannot apply.
+4. Do **not** suppress `NOT ASSESSED` rows caused by missing input artifacts. Version suppression only applies to checks the instance cannot support, not to checks whose input was not provided.
+
+Version facts are treated as a minimum filter only. A check marked `SQL 2019+` fires on SQL 2019, 2022, and later; it is suppressed on SQL 2016 and earlier.
+
 ## Follow-Up Q&A
 
 After the report is delivered, stay in the session to answer follow-up questions. Most are free — they read from the in-context evidence chain without new tool calls. The question taxonomy (5 categories), when-to-probe rules, refusal patterns, and answer format are in `references/followup-qa.md`. Load that reference when:

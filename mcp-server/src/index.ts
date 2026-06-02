@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { SKILLS, GUIDE_CONTENT } from "./skills-data.js";
+import { SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT } from "./skills-data.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
@@ -17,7 +17,7 @@ function createServer(): McpServer {
     version: "1.0.0",
   });
   registerTools(server, SKILLS);
-  registerResources(server, SKILLS, GUIDE_CONTENT);
+  registerResources(server, SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT);
   registerPrompts(server, SKILLS);
   return server;
 }
