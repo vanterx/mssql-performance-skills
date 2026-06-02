@@ -57,12 +57,12 @@ These cumulative counts show how many of the 520 total checks are active on a gi
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
 | SQL Server 2022 | **516** | 4 Azure-specific checks (I15, I17, K32, K33) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **491** | +23 SQL 2022-only checks unavailable |
-| SQL Server 2017 | **479** | +12 SQL 2019-only checks unavailable |
-| SQL Server 2016 | **468** | +11 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **443** | −25 more: all Query Store checks unavailable on SQL 2014 (QS introduced SQL 2016; Q31/Q32 also absent from SQL 2016, requiring SQL 2022/2017); minus S10, H25, K36, P16, R25 |
-| SQL Server 2012 | **442** | −1 more: R21 (In-Memory OLTP, SQL 2014+) unavailable |
-| SQL Server 2008 R2 | **383** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
+| SQL Server 2019 | **492** | −24 SQL 2022-only checks unavailable |
+| SQL Server 2017 | **480** | −12 SQL 2019-only checks unavailable |
+| SQL Server 2016 | **469** | −11 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **444** | −25 more: all Query Store base checks unavailable (QS requires SQL 2016+); minus S10, H25, K36, P16, R25 |
+| SQL Server 2012 | **443** | −1 more: R21 (In-Memory OLTP, SQL 2014+) unavailable |
+| SQL Server 2008 R2 | **384** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -242,7 +242,7 @@ These checks analyze behaviors present since SQL Server 2008 R2:
 | "I'm on SQL…" | Run these skills without restrictions | Skip or expect partial results |
 |---|---|---|
 | **2022** | All 16 skills | 5 Azure-specific checks silently skip on-premises |
-| **2019** | All 16 skills | 23 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints) skip |
+| **2019** | All 16 skills | 24 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback) skip |
 | **2017** | All 16 skills | Above + 12 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata) skip |
 | **2016** | All 16 skills | Above + 11 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
 | **2014** | 15 skills (no `query-store-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
