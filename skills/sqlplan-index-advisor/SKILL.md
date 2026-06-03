@@ -291,6 +291,12 @@ Before generating DDL, flag:
 
 ---
 
+## Version-Aware Check Suppression
+
+If the SQL Server version is known — from the `ServerVersion` attribute in the plan XML or stated by the user — read `VERSION_COMPATIBILITY.md` (`~/.claude/skills/VERSION_COMPATIBILITY.md` if installed, or `skills/VERSION_COMPATIBILITY.md` from the repo). If unavailable, skip silently. For checks whose minimum version exceeds the instance version: verbose mode → log as `SKIP (version: requires SQL 20XX+, instance is SQL 20YY)`; standard report → omit entirely. Do not suppress `NOT ASSESSED` rows from missing input — only suppress version-inapplicable checks.
+
+---
+
 ## Output Format
 
 ```
