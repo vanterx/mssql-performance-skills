@@ -773,6 +773,62 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Check 38: No check prefix map in AGENTS.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[38 ] No check prefix map in AGENTS.md"
+if grep -q "^## Check prefix map" AGENTS.md 2>/dev/null; then
+    fail "AGENTS.md contains a '## Check prefix map' section — remove it; detail belongs in CLAUDE.md only"
+else
+    pass "AGENTS.md has no check prefix map"
+fi
+
+# ---------------------------------------------------------------------------
+# Check 39: No per-skill check counts in AGENTS.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[39 ] No per-skill check counts in AGENTS.md"
+check39_ok=1
+# Look for skill-name followed by a number in parentheses, or "N checks" near a skill name
+matches=$(grep -nE 'skills\/[a-z-]+.*\([0-9]+\)|[a-z-]+-review.*[0-9]+ checks|[0-9]+ checks.*[a-z-]+-review' AGENTS.md 2>/dev/null || true)
+if [ -n "$matches" ]; then
+    fail "AGENTS.md contains per-skill check counts — remove them; detail belongs in CLAUDE.md only"
+    echo "$matches" | sed 's/^/    /'
+    check39_ok=0
+fi
+# Extra: catch any line that has a skill name and a digit
+extra=$(grep -nE 'sqlplan-(review|compare|batch|deadlock|index-advisor)|tsql-review|sqlstats-review|sqltrace-review|sqlwait-review|query-store-review|procstats-review|clusterlog-review|errorlog-review|hadr-health-review|spn-review|mssql-performance-review' AGENTS.md 2>/dev/null | grep -E '[0-9]{1,3}' || true)
+if [ -n "$extra" ]; then
+    fail "AGENTS.md contains skill names with numeric counts — remove them; detail belongs in CLAUDE.md only"
+    echo "$extra" | sed 's/^/    /'
+    check39_ok=0
+fi
+[ "$check39_ok" -eq 1 ] && pass "AGENTS.md contains no per-skill check counts"
+
+# ---------------------------------------------------------------------------
+# Check 40: AGENTS.md delegates to CLAUDE.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[40 ] AGENTS.md delegates to CLAUDE.md"
+claude_refs=$(grep -c "CLAUDE.md" AGENTS.md 2>/dev/null || echo 0)
+if [ "$claude_refs" -lt 2 ]; then
+    warn "AGENTS.md references CLAUDE.md only $claude_refs time(s) — add at least 2 pointers so agents know where detail lives"
+else
+    pass "AGENTS.md references CLAUDE.md $claude_refs times"
+fi
+
+# ---------------------------------------------------------------------------
+# Check 41: No hardcoded verify-docs count in AGENTS.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[41 ] No hardcoded verify-docs count in AGENTS.md"
+if grep -qE 'Runs [0-9]+ documentation consistency checks' AGENTS.md 2>/dev/null; then
+    warn "AGENTS.md hardcodes the number of documentation checks — use generic wording so it stays accurate when checks are added"
+else
+    pass "AGENTS.md uses generic wording for verify-docs count"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
