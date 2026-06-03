@@ -75,7 +75,7 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
 const guidePath = join(repoRoot, "PERFORMANCE_TUNING_GUIDE.md");
 const guideContent = existsSync(guidePath) ? readFileSync(guidePath, "utf-8") : "";
 
-const vcPath = join(repoRoot, "VERSION_COMPATIBILITY.md");
+const vcPath = join(repoRoot, "skills", "VERSION_COMPATIBILITY.md");
 const vcContent = existsSync(vcPath) ? readFileSync(vcPath, "utf-8") : "";
 
 const output = `// AUTO-GENERATED — do not edit. Run: npm run bundle

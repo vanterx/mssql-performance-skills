@@ -153,7 +153,7 @@ Rank 1 — REJECTED: facts.json says maxdop already = 8
 
 When `facts.version` is set (e.g. `"version": "SQL Server 2017"`), apply version-gating before emitting the report:
 
-1. Read `VERSION_COMPATIBILITY.md` from the repo root (or `~/.claude/skills/VERSION_COMPATIBILITY.md` if installed globally). If the file is unavailable, skip suppression silently — do not error.
+1. Read `VERSION_COMPATIBILITY.md` (`~/.claude/skills/VERSION_COMPATIBILITY.md` if installed, or `skills/VERSION_COMPATIBILITY.md` from the repo). If unavailable, skip suppression silently — do not error.
 2. Parse the version-gated check catalog sections (e.g. `## SQL Server 2022+ Only Checks`, `## SQL Server 2019+ Only Checks`). Each section lists check IDs and the minimum SQL Server version required.
 3. For every check whose minimum version exceeds `facts.version`, treat it as `SKIP (version)`:
    - **Verbose mode:** Show the row as `SKIP (version: requires SQL 20XX+, instance is SQL 20YY)` in the Check Evaluation Log.
