@@ -25,7 +25,7 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 44 checks (V1–V44) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency, IQP/PSP/ADR waits, TempDB metadata |
 | [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 108 checks (S1–S36, N1–N72), thresholds, output format |
 | [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C20) |
-| [skills/sqlindex-advisor/SKILL.md](skills/sqlindex-advisor/SKILL.md) | Index recommendations: `sqlindex-advisor`. Derive indexes from operator patterns (D1–D8) + optimizer suggestions |
+| [skills/sqlindex-advisor/SKILL.md](skills/sqlindex-advisor/SKILL.md) | Index recommendations: `sqlindex-advisor`. Derive indexes from operator patterns (D1–D10) + optimizer suggestions + missing index DMVs |
 | [skills/sqldeadlock-review/SKILL.md](skills/sqldeadlock-review/SKILL.md) | Deadlock analysis: `sqldeadlock-review`. 16 patterns (P1–P16), lock cycle extraction, remediation |
 | [skills/sqlplan-batch/SKILL.md](skills/sqlplan-batch/SKILL.md) | Batch workload: `sqlplan-batch`. Aggregate dashboard across many `.sqlplan` files |
 | [skills/sqlquerystore-review/SKILL.md](skills/sqlquerystore-review/SKILL.md) | Query Store analysis: `sqlquerystore-review`. 32 checks (Q1–Q32) — regressed queries, plan instability, resource hotspots, query waits, operational health, IQP/PSP/DOP/CE feedback, QS hints, auto-tuning |
@@ -48,7 +48,7 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 44 V-checks with wait type descriptions, capture queries, and category quick reference |
 | [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 108 S/N checks with XML examples and fix recipes |
 | [skills/sqlplan-compare/references/check-explanations.md](skills/sqlplan-compare/references/check-explanations.md) | C1–C20 regression checks explained — what each change means and why it causes a slowdown |
-| [skills/sqlindex-advisor/references/check-explanations.md](skills/sqlindex-advisor/references/check-explanations.md) | Merge rules, Impact score, ranking formula, width check, and output guide |
+| [skills/sqlindex-advisor/references/check-explanations.md](skills/sqlindex-advisor/references/check-explanations.md) | Plain-English explanation of all 10 D-checks (D1–D10) with XML examples, fix recipes, filtered index and hash match guidance, and Quick Reference table |
 | [skills/sqldeadlock-review/references/check-explanations.md](skills/sqldeadlock-review/references/check-explanations.md) | P1–P16 deadlock patterns, lock concepts, how to capture XML |
 | [skills/sqlplan-batch/references/check-explanations.md](skills/sqlplan-batch/references/check-explanations.md) | How to read each dashboard section, prioritisation guide, next-step workflow |
 | [skills/sqlquerystore-review/references/check-explanations.md](skills/sqlquerystore-review/references/check-explanations.md) | Plain-English explanation of all 32 Q-checks with Query Store DMV examples and fix recipes |
@@ -65,9 +65,9 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | File | Purpose |
 |------|---------|
 | [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 18 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 555-check ID reference |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 557-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 555 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 557 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
 | [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 18 SKILL.md files are discovered by the plugin system |

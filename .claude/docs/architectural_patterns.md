@@ -92,7 +92,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `S` | `sqlplan-review` | Statement-level (once per query) | S1–S36 |
 | `N` | `sqlplan-review` | Node-level (per operator) | N1–N72 |
 | `C` | `sqlplan-compare` | Regression comparison checks | C1–C20 |
-| `D` | `sqlindex-advisor` | Derived index rules (operator patterns) | D1–D8 |
+| `D` | `sqlindex-advisor` | Derived index rules (operator patterns) | D1–D10 |
 | `P` | `sqldeadlock-review` | Deadlock patterns | P1–P16 |
 | `T` | `tsql-review` | T-SQL static analysis checks | T1–T85 |
 | `I` | `sqlstats-review` | IO metrics checks | I1–I18 |

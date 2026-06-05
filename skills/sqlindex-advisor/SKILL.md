@@ -1,6 +1,6 @@
 ---
 name: sqlindex-advisor
-description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Derives index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops — D1–D8) and the optimizer's explicit MissingIndexGroup suggestions. Use this skill whenever a user wants index recommendations from an execution plan; asks what indexes would help a query; mentions Key Lookup, index scan, missing index, or covering index; or asks to generate CREATE INDEX statements. Trigger after sqlplan-review findings or directly on any .sqlplan file.
+description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Derives index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops, filtered index opportunities, hash match probe-side scans — D1–D10) and the optimizer's explicit MissingIndexGroup suggestions. Also accepts sys.dm_db_missing_index_details + sys.dm_db_missing_index_group_stats DMV output directly, without a plan file. Use this skill whenever a user wants index recommendations from an execution plan; asks what indexes would help a query; mentions Key Lookup, index scan, missing index, filtered index, or covering index; or asks to generate CREATE INDEX statements. Trigger after sqlplan-review findings or directly on any .sqlplan file or missing index DMV output.
 triggers:
   - /sqlindex-advisor
   - /index-advisor
@@ -11,12 +11,13 @@ triggers:
 
 ## Purpose
 
-Produce a prioritized, ready-to-run `CREATE INDEX` script from two independent sources:
+Produce a prioritized, ready-to-run `CREATE INDEX` script from three independent sources:
 
-1. **Operator-derived recommendations** — index opportunities inferred directly from plan operator patterns (Key Lookups, expensive scans, Sort operators, Eager Index Spools, high-count Nested Loops, residual predicates, heap scans, backward scans)
+1. **Operator-derived recommendations** — index opportunities inferred directly from plan operator patterns (Key Lookups, expensive scans, Sort operators, Eager Index Spools, high-count Nested Loops, residual predicates, heap scans, backward scans, filtered index candidates, hash match probe-side scans)
 2. **Optimizer suggestions** — the explicit `<MissingIndexGroup>` elements SQL Server emits, consolidated and de-duplicated
+3. **DMV data** — `sys.dm_db_missing_index_details` + `sys.dm_db_missing_index_group_stats` output, which provides server-wide frequency data (`UserSeeks × AvgQueryCost`) unavailable in plan files
 
-Both sources feed into a single unified merge and ranking pipeline. The final output contains one CREATE INDEX statement per table group — not one per source.
+All sources feed into a single unified merge and ranking pipeline. The final output contains one CREATE INDEX statement per table group — not one per source.
 
 ## Input
 
@@ -24,20 +25,48 @@ Accept any of:
 - One or more `.sqlplan` file paths
 - Raw `.sqlplan` XML pasted inline
 - A description of plan operators if XML is not available
+- Output from `sys.dm_db_missing_index_details` + `sys.dm_db_missing_index_group_stats` (Source C — no plan file required):
+
+```sql
+-- Capture server-wide missing index data (run on the target instance)
+SELECT
+    mig.index_group_handle,
+    mig.index_handle,
+    mig.unique_compiles,
+    migs.user_seeks,
+    migs.user_scans,
+    migs.avg_total_user_cost,
+    migs.avg_user_impact,
+    ROUND(migs.user_seeks * migs.avg_total_user_cost * (migs.avg_user_impact / 100.0), 2) AS weighted_impact,
+    mid.statement            AS table_name,
+    mid.equality_columns,
+    mid.inequality_columns,
+    mid.included_columns
+FROM sys.dm_db_missing_index_groups  mig
+JOIN sys.dm_db_missing_index_details mid
+  ON mig.index_handle = mid.index_handle
+JOIN sys.dm_db_missing_index_group_stats migs
+  ON mig.index_group_handle = migs.group_handle
+ORDER BY weighted_impact DESC;
+```
+
+When DMV output is provided, treat each row as a Source C candidate and use `weighted_impact` as the ranking score rather than the optimizer's static Impact percentage.
 
 ## How to Run
 
-1. **Source A — Operator scan:** Walk every `<RelOp>` node and apply the derived rules (D1–D8) below
+1. **Source A — Operator scan:** Walk every `<RelOp>` node and apply the derived rules (D1–D10) below
 2. **Source B — Explicit extraction:** Extract all `<MissingIndexGroup>` elements
-3. **Unified merge:** Combine A and B by table, apply merge rules, deduplicate
-4. **Rank** the merged set by score
-5. **Generate DDL** with width checks applied
+3. **Source C — DMV parsing:** If DMV output is present, parse each row into a candidate (table, equality cols, inequality cols, include cols, weighted_impact)
+4. **Unified merge:** Combine A, B, and C by table, apply merge rules, deduplicate
+5. **Rank** the merged set by score
+6. **Generate DDL** with width checks applied
 
 ---
 
 ## Source A: Operator-Derived Recommendations
 
 Apply these rules to every operator node. Each fired rule produces a candidate recommendation with an estimated impact derived from the operator's `costPercent` or `actualExecutions`.
+
 ### D1 — Key Lookup / RID Lookup: Extend NC Index
 
 **When:** `physicalOp` = Key Lookup or RID Lookup
@@ -51,18 +80,18 @@ Apply these rules to every operator node. Each fired rule produces a candidate r
 
 ```xml
 <!-- Key Lookup fetches Status and TotalAmount after seeking IX_Orders_CustomerId -->
-<!-- Recommendation: ALTER INDEX or DROP/CREATE -->
 CREATE NONCLUSTERED INDEX [IX_Orders_CustomerId]
 ON [dbo].[Orders] ([CustomerId])
 INCLUDE ([Status], [TotalAmount])   -- add these to kill the lookup
-WITH (ONLINE = ON, DROP_EXISTING = ON);
+WITH (ONLINE = ON, DROP_EXISTING = ON, SORT_IN_TEMPDB = ON);
 ```
 
-**Estimated impact:** `min(90, costPercent × 2)` — Key Lookups at scale are high-value targets.
+**Estimated impact:** `min(90, costPercent)` — the lookup's plan share is the impact; no multiplier needed since Key Lookup cost already reflects the round-trip penalty.
 
 **Cross-reference:** sqlplan-review N5
 
 ---
+
 ### D2 — Expensive Scan: Add Seek Index
 
 **When:** `physicalOp` = Index Scan or Table Scan AND `costPercent` ≥ 25% AND a predicate is present on the operator
@@ -85,6 +114,7 @@ ON [dbo].[Orders] ([CustomerId], [CreatedDate]);
 **Cross-reference:** sqlplan-review N4, N39
 
 ---
+
 ### D3 — Residual Predicate on Seek: Promote Column to Key
 
 **When:** A Seek operator has both `<SeekPredicates>` AND `<Predicate>` (residual), AND when runtime data is present `actualRows / actualRowsRead` < 0.2 (seek fetches 5× more rows than it returns)
@@ -97,18 +127,19 @@ ON [dbo].[Orders] ([CustomerId], [CreatedDate]);
 
 ```xml
 <!-- Seek on (CustomerId), residual filters on Status = 'Active' -->
-<!-- Current index: IX_Orders_CustomerId -->
+-- Current index: IX_Orders_CustomerId
 CREATE NONCLUSTERED INDEX [IX_Orders_CustomerId_Status]
 ON [dbo].[Orders] ([CustomerId], [Status]);   -- Status as key, not INCLUDE
 ```
 
-**Note:** If the residual column is low-cardinality (e.g., a boolean or 3-value status), a filtered index is often better than adding it to every row's key entry.
+**Note:** If the residual column is low-cardinality (e.g., a boolean or 3-value status), consider D9 (Filtered Index) instead — a filtered index avoids including the low-cardinality column on all rows.
 
 **Estimated impact:** `min(80, (1 - actualRows/actualRowsRead) × 100)` — scaled by how much the residual discards.
 
 **Cross-reference:** sqlplan-review N43
 
 ---
+
 ### D4 — Eager Index Spool: Replace with Permanent Index
 
 **When:** `logicalOp` = Eager Spool AND operator name contains "Index" (distinguishes from table spools)
@@ -131,6 +162,7 @@ INCLUDE ([OrderId], [Quantity], [Price]);
 **Cross-reference:** sqlplan-review N2
 
 ---
+
 ### D5 — Costly Sort: Add Pre-Sorted Index
 
 **When:** `physicalOp` = Sort AND `costPercent` ≥ 10%
@@ -152,6 +184,7 @@ ON [dbo].[Orders] ([CustomerId], [OrderDate] DESC);
 **Cross-reference:** sqlplan-review N22
 
 ---
+
 ### D6 — High-Count Nested Loops: Index the Inner Side
 
 **When:** `physicalOp` = Nested Loops AND `actualExecutions` > 1,000 AND the inner side operator is a Scan (no seek on the join column)
@@ -173,6 +206,7 @@ ON [dbo].[LineItems] ([OrderId]);
 **Cross-reference:** sqlplan-review N15
 
 ---
+
 ### D7 — Heap Scan: Add Clustered Index
 
 **When:** `physicalOp` = Table Scan (indicates a heap — table with no clustered index)
@@ -197,6 +231,7 @@ CREATE CLUSTERED INDEX [CIX_StagingOrders_OrderRef] ON [dbo].[StagingOrders] ([O
 **Cross-reference:** sqlplan-review N39
 
 ---
+
 ### D8 — Backward Scan: Add DESC Index
 
 **When:** Any scan or seek operator has `ScanDirection` = BACKWARD
@@ -205,7 +240,7 @@ CREATE CLUSTERED INDEX [CIX_StagingOrders_OrderRef] ON [dbo].[StagingOrders] ([O
 - The index being scanned and its current key column directions
 - The columns and directions needed for a forward scan that produces the same order
 
-**Recommendation:** A new index with the sort direction reversed on the relevant key column eliminates the backward scan. Backward scans have higher CPU cost than forward scans due to page latch contention patterns.
+**Recommendation:** A new index with the sort direction reversed on the relevant key column eliminates the backward scan. Backward scans have modestly higher CPU cost than forward scans due to latch ordering differences.
 
 ```xml
 <!-- Current index: IX_Orders_CreatedDate (ASC), query wants DESC order -->
@@ -214,9 +249,69 @@ ON [dbo].[Orders] ([CreatedDate] DESC)
 INCLUDE ([CustomerId], [Status]);
 ```
 
-**Estimated impact:** 40 (fixed) — modest but consistent CPU saving.
+**Estimated impact:** 22 (fixed) — modest CPU saving; backward scans are rarely the primary bottleneck. Validate with `sys.dm_os_wait_stats` PAGELATCH data before prioritizing this fix over higher-impact recommendations.
 
 **Cross-reference:** sqlplan-review N12
+
+---
+
+### D9 — Filtered Index Opportunity
+
+**When:** A seek or scan has an equality predicate on a **low-cardinality column** (≤ 10 distinct values estimated) AND the predicate's selectivity discards > 80% of rows — e.g., `IsDeleted = 0` where 98% of rows have `IsDeleted = 1`, or `Status = 'Active'` on a table where most rows are 'Completed'
+
+**What to extract:**
+- Table and schema name
+- The highly selective equality predicate column and constant value
+- The remaining predicate and output columns (→ key and INCLUDE of the filtered index)
+
+**Why a filtered index rather than a standard key-column index:** Adding a low-cardinality column to the key of a full index writes an index entry for every row, including the 98% your query never touches. A filtered index stores only the matching subset — it is narrower, cheaper to maintain on writes, and faster to scan because the entire index fits in far fewer pages.
+
+```xml
+<!-- Scan on dbo.Tasks WHERE Status = 'Pending' (2% of rows); rest are 'Completed' -->
+CREATE NONCLUSTERED INDEX [IX_Tasks_Status_Pending_AssignedUserId]
+ON [dbo].[Tasks] ([AssignedUserId], [CreatedDate])
+INCLUDE ([Priority], [DueDate])
+WHERE Status = 'Pending'
+WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
+```
+
+**Caveats:**
+- Filtered indexes only benefit queries that include the filter predicate as a literal constant or a properly typed parameter — the query optimizer will not use `IX_..._Pending` to satisfy `WHERE Status = @status` unless the plan is forced or the parameter value is sniffed to 'Pending'.
+- Filtered statistics generated by the optimizer (auto-created) may not cover filtered index predicates correctly; manual statistics update may be needed after creation.
+- Do not use on columns with high cardinality or evenly distributed values — a standard seek index is better in that case.
+
+**Estimated impact:** `min(85, (1 − selectivity_pct) × 100)` — scaled by what fraction of the table is excluded from the filtered index.
+
+**Cross-reference:** sqlplan-review N4, D3
+
+---
+
+### D10 — Hash Match Probe Side: Add Join Index
+
+**When:** `physicalOp` = Hash Match (Join, not Aggregate) AND the **probe-side** input operator is a Scan (no seek) AND `costPercent` ≥ 20%
+
+Hash Match joins are build-then-probe: the optimizer builds a hash table from the smaller input, then probes it for each row from the larger input. When the probe side is a scan, adding an index on the probe-side join column often allows the optimizer to switch to Merge Join (which requires no hash table build) or a much cheaper nested-loops seek pattern.
+
+**What to extract:**
+- Probe-side table name (typically the larger input — identified by the `Probe` child of the Hash Match node)
+- The join predicate column(s) on the probe side — these become the key columns
+- Probe-side output columns referenced further up the plan — INCLUDE candidates
+
+**Recommendation:**
+
+```xml
+<!-- Hash Match joining dbo.OrderLines probe side (OrderId) to dbo.Orders build side -->
+CREATE NONCLUSTERED INDEX [IX_OrderLines_OrderId]
+ON [dbo].[OrderLines] ([OrderId])
+INCLUDE ([ProductId], [Quantity], [UnitPrice])
+WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
+```
+
+**Note:** The optimizer will not always switch to Merge Join — it depends on whether both sides can now be presented in sorted order. If after adding this index the plan still uses Hash Match, check whether the build side also lacks a sorted seek; if so, both sides may need indexes to unlock Merge Join.
+
+**Estimated impact:** `min(80, costPercent)` — the hash match's plan share is the upper bound.
+
+**Cross-reference:** sqlplan-review N6 (Hash Match spill), N7 (Hash Match memory grant)
 
 ---
 
@@ -245,11 +340,23 @@ Per suggestion, extract: `Impact`, `Database/Schema/Table`, EQUALITY columns, IN
 
 **Key column order rule:** EQUALITY columns always precede INEQUALITY columns, regardless of XML order.
 
+**Note on Impact scores:** The Impact percentage reflects the optimizer's single-query cost estimate. A score of 99.999 (the cap) means the optimizer thinks the query would be effectively free with the index — treat these as high-priority but verify the query actually runs frequently enough to justify the write overhead.
+
+---
+
+## Source C: DMV-Based Suggestions
+
+When `sys.dm_db_missing_index_group_stats` output is pasted, treat each row as a candidate. The `weighted_impact` column (`user_seeks × avg_total_user_cost × avg_user_impact / 100`) is a much better ranking signal than the static optimizer Impact because it accounts for how frequently the query actually runs.
+
+Extract per row: `table_name`, `equality_columns`, `inequality_columns`, `included_columns`, `weighted_impact`.
+
+**Note:** Missing index DMV data is cleared on SQL Server restart. If `user_seeks` is low but the server was recently restarted, the data may be incomplete.
+
 ---
 
 ## Unified Merge
 
-After collecting all candidates from Source A and Source B, group by `(Schema, Table)` and apply:
+After collecting all candidates from Sources A, B, and C, group by `(Schema, Table)` and apply:
 
 ### Merge Rules (within each table group)
 
@@ -258,9 +365,11 @@ After collecting all candidates from Source A and Source B, group by `(Schema, T
 3. **Overlapping, not prefix** — keep as separate indexes; flag the overlap
 4. **Completely distinct keys** — keep as separate indexes
 
-When a Source A (derived) candidate and Source B (optimizer) candidate overlap for the same table, merge them — the optimizer's explicit Impact score takes precedence over the derived estimate when both are available.
+When a Source A (derived) candidate and Source B/C (optimizer/DMV) candidate overlap for the same table, merge them — the optimizer's Impact or the DMV's weighted_impact takes precedence over the derived estimate when both are available.
 
-**Label each merged recommendation with its sources:** `[optimizer]`, `[derived: D1, D5]`, or `[both]` so it's clear how the recommendation was identified.
+**Filtered index candidates (D9) are never merged with full indexes.** A filtered index serves only queries containing its filter predicate; merging it into a full index defeats the purpose.
+
+**Label each merged recommendation with its sources:** `[optimizer]`, `[dmv]`, `[derived: D1, D5]`, `[both]`, etc.
 
 ---
 
@@ -269,11 +378,11 @@ When a Source A (derived) candidate and Source B (optimizer) candidate overlap f
 After merging, rank by:
 
 ```
-Score = Impact × ln(1 + SourceCount)
+Score = Impact × ln(1 + QueryCount)
 ```
 
-- `Impact` — optimizer Impact if available; derived estimate otherwise
-- `SourceCount` — how many original candidates (from either source) were merged here
+- `Impact` — DMV `weighted_impact` if available (preferred); optimizer Impact if only a plan file; derived estimate otherwise
+- `QueryCount` — how many distinct queries (plan files or DMV entries) were merged here; logarithmic to avoid over-weighting broad but shallow suggestions
 
 Sort descending.
 
@@ -293,7 +402,7 @@ Before generating DDL, flag:
 
 ## Version-Aware Check Suppression
 
-If the SQL Server version is known — from the `ServerVersion` attribute in the plan XML or stated by the user — read `VERSION_COMPATIBILITY.md` (`~/.claude/skills/VERSION_COMPATIBILITY.md` if installed, or `skills/VERSION_COMPATIBILITY.md` from the repo). If unavailable, skip silently. For checks whose minimum version exceeds the instance version: verbose mode → log as `SKIP (version: requires SQL 20XX+, instance is SQL 20YY)`; standard report → omit entirely. Do not suppress `NOT ASSESSED` rows from missing input — only suppress version-inapplicable checks.
+If the SQL Server version is known — from the `ServerVersion` attribute in the plan XML or stated by the user — read `VERSION_COMPATIBILITY.md` (`~/.claude/skills/VERSION_COMPATIBILITY.md` if installed, or `skills/VERSION_COMPATIBILITY.md` from the repo). If unavailable, skip silently. For checks whose minimum version exceeds the instance version: verbose mode → log as `SKIP (version: requires SQL 20XX+, instance is SQL 20YY)`; standard report → omit entirely.
 
 ---
 
@@ -306,7 +415,8 @@ If the SQL Server version is known — from the `ServerVersion` attribute in the
 - Plans analyzed: N
 - Operator-derived candidates (Source A): X
 - Optimizer suggestions (Source B): Y
-- After unified merge: Z
+- DMV candidates (Source C): Z [or "none"]
+- After unified merge: M
 - Tables affected: T
 
 ### Recommended Indexes (Ranked)
@@ -316,22 +426,27 @@ If the SQL Server version is known — from the `ServerVersion` attribute in the
 CREATE NONCLUSTERED INDEX [IX_Orders_CustomerId_CreatedDate]
 ON [dbo].[Orders] ([CustomerId], [CreatedDate])
 INCLUDE ([Status], [TotalAmount])
-WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
+WITH (ONLINE = ON, DROP_EXISTING = ON, SORT_IN_TEMPDB = ON);
+-- Note: DROP_EXISTING = ON assumes IX_Orders_CustomerId already exists and is being extended.
+-- Verify: SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.Orders')
+-- Remove DROP_EXISTING if this is a new index name.
 ```
 - Source: Key Lookup elimination (D1) + optimizer suggestion (Impact 87.3)
 - Covers: 3 plans, eliminates Key Lookup on dbo.Orders
 - Prerequisite: [any query/schema change required before this index is effective — omit if none]
 - Warnings: None [or: brief warning if index won't help without a predicate fix, or if it overlaps with an existing index]
 
-#### [I2] dbo.LineItems — Score: 71.0 [derived: D6]
+#### [I2] dbo.Tasks — Score: 71.0 [derived: D9, filtered]
 ```sql
-CREATE NONCLUSTERED INDEX [IX_LineItems_OrderId]
-ON [dbo].[LineItems] ([OrderId])
+CREATE NONCLUSTERED INDEX [IX_Tasks_AssignedUserId_CreatedDate_Pending]
+ON [dbo].[Tasks] ([AssignedUserId], [CreatedDate])
+INCLUDE ([Priority], [DueDate])
+WHERE Status = 'Pending'
 WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 ```
-- Source: Nested Loops inner-side scan (D6), 12,400 executions
-- Covers: 2 plans
-- Warnings: None
+- Source: Filtered index candidate (D9): Status = 'Pending' excludes 97% of table rows
+- Covers: Queries containing literal WHERE Status = 'Pending' — will NOT be used for parameterized @status queries unless sniffed to 'Pending'
+- Warnings: Verify query uses the literal constant, not a parameter
 
 ### Skipped / Flagged
 
@@ -342,12 +457,31 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 
 ### Deployment Script
 
-[Full CREATE INDEX block for all recommended indexes, in ranked order]
+```sql
+-- ============================================================
+-- Deploy in ranked order. Test each index in non-production first.
+-- ============================================================
+
+-- STEP 1: [description]
+CREATE NONCLUSTERED INDEX [IX_...]
+ON [dbo].[...] ([...])
+INCLUDE ([...])
+WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
+      -- SQL 2017+ on large tables: add RESUMABLE = ON, MAX_DURATION = 120 MINUTES
+      -- Remove ONLINE = ON for Standard edition pre-2016 or tables with LOB columns
+     );
+
+-- Validate before promoting to production:
+-- SELECT TOP 100 ... FROM dbo.Orders WITH (INDEX = IX_Orders_CustomerId_CreatedDate) WHERE ...;
+-- Confirm the query uses the new index in the execution plan before removing the hint.
+```
 
 ### Summary
 - Operator-derived only: N indexes
 - Optimizer-suggested only: M indexes
-- Combined (both sources agreed): K indexes
+- DMV-derived only: K indexes
+- Combined (multiple sources agreed): J indexes
+- Filtered indexes: F indexes
 - Estimated queries improved: Q
 
 ---
@@ -361,6 +495,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 `IX_{Table}_{KeyCol1}_{KeyCol2}[_Desc][_etc]`
 
 - Append `_Desc` when a key column is DESC
+- For filtered indexes, append a suffix describing the filter: `IX_Tasks_AssignedUserId_Pending`
 - Truncate to 128 characters
 - Append `_2`, `_3` on collision
 
@@ -369,10 +504,10 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 ## Notes
 
 - Operator-derived recommendations (Source A) are inferences — they are not guaranteed improvements. Always validate with `/sqlplan-review` findings before deploying.
-- The optimizer's Impact score reflects a single query's estimated benefit. A derived recommendation from a Nested Loops with 50,000 executions may be more valuable than an optimizer suggestion with Impact 90 from a query that runs once a day.
+- The optimizer's Impact score reflects a single query's estimated benefit. A derived recommendation from a Nested Loops with 50,000 executions may be more valuable than an optimizer suggestion with Impact 90 from a query that runs once a day. DMV `weighted_impact` data is the most reliable ranking signal when available.
 - Always test in non-production first. New indexes can shift plan shapes for other queries on the same table.
-- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition pre-2016 or tables with LOB columns (xml, varchar(max), etc.).
-- If `sys.dm_db_missing_index_group_stats` data is available, incorporate `UserSeeks × AverageQueryCost` into the Impact ranking for Source B.
+- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition pre-2016 or tables with LOB columns (xml, varchar(max), etc.). SQL Server 2017+ supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` for large tables, which allows pausing and resuming a long index build.
+- `DROP_EXISTING = ON` is appropriate when extending an existing index (D1 Key Lookup pattern). Always verify the current index name against `sys.indexes` before using it.
 
 ---
 
@@ -416,20 +551,15 @@ Derive `<input-prefix>`:
 3. Fallback: `run`
 Sanitize: alphanumeric + hyphens/underscores only, max 32 chars.
 
-File headers:
-  analysis.md → `# Analysis — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
-  trace.md    → `# Check Evaluation Log — <skill-name> / # Input: <first 80 chars> / # Generated: <UTC timestamp>`
-
 Create directories as needed. When `--verbose` is not present, write nothing to disk.
 
 ---
 
 ## Companion Skills
 
-- **sqlplan-review** — Run the full 99-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
+- **sqlplan-review** — Run the full 108-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
 - **sqlplan-compare** — After deploying the recommended indexes, capture a new plan and diff against the baseline to confirm the improvement.
 - **sqlplan-batch** — Run index advisor across a folder of plans to produce a single consolidated `CREATE INDEX` script for the whole workload.
 - **tsql-review** — If the plan shows implicit conversion warnings (S12), review the T-SQL source (T5) to fix the type mismatch that prevents index seeks.
 - **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
-
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

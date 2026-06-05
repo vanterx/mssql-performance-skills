@@ -114,7 +114,7 @@ SQL Server Execution Times: CPU time = 18420 ms, elapsed time = 18912 ms.
 
 **Use: `/sqlindex-advisor`**
 
-Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D8: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans) and the optimizer's own `MissingIndexGroup` suggestions. Both sources are merged and deduplicated per table — the output is one index per table group, not one per source.
+Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D10: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans, filtered index opportunities, hash match probe-side scans) plus the optimizer's own `MissingIndexGroup` suggestions and DMV data from `sys.dm_db_missing_index_group_stats`. All sources are merged and deduplicated per table — the output is one index per table group, not one per source.
 
 ```
 /sqlindex-advisor path/to/query.sqlplan
@@ -676,7 +676,7 @@ Execution Plan            │  .sqlplan XML
                           │  IQP/PSP/ADR/CE feedback (SQL 2019–2022)
 
 /sqlindex-advisor    │  Indexes: what should I create?
-                          │  D1–D8 derived rules + MissingIndexGroup
+                          │  D1–D10 derived rules + MissingIndexGroup + DMV
                           │  → ranked CREATE INDEX script
 
 /sqlplan-compare          │  Regression: what changed between two plans?
@@ -883,7 +883,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `S1–S36` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width, PSP dispatcher, ADR version store, CE feedback | 36 |
 | `N1–N72` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes, low statistics sampling percent | 72 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
-| `D1–D8` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
+| `D1–D10` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap, filtered index, hash match probe side | 10 |
 | `P1–P16` | `sqldeadlock-review` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
 | `Q1–Q32` | `sqlquerystore-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage, QS hints, auto-tuning | 32 |
 | `R1–R25` | `sqlprocstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
@@ -894,7 +894,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `O1–O20` | `sqlmemory-review` | Memory pressure: PLE, NUMA imbalance, buffer pool concentration, stolen memory, single-use plan bloat, compile rate, large plans, lock clerk, grant queue depth, grant timeout, oversized grants, Resource Governor, BPE, ColumnStore clerk, XTP clerk, OS pressure notifications, LPIM, Max Server Memory | 20 |
 | `Z1–Z15` | `sqldiskio-review` | File I/O: data read latency, data write latency, log write latency, hot file, stall ratio, data+log co-location, TempDB co-location, TempDB log latency, file count imbalance, system drive placement, auto-growth events, data growth increment, log growth increment, peak-hour growth, I/O trend worsening | 15 |
 
-**Total: 555 checks across all skills.**
+**Total: 557 checks across all skills.**
 
 ---
 

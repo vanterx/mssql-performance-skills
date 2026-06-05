@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 555 checks in this library apply to your SQL Server version.
+Which of the 557 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -52,7 +52,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 555 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 557 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
@@ -217,7 +217,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**384 of 555 checks (69.2%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**384 of 557 checks (68.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
