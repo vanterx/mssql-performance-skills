@@ -105,7 +105,7 @@ INCLUDE (OrderDate, TotalAmount, Status);
 
 **Fix options (ranked by impact)**
 1. Add a covering index — eliminates the scan driving long duration.
-2. Run `/sqlplan-review` to find the dominant operator; run `/sqlplan-index-advisor` for DDL.
+2. Run `/sqlplan-review` to find the dominant operator; run `/sqlindex-advisor` for DDL.
 3. If `CPU << Duration` (waiting, not computing): investigate lock blocking or I/O waits rather than the query plan.
 4. Set a query timeout as a safety net: only after optimizing, not instead of.
 
@@ -168,7 +168,7 @@ Reads 1,204,180 → Critical (≥ 1,000,000)
 
 **Fix options**
 1. Run `/sqlstats-review` on this query's STATISTICS IO output to identify which table has the most reads.
-2. Run `/sqlplan-index-advisor` for covering index recommendations.
+2. Run `/sqlindex-advisor` for covering index recommendations.
 3. Check X13 — if this query runs 1,000+ times, reads compound: 1,000 × 1,200 reads = 1.2 B total reads per trace window.
 
 **Related checks:** X1 (duration), X2 (CPU), X4 (writes), X13 (frequency)
@@ -247,7 +247,7 @@ EventClass  TextData              SPID  Duration
 | High contention on hotspot row | Consider row-level vs page-level locking; re-architect hot row access |
 | READ COMMITTED default causing reader/writer contention | Enable READ_COMMITTED_SNAPSHOT isolation at database level |
 
-**Related checks:** X5 (attention), X8 (errors), `/sqlplan-deadlock` if deadlock events also present
+**Related checks:** X5 (attention), X8 (errors), `/sqldeadlock-review` if deadlock events also present
 
 ---
 
@@ -296,12 +296,12 @@ EventClass  TextData                                    Error  Severity
 ```
 
 **Fix options**
-1. **Error 1205 (deadlock victim)**: extract the deadlock XML and run `/sqlplan-deadlock`.
+1. **Error 1205 (deadlock victim)**: extract the deadlock XML and run `/sqldeadlock-review`.
 2. **Error 2627 / 2601 (duplicate key)**: the application is inserting duplicates — use `INSERT ... WHERE NOT EXISTS` or handle the error in the application.
 3. **Error 547 (FK violation)**: application is violating referential integrity — review DML ordering.
 4. **Severity ≥ 20**: escalate immediately — these indicate server-level problems.
 
-**Related checks:** X5 (attention), X6 (lock timeout), `/sqlplan-deadlock`
+**Related checks:** X5 (attention), X6 (lock timeout), `/sqldeadlock-review`
 
 ---
 
@@ -573,7 +573,7 @@ By Max Duration (top 5):
 
 **Fix options**
 1. Run `/sqlplan-review` on the #1 query by CPU.
-2. Run `/sqlplan-index-advisor` on the #1 query by reads.
+2. Run `/sqlindex-advisor` on the #1 query by reads.
 3. If the #1 query by max duration is a reporting job, schedule it off-peak.
 
 **Related checks:** X18 (workload concentration), X1, X2, X3

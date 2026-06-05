@@ -14,16 +14,18 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqltrace-review`](#sqltrace-review) | `/sqltrace-review` | Profiler `.trc` / XE `.xel` / `fn_trace_gettable()` results | Workload analysis — 25 checks for N+1, sniffing, recompiles, spills, top consumers, SQL 2019/2022 modern events |
 | [`sqlwait-review`](#sqlwait-review) | `/sqlwait-review` | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | Wait statistics — 44 checks (V1–V44): I/O, locks, parallelism, memory, CPU, latch, log I/O, network, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, multi-snapshot trend analysis, In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo, memory grants, file I/O latency, IQP/PSP/ADR feature waits, TempDB metadata contention |
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 108 checks across operators, memory, parallelism, row widths, elapsed timing, IQP/PSP/ADR/CE feedback |
-| [`sqlplan-index-advisor`](#sqlplan-index-advisor) | `/sqlplan-index-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
+| [`sqlindex-advisor`](#sqlindex-advisor) | `/sqlindex-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
-| [`sqlplan-deadlock`](#sqlplan-deadlock) | `/sqlplan-deadlock` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
+| [`sqldeadlock-review`](#sqldeadlock-review) | `/sqldeadlock-review` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
-| [`query-store-review`](#query-store-review) | `/query-store-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 32 checks for regressed queries, plan instability, resource hotspots, query-level waits, configuration health, SQL 2019/2022 IQP/PSP/DOP/CE feedback, QS hints, and auto-tuning |
-| [`procstats-review`](#procstats-review) | `/procstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 25 checks (R1–R25): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis, natively compiled proc regression, CLR ratio, trigger dominance, parallel-to-serial regression |
-| [`clusterlog-review`](#clusterlog-review) | `/clusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 30 checks (L1–L30): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics |
-| [`errorlog-review`](#errorlog-review) | `/errorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 33 checks (E1–E33): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, configuration signals, and SQL 2019/2022 modern feature events |
-| [`hadr-health-review`](#hadr-health-review) | `/hadr-health-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 27 checks (H1–H27): replica connectivity, data loss risk, recovery time, throughput, configuration, and modern AG features (Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection) |
-| [`spn-review`](#spn-review) | `/spn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 40 checks (K1–K40): SPN presence, service account binding, AG listener, permissions, delegation, Azure AD hybrid, gMSA rollover, FCI/DAG, FAST armoring, CNAME alias |
+| [`sqlquerystore-review`](#sqlquerystore-review) | `/sqlquerystore-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 32 checks for regressed queries, plan instability, resource hotspots, query-level waits, configuration health, SQL 2019/2022 IQP/PSP/DOP/CE feedback, QS hints, and auto-tuning |
+| [`sqlprocstats-review`](#sqlprocstats-review) | `/sqlprocstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 25 checks (R1–R25): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis, natively compiled proc regression, CLR ratio, trigger dominance, parallel-to-serial regression |
+| [`sqlclusterlog-review`](#sqlclusterlog-review) | `/sqlclusterlog-review` | `CLUSTER.LOG` file or inline paste | WSFC cluster log analysis — 30 checks (L1–L30): lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics |
+| [`sqlerrorlog-review`](#sqlerrorlog-review) | `/sqlerrorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 33 checks (E1–E33): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, configuration signals, and SQL 2019/2022 modern feature events |
+| [`sqlhadr-review`](#sqlhadr-review) | `/sqlhadr-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 27 checks (H1–H27): replica connectivity, data loss risk, recovery time, throughput, configuration, and modern AG features (Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection) |
+| [`sqlspn-review`](#sqlspn-review) | `/sqlspn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 40 checks (K1–K40): SPN presence, service account binding, AG listener, permissions, delegation, Azure AD hybrid, gMSA rollover, FCI/DAG, FAST armoring, CNAME alias |
+| [`sqlmemory-review`](#sqlmemory-review) | `/sqlmemory-review` | `sys.dm_os_memory_clerks`, `sys.dm_exec_query_memory_grants`, PLE counter, `sys.dm_os_sys_memory` output | Memory pressure analysis — 20 checks (O1–O20): PLE, plan cache bloat, memory grants queue, oversized grants, ColumnStore/XTP footprint, OS pressure notifications, LPIM, Max Server Memory |
+| [`sqldiskio-review`](#sqldiskio-review) | `/sqldiskio-review` | `sys.dm_io_virtual_file_stats` snapshot pair, `sys.master_files`, default trace auto-growth events | File-level I/O analysis — 15 checks (Z1–Z15): data/log latency, hot file, stall ratio, storage placement, TempDB co-location, auto-growth sizing and timing, I/O trend worsening |
 
 ---
 
@@ -110,22 +112,22 @@ SQL Server Execution Times: CPU time = 18420 ms, elapsed time = 18912 ms.
 
 ### "I need to know which indexes to create"
 
-**Use: `/sqlplan-index-advisor`**
+**Use: `/sqlindex-advisor`**
 
-Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D8: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans) and the optimizer's own `MissingIndexGroup` suggestions. Both sources are merged and deduplicated per table — the output is one index per table group, not one per source.
+Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D10: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans, filtered index opportunities, hash match probe-side scans) plus the optimizer's own `MissingIndexGroup` suggestions and DMV data from `sys.dm_db_missing_index_group_stats`. All sources are merged and deduplicated per table — the output is one index per table group, not one per source.
 
 ```
-/sqlplan-index-advisor path/to/query.sqlplan
+/sqlindex-advisor path/to/query.sqlplan
 ```
 
 For multiple plans in one pass (consolidated script across all):
 ```
-/sqlplan-index-advisor plans/proc1.sqlplan plans/proc2.sqlplan plans/proc3.sqlplan
+/sqlindex-advisor plans/proc1.sqlplan plans/proc2.sqlplan plans/proc3.sqlplan
 ```
 
 **When to use this vs just following sqlplan-review findings:**
 - `/sqlplan-review` tells you *what* the problem is (e.g., "Key Lookup executing 48,000 times")
-- `/sqlplan-index-advisor` tells you *exactly which index DDL to run* — it handles column order, INCLUDE columns, and merging overlapping suggestions that sqlplan-review does not generate
+- `/sqlindex-advisor` tells you *exactly which index DDL to run* — it handles column order, INCLUDE columns, and merging overlapping suggestions that sqlplan-review does not generate
 - Run both on the same plan for the most complete picture: review for full analysis, advisor for the actionable DDL
 
 ---
@@ -146,7 +148,7 @@ Or paste both XML blocks labeled "Baseline" and "New".
 
 ### "Kerberos authentication fails — linked server falls back to NTLM or anonymous login — AG listener connections fail"
 
-**Use: `/spn-review`**
+**Use: `/sqlspn-review`**
 
 Collect `setspn` output and AD delegation attributes, then paste them for analysis. The skill applies 30 checks to identify missing SPNs, duplicate SPNs, unconstrained delegation, misconfigured KCD/RBCD, and AD account sensitivity flags that block delegation.
 
@@ -159,12 +161,12 @@ Get-ADComputer SQLNODE1 -Properties TrustedForDelegation, msDS-AllowedToActOnBeh
 ```
 
 ```
-/spn-review
+/sqlspn-review
 
 [paste output above]
 ```
 
-Common root causes found by `/spn-review`:
+Common root causes found by `/sqlspn-review`:
 - K8 (duplicate SPN) — previous service account not cleaned up during account rotation
 - K19/K29 (unconstrained delegation) — legacy configuration that must be replaced with KCD
 - K21/K22 (KCD not configured or target SPN missing) — linked server double-hop fails
@@ -174,12 +176,12 @@ Common root causes found by `/spn-review`:
 
 ### "Users are getting error 1205 (deadlock victim)"
 
-**Use: `/sqlplan-deadlock`**
+**Use: `/sqldeadlock-review`**
 
 Capture the deadlock XML from the `system_health` Extended Events session in SSMS, or save the deadlock graph as XML. The skill identifies the victim and winner processes, the lock resources involved, matches against 8 known deadlock patterns (P1–P8), and produces a prioritized fix plan.
 
 ```
-/sqlplan-deadlock path/to/deadlock.xdl
+/sqldeadlock-review path/to/deadlock.xdl
 ```
 
 Or paste the raw `<deadlock>` XML directly.
@@ -318,7 +320,7 @@ Capture a folder of `.sqlplan` files (from SQL Server's Query Store, Extended Ev
 - **Top 10 most expensive plans** — ranked by statement cost
 - **Top 10 plans by critical issue count** — worst offenders for prioritization
 - **Check violation frequency** — which checks fire most often across the workload (systemic vs one-off problems)
-- **Consolidated missing index script** — merged and ranked `CREATE INDEX` DDL across all plans (same merge rules as `/sqlplan-index-advisor`)
+- **Consolidated missing index script** — merged and ranked `CREATE INDEX` DDL across all plans (same merge rules as `/sqlindex-advisor`)
 - **Spill report** — all plans with confirmed TempDb spills
 - **Per-plan summary table** — one row per file with key metrics
 
@@ -335,29 +337,29 @@ OFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY;
 -- Save each query_plan XML as a .sqlplan file
 ```
 
-Follow up with `/sqlplan-review` on the worst 3–5 plans and `/sqlplan-index-advisor` for the consolidated index script.
+Follow up with `/sqlplan-review` on the worst 3–5 plans and `/sqlindex-advisor` for the consolidated index script.
 
 ---
 
 ### "I want to find my worst queries without running any captures — I have Query Store enabled"
 
-**Use: `/query-store-review`**
+**Use: `/sqlquerystore-review`**
 
 If your database has Query Store enabled (SQL Server 2016+, on by default in many configurations), you already have weeks or months of query performance history. Run one capture query and the skill applies 25 checks to identify regressed queries, plan instability, resource hotspots, N+1 patterns, and configuration issues — all from data already collected.
 
 ```
-/query-store-review
+/sqlquerystore-review
 
 [paste output from the capture query in the skill or README]
 ```
 
-The output tells you which queries to focus on and which companion skill to use next — `/sqlplan-review` for deep-dive plan analysis, `/sqlplan-index-advisor` for index DDL, `/tsql-review` for source code anti-patterns.
+The output tells you which queries to focus on and which companion skill to use next — `/sqlplan-review` for deep-dive plan analysis, `/sqlindex-advisor` for index DDL, `/tsql-review` for source code anti-patterns.
 
 ---
 
 ### "I want to find my worst stored procedures, triggers, or functions — I have sys.dm_exec_procedure_stats data"
 
-**Use: `/procstats-review`**
+**Use: `/sqlprocstats-review`**
 
 Collect procedure/trigger/function runtime stats from the DMV and paste the output. No execution plan needed — the skill applies 20 checks to identify top CPU and I/O consumers, per-execution efficiency (cost per call), N+1 callers (a procedure called thousands of times per minute), parameter sniffing signals (execution time variance), and trend analysis when multiple snapshots are provided.
 
@@ -378,7 +380,7 @@ ORDER BY ps.total_worker_time DESC;
 ```
 
 ```
-/procstats-review
+/sqlprocstats-review
 
 [paste query output]
 ```
@@ -389,7 +391,7 @@ Once the worst procedure is identified, pivot to `/tsql-review` on its source, `
 
 ### "A query is fast for most parameter values but slow for specific ones"
 
-**Use: `/sqlplan-compare` (C19) → `/sqlplan-review` (S34/N68) → `/query-store-review` (Q26)**
+**Use: `/sqlplan-compare` (C19) → `/sqlplan-review` (S34/N68) → `/sqlquerystore-review` (Q26)**
 
 This is the parameter-sensitive plan (PSP) / parameter sniffing diagnosis path. SQL Server 2022 adds native PSP optimization; earlier versions require manual workarounds.
 
@@ -407,7 +409,7 @@ Check S34 (PSP Dispatcher Detected — SQL 2022+) and N68 (PSP Variant Cardinali
 
 **Step 3** — Check Query Store for plan instability history:
 ```
-/query-store-review
+/sqlquerystore-review
 [paste sys.query_store_* DMV output for the query]
 ```
 Check Q26 (PSP Optimization Active — SQL 2022+) to see if the database is already using PSP optimization, and Q5/Q6 (plan instability) for the historical pattern of plan flip-flopping.
@@ -416,13 +418,13 @@ Check Q26 (PSP Optimization Active — SQL 2022+) to see if the database is alre
 
 ### "The transaction log is growing despite regular log backups"
 
-**Use: `/errorlog-review` (E29) → `/sqlwait-review` (V43)**
+**Use: `/sqlerrorlog-review` (E29) → `/sqlwait-review` (V43)**
 
 When log backups run but `log_reuse_wait_desc` stays non-zero and the log keeps growing, the cause is often ADR Persistent Version Store (PVS) cleanup lag (SQL 2019+) or an open long transaction.
 
 **Step 1** — Check the ERRORLOG for PVS cleanup stalls:
 ```
-/errorlog-review
+/sqlerrorlog-review
 [paste ERRORLOG text]
 ```
 Check E29 (ADR PVS Cleanup Stall) — look for `PVS cleanup worker stalled` or `ADR cleanup: version store growing` messages. If E29 fires, the database has ADR enabled and the PVS cleanup thread is falling behind.
@@ -461,7 +463,7 @@ Step 3 — Capture and analyze the execution plan
    → Fix: join strategy, row estimate errors, memory grant, parallelism
 
 Step 4 — Get the index recommendations
-   /sqlplan-index-advisor
+   /sqlindex-advisor
    → Fix: deploy the CREATE INDEX script, verify improvement
 
 Step 5 — If the query regressed after a change
@@ -469,7 +471,7 @@ Step 5 — If the query regressed after a change
    → Fix: revert the statistics / schema change, or rewrite the query
 
 Step 6 — If the query causes deadlocks
-   /sqlplan-deadlock deadlock.xdl
+   /sqldeadlock-review deadlock.xdl
    → Fix: add missing index, change lock order, switch isolation level
 ```
 
@@ -481,14 +483,14 @@ For availability incidents (AG failovers, listener connectivity failures, Kerber
 AG failover / unexpected downtime / auth failure
          │
          ▼
-/errorlog-review  (E1–E33)
+/sqlerrorlog-review  (E1–E33)
    Check: AG lease expiry (E1), hadr_health event (E2), I/O slow (E11–E14),
           memory pressure (E6–E10), login failure burst (E19), ADR PVS stall (E29),
           IQP DOP Feedback applied (E30), Ledger verification failure (E31)
          │
          │ AG event in ERRORLOG?
          ▼
-/clusterlog-review  (L1–L30)
+/sqlclusterlog-review  (L1–L30)
    Check: lease timeout (L1), health check failure (L3–L4), quorum loss (L5),
           node eviction (L6), network partition (L9), RHS crash (L14–L16),
           Cloud Witness timeout (L26), Azure Arc disconnect (L27),
@@ -496,14 +498,14 @@ AG failover / unexpected downtime / auth failure
          │
          │ cluster stable but AG replica unhealthy?
          ▼
-/hadr-health-review  (H1–H27)
+/sqlhadr-review  (H1–H27)
    Check: replica disconnected (H1), log send rate (H5), redo queue (H6),
           data loss risk (H7), secondary lag (H9), parallel redo saturation (H25),
           read-scale RCSI missing (H26), Contained AG misrouted DML (H23)
          │
          │ Kerberos/auth error? NTLM fallback in ERRORLOG?
          ▼
-/spn-review  (K1–K40)
+/sqlspn-review  (K1–K40)
    Check: MSSQLSvc SPN missing (K1–K4), AG listener SPN (K9–K10),
           delegation not configured (K17–K22), gMSA rollover drift (K34),
           FCI node SPN leak (K35), Distributed AG forwarder (K36),
@@ -520,14 +522,14 @@ AG failover / unexpected downtime / auth failure
 | SSMS Messages tab output (STATISTICS IO, TIME) | `/sqlstats-review` |
 | Profiler `.trc`, XE `.xel`, or `fn_trace_gettable()` results | `/sqltrace-review` |
 | `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output | `/sqlwait-review` |
-| One `.sqlplan` file | `/sqlplan-review` then `/sqlplan-index-advisor` |
+| One `.sqlplan` file | `/sqlplan-review` then `/sqlindex-advisor` |
 | Two `.sqlplan` files (before and after) | `/sqlplan-compare` |
-| Deadlock XML / `.xdl` file | `/sqlplan-deadlock` |
+| Deadlock XML / `.xdl` file | `/sqldeadlock-review` |
 | Folder of `.sqlplan` files | `/sqlplan-batch` |
-| `sys.query_store_*` DMV output | `/query-store-review` |
-| `collect.proc_stats` report query output (Q1–Q5 from `04_report_queries.sql`) | `/procstats-review` |
+| `sys.query_store_*` DMV output | `/sqlquerystore-review` |
+| `collect.proc_stats` report query output (Q1–Q5 from `04_report_queries.sql`) | `/sqlprocstats-review` |
 | No artifacts — just a slow query description | `/sqlplan-review` (describe operators) or `/tsql-review` (describe the code) |
-| `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute data | `/spn-review` |
+| `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute data | `/sqlspn-review` |
 
 ---
 
@@ -538,7 +540,7 @@ AG failover / unexpected downtime / auth failure
 Users are reporting the application is slow, but you don't know if it's I/O, locking, CPU, or something else.
 
 1. **`/sqlwait-review`** — run the wait statistics query and paste results. V17 (top-5 table) orients the analysis; specific checks identify the dominant wait type and give a prioritized fix. This is always the first step for server-wide performance problems.
-2. If dominant wait is `PAGEIOLATCH` → I/O bound → proceed to `/sqlstats-review` on the heaviest queries, then `/sqlplan-index-advisor`.
+2. If dominant wait is `PAGEIOLATCH` → I/O bound → proceed to `/sqlstats-review` on the heaviest queries, then `/sqlindex-advisor`.
 3. If dominant wait is `LCK_M_*` → blocking → proceed to blocking chain analysis with `sys.dm_exec_requests`.
 4. If dominant wait is `CXPACKET` → parallelism overhead → check Cost Threshold for Parallelism and data skew; `/sqlplan-review` for N30.
 5. If dominant wait is `RESOURCE_SEMAPHORE` → memory grant queue → update statistics; `/sqlplan-review` S2–S4.
@@ -551,7 +553,7 @@ The query consumes excessive CPU on the server.
 1. **`/sqlwait-review`** — check signal wait ratio (V10). High signal wait = CPU saturation (threads ready but no CPU). Check `CXPACKET` (V3) and `SOS_SCHEDULER_YIELD` (V7).
 2. **`/sqlstats-review`** — check W5 (CPU ≥ 60s). If CPU ≈ elapsed: CPU-bound (scans, sorts). If CPU >> elapsed: parallel execution — check thread skew.
 3. **`/sqlplan-review`** — check N4 (expensive scan), N18 (hash match), N20 (sort), S1 (serial plan vs expected parallelism).
-4. **`/sqlplan-index-advisor`** — add indexes to eliminate scans driving the CPU cost.
+4. **`/sqlindex-advisor`** — add indexes to eliminate scans driving the CPU cost.
 
 ### High I/O / disk pressure
 
@@ -560,7 +562,7 @@ Disk or buffer pool pressure, slow disk response.
 1. **`/sqlwait-review`** — check `PAGEIOLATCH_SH` (V1). If ≥ 40% of waits, I/O is the dominant bottleneck. Note: the root cause is almost always inefficient queries reading too many pages — investigate queries before blaming storage.
 2. **`/sqlstats-review`** — check I1 (total logical reads), I2 (scan count), I3 (physical reads ratio), I6 (worktable spill).
 3. **`/sqlplan-review`** — check N4 (expensive scan), N5 (key lookup), N41–N43 (confirmed spill), S2/S3 (memory grant).
-4. **`/sqlplan-index-advisor`** — covering indexes to eliminate key lookups and reduce scans.
+4. **`/sqlindex-advisor`** — covering indexes to eliminate key lookups and reduce scans.
 
 ### Long elapsed time but low CPU
 
@@ -568,7 +570,7 @@ Query is slow but not using much CPU — it is waiting.
 
 1. **`/sqlwait-review`** — check signal wait ratio (V10 < 15% = not CPU). Check which wait type dominates: `PAGEIOLATCH` (I/O wait), `LCK_M_*` (blocking), `ASYNC_NETWORK_IO` (client-side — not SQL Server). `WRITELOG` (log I/O).
 2. **`/sqlstats-review`** — check W1 (CPU < 10% of elapsed = wait-bound), I3/I14 (physical reads).
-3. **`/sqlplan-deadlock`** if blocking or deadlocks are suspected.
+3. **`/sqldeadlock-review`** if blocking or deadlocks are suspected.
 
 ### Query was fast, now it's slow
 
@@ -590,7 +592,7 @@ The query is fast for one parameter value, slow for another.
 
 Users intermittently get killed as a deadlock victim.
 
-1. **`/sqlplan-deadlock`** — analyze the deadlock XML. The skill identifies which of the 8 canonical patterns applies (P1–P8) and gives a prioritized fix.
+1. **`/sqldeadlock-review`** — analyze the deadlock XML. The skill identifies which of the 8 canonical patterns applies (P1–P8) and gives a prioritized fix.
 2. Common fixes: add a missing index (P4, P5), switch to READ_COMMITTED_SNAPSHOT isolation (P2), index the FK column in the child table (P7), enforce consistent lock order (P1).
 
 ### "This stored proc is slow but I don't know where to start"
@@ -607,16 +609,16 @@ After a version upgrade, migration, or workload capture.
 
 1. **`/sqlplan-batch`** — point it at the folder of captured plans. Get the top offenders by cost, the most common check violations, and a consolidated missing index script.
 2. Drill into the worst 5–10 plans with **`/sqlplan-review`**.
-3. Generate targeted index DDL for each with **`/sqlplan-index-advisor`**.
+3. Generate targeted index DDL for each with **`/sqlindex-advisor`**.
 
 ### "I want to find my worst stored procedures / functions by resource usage — no specific query yet"
 
 You have Query Store disabled or don't want to capture a trace. You have `sys.dm_exec_procedure_stats` available.
 
-1. **`/procstats-review`** — collect DMV data (see capture query above) and paste. R1–R5 rank procedures by CPU, reads, and duration. R11/R12 flag workload concentration — if one procedure accounts for 80%+ of CPU, it's the target.
+1. **`/sqlprocstats-review`** — collect DMV data (see capture query above) and paste. R1–R5 rank procedures by CPU, reads, and duration. R11/R12 flag workload concentration — if one procedure accounts for 80%+ of CPU, it's the target.
 2. Run `/tsql-review` on the worst procedure's body — catch source-level anti-patterns before capturing a plan.
 3. Run the procedure with `SET STATISTICS IO, TIME ON` → **`/sqlstats-review`** — identify which statement is the bottleneck.
-4. Capture the plan for that statement → **`/sqlplan-review`** → **`/sqlplan-index-advisor`**.
+4. Capture the plan for that statement → **`/sqlplan-review`** → **`/sqlindex-advisor`**.
 
 ---
 
@@ -673,8 +675,8 @@ Execution Plan            │  .sqlplan XML
                           │  memory grants, parallelism, spills,
                           │  IQP/PSP/ADR/CE feedback (SQL 2019–2022)
 
-/sqlplan-index-advisor    │  Indexes: what should I create?
-                          │  D1–D8 derived rules + MissingIndexGroup
+/sqlindex-advisor    │  Indexes: what should I create?
+                          │  D1–D10 derived rules + MissingIndexGroup + DMV
                           │  → ranked CREATE INDEX script
 
 /sqlplan-compare          │  Regression: what changed between two plans?
@@ -683,13 +685,13 @@ Execution Plan            │  .sqlplan XML
 
 Deadlock                  │  deadlock XML / .xdl
 ──────────────────────────┼─────────────────────────────────────────
-/sqlplan-deadlock         │  Deadlock: why are two sessions blocked?
+/sqldeadlock-review         │  Deadlock: why are two sessions blocked?
                           │  P1–P16 patterns: lock order, RCSI bypass,
                           │  MERGE, heap, TempDB, lock escalation, ledger
 
 Workload                  │  Folder of .sqlplan files
 ──────────────────────────┼─────────────────────────────────────────
-/query-store-review       │  Query Store: which queries in a workload
+/sqlquerystore-review       │  Query Store: which queries in a workload
                            │  need attention? 32 checks: regressions,
                            │  plan instability, resource hotspots,
                            │  waits per query, operational health,
@@ -881,16 +883,18 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `S1–S36` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width, PSP dispatcher, ADR version store, CE feedback | 36 |
 | `N1–N72` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes, low statistics sampling percent | 72 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
-| `D1–D8` | `sqlplan-index-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap | 8 |
-| `P1–P16` | `sqlplan-deadlock` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
-| `Q1–Q32` | `query-store-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage, QS hints, auto-tuning | 32 |
-| `R1–R25` | `procstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
-| `L1–L30` | `clusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics | 30 |
-| `H1–H27` | `hadr-health-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, configuration, Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection | 27 |
-| `E1–E33` | `errorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals, ADR PVS, IQP/CE feedback, Ledger verification, Azure Arc | 33 |
-| `K1–K40` | `spn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
+| `D1–D10` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap, filtered index, hash match probe side | 10 |
+| `P1–P16` | `sqldeadlock-review` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
+| `Q1–Q32` | `sqlquerystore-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage, QS hints, auto-tuning | 32 |
+| `R1–R25` | `sqlprocstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
+| `L1–L30` | `sqlclusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics | 30 |
+| `H1–H27` | `sqlhadr-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, configuration, Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection | 27 |
+| `E1–E33` | `sqlerrorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals, ADR PVS, IQP/CE feedback, Ledger verification, Azure Arc | 33 |
+| `K1–K40` | `sqlspn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
+| `O1–O20` | `sqlmemory-review` | Memory pressure: PLE, NUMA imbalance, buffer pool concentration, stolen memory, single-use plan bloat, compile rate, large plans, lock clerk, grant queue depth, grant timeout, oversized grants, Resource Governor, BPE, ColumnStore clerk, XTP clerk, OS pressure notifications, LPIM, Max Server Memory | 20 |
+| `Z1–Z15` | `sqldiskio-review` | File I/O: data read latency, data write latency, log write latency, hot file, stall ratio, data+log co-location, TempDB co-location, TempDB log latency, file count imbalance, system drive placement, auto-growth events, data growth increment, log growth increment, peak-hour growth, I/O trend worsening | 15 |
 
-**Total: 520 checks across all skills.**
+**Total: 557 checks across all skills.**
 
 ---
 
@@ -927,9 +931,9 @@ This is a SQL Server 2019+ / Azure SQL wait that fires when SQL Server is active
 
 `/sqlstats-review` tells you *what happened at the I/O layer*: which tables were read, how many pages, how long it took. `/sqlplan-review` tells you *why*: which operators were chosen, what join strategy, what row estimates were made. Use STATISTICS to measure severity; use the plan to understand root cause.
 
-**Q: `/sqlplan-review` found a Key Lookup. Should I also run `/sqlplan-index-advisor`?**
+**Q: `/sqlplan-review` found a Key Lookup. Should I also run `/sqlindex-advisor`?**
 
-Yes — `/sqlplan-index-advisor` is the natural next step after `/sqlplan-review` finds issues. It takes the same plan, extracts every index opportunity (not just Key Lookups), merges them with the optimizer's own suggestions, and produces ready-to-run DDL.
+Yes — `/sqlindex-advisor` is the natural next step after `/sqlplan-review` finds issues. It takes the same plan, extracts every index opportunity (not just Key Lookups), merges them with the optimizer's own suggestions, and produces ready-to-run DDL.
 
 **Q: When should I use `/sqlplan-batch` vs `/sqlplan-review`?**
 
@@ -937,11 +941,11 @@ Use `/sqlplan-batch` when you don't know which queries to focus on — it identi
 
 **Q: Can I run multiple skills in one conversation?**
 
-Yes. A typical session: paste a slow proc body → `/tsql-review` → paste STATISTICS output → `/sqlstats-review` → paste the `.sqlplan` → `/sqlplan-review` → `/sqlplan-index-advisor`. Each skill builds on what the previous one found.
+Yes. A typical session: paste a slow proc body → `/tsql-review` → paste STATISTICS output → `/sqlstats-review` → paste the `.sqlplan` → `/sqlplan-review` → `/sqlindex-advisor`. Each skill builds on what the previous one found.
 
 **Q: My query involves a deadlock AND it's slow. Where do I start?**
 
-Start with the deadlock: `/sqlplan-deadlock`. A missing index (P4, P5) is the most common deadlock cause and will also fix the performance problem. If adding the index doesn't eliminate the deadlock, investigate isolation level changes (P2, P6) with `/sqlplan-review` for the overall plan.
+Start with the deadlock: `/sqldeadlock-review`. A missing index (P4, P5) is the most common deadlock cause and will also fix the performance problem. If adding the index doesn't eliminate the deadlock, investigate isolation level changes (P2, P6) with `/sqlplan-review` for the overall plan.
 
 **Q: The execution plan is estimated (no actual rows). Does `/sqlplan-review` still work?**
 
@@ -958,9 +962,9 @@ cp -r skills/sqlstats-review       ~/.claude/skills/sqlstats-review
 cp -r skills/sqltrace-review       ~/.claude/skills/sqltrace-review
 cp -r skills/sqlwait-review        ~/.claude/skills/sqlwait-review
 cp -r skills/sqlplan-review        ~/.claude/skills/sqlplan-review
-cp -r skills/sqlplan-index-advisor ~/.claude/skills/sqlplan-index-advisor
+cp -r skills/sqlindex-advisor ~/.claude/skills/sqlindex-advisor
 cp -r skills/sqlplan-compare       ~/.claude/skills/sqlplan-compare
-cp -r skills/sqlplan-deadlock      ~/.claude/skills/sqlplan-deadlock
+cp -r skills/sqldeadlock-review      ~/.claude/skills/sqldeadlock-review
 cp -r skills/sqlplan-batch         ~/.claude/skills/sqlplan-batch
 
 # Or install all at once

@@ -19,8 +19,8 @@ The orchestrator will not contact your SQL Server. The captures below are read-o
 
 | Rank | Hypothesis | Initial confidence | Why ranked here | Probe sequence to confirm |
 |------|-----------|-------------------|----------------|---------------------------|
-| 1 | Runaway query (single workload consuming most CPU) | MEDIUM | "Suddenly slow without a deploy" usually means a specific query crossed a data-size threshold or got a bad plan. Most common cause of acute CPU spikes on an otherwise-healthy instance. | sqlwait-review (confirm CPU-bound profile) → procstats-review (find the offender) → sqlplan-review (drill on top consumer) |
-| 2 | Parameter sniffing on a hot procedure | MEDIUM | Plan-cache flush events (memory pressure, AG failover, agent recompile) often expose sniffing problems that lay dormant. | sqlwait-review → query-store-review (plan instability) → sqlplan-compare (before/after) |
+| 1 | Runaway query (single workload consuming most CPU) | MEDIUM | "Suddenly slow without a deploy" usually means a specific query crossed a data-size threshold or got a bad plan. Most common cause of acute CPU spikes on an otherwise-healthy instance. | sqlwait-review (confirm CPU-bound profile) → sqlprocstats-review (find the offender) → sqlplan-review (drill on top consumer) |
+| 2 | Parameter sniffing on a hot procedure | MEDIUM | Plan-cache flush events (memory pressure, AG failover, agent recompile) often expose sniffing problems that lay dormant. | sqlwait-review → sqlquerystore-review (plan instability) → sqlplan-compare (before/after) |
 | 3 | Compilation pressure / cache flush | LOW | If many distinct queries are recompiling, SIGNAL waits dominate and CPU is consumed by optimizer work. Less likely without a recent deploy, but possible after a memory event. | sqlwait-review (RESOURCE_SEMAPHORE_QUERY_COMPILE signal) → sqlplan-review (look for short total / high compile CPU) |
 
 ## Recommended Capture Sequence
@@ -42,7 +42,7 @@ This is a single SELECT against `sys.dm_os_wait_stats` with the benign-idle excl
 
 ### Step 2 — Top procedures by CPU (finds the offender)
 
-Script: `skills/procstats-review/scripts/collection/04_report_queries.sql` (Query 1 — Top CPU)
+Script: `skills/sqlprocstats-review/scripts/collection/04_report_queries.sql` (Query 1 — Top CPU)
 
 This identifies the procedure (or trigger, or function) consuming the most CPU in the current cache window. Returns about 20 rows.
 
@@ -61,7 +61,7 @@ The execution plan for the top CPU consumer. sqlplan-review will then identify w
 
 ### Optional Step 4 — Query Store plan history (if confirming hypothesis 2)
 
-Script: `skills/query-store-review/scripts/01_capture_queries.sql` — modify to filter to the `query_hash` of the top consumer.
+Script: `skills/sqlquerystore-review/scripts/01_capture_queries.sql` — modify to filter to the `query_hash` of the top consumer.
 
 **What this tells the orchestrator:**
 
@@ -78,7 +78,7 @@ Run:
 The orchestrator will:
 
 1. Classify the captured files
-2. Apply the relevant skills (sqlwait-review → procstats-review → sqlplan-review, plus query-store-review if Step 4 was run)
+2. Apply the relevant skills (sqlwait-review → sqlprocstats-review → sqlplan-review, plus sqlquerystore-review if Step 4 was run)
 3. Generate a full unified report with findings, fix priority, and verification checklist
 4. Run the adversarial pass to confirm the root cause is not actually one of the alternatives
 

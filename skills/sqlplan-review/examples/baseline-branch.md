@@ -72,7 +72,7 @@
 ### [W7 — N5] Key Lookup Explosion — 5,000,000 executions (NodeId=4)
 - **Observed:** NodeId=4 (Key Lookup), `ActualRows=5,000,000`, `ActualExecutions=5,000,000`
 - **Impact:** Each of the 5 million rows from the outer loop triggers a separate Key Lookup into the clustered index, producing 5 million random I/O operations. This is one of the most expensive patterns in the plan.
-- **Fix:** Add a covering index on `Orders` that includes all columns referenced by this query, eliminating the need to return to the clustered index. Use the `/sqlplan-index-advisor` skill to generate the `CREATE INDEX` DDL with correct INCLUDE columns.
+- **Fix:** Add a covering index on `Orders` that includes all columns referenced by this query, eliminating the need to return to the clustered index. Use the `/sqlindex-advisor` skill to generate the `CREATE INDEX` DDL with correct INCLUDE columns.
 
 ### [W8 — N6] Sort Spill Risk — actualRows 9,999,999 vs estimateRows 1
 - **Observed:** NodeId=5 (Sort), `ActualRows=9,999,999` vs `EstimatedRows=1` — ratio 9,999,999× exceeds 10× spill-risk threshold.

@@ -22,7 +22,7 @@ The orchestrator's writes are confined to `./captures/<run-id>/` (the bundle dir
 ├── README.md                       # Run order, paste-back instructions, security notes, time estimates
 ├── 01-wait-stats.sql               # Copy of skills/sqlwait-review/scripts/01_capture_wait_stats.sql
 ├── 02-plan-from-cache.sql          # Copy of skills/sqlplan-review/scripts/01_capture_from_cache.sql
-├── 03-query-store-instability.sql  # Copy of skills/query-store-review/scripts/01_capture_queries.sql
+├── 03-query-store-instability.sql  # Copy of skills/sqlquerystore-review/scripts/01_capture_queries.sql
 ├── PASTE-RESULTS-HERE.md           # Template with section per script
 └── manifest.json                   # Machine-readable bundle metadata
 ```
@@ -182,8 +182,8 @@ Sections that are not filled in will be skipped on `--resume`.
     },
     {
       "filename": "03-query-store-instability.sql",
-      "source": "skills/query-store-review/scripts/01_capture_queries.sql",
-      "target_skill": "query-store-review",
+      "source": "skills/sqlquerystore-review/scripts/01_capture_queries.sql",
+      "target_skill": "sqlquerystore-review",
       "paste_section": "03-query-store-instability",
       "estimated_run_time_sec": 2,
       "estimated_output_tokens": 2000,

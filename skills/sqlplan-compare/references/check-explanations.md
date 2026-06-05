@@ -190,7 +190,7 @@ WITH (ONLINE = ON)
 The optimizer generates missing index suggestions when it encounters an access pattern with no suitable index. Impact > 50 means the optimizer estimates this index would reduce the query's cost by more than 50%. A new suggestion that didn't exist in the baseline means either the query changed, the data distribution changed, or an index was dropped.
 
 **Fix**  
-Evaluate the suggestion (don't blindly create it — see the `sqlplan-index-advisor` skill for consolidation). Check if a similar index already exists that could be extended with INCLUDE columns before creating a new one.
+Evaluate the suggestion (don't blindly create it — see the `sqlindex-advisor` skill for consolidation). Check if a similar index already exists that could be extended with INCLUDE columns before creating a new one.
 
 ---
 
@@ -366,7 +366,7 @@ An Eager Index Spool materializes all input rows into a temporary index structur
 A permanent index that the baseline used was dropped. Alternatively, a new join or filter condition was added to the query that no existing index covers.
 
 **Fix**
-Identify the columns the spool is indexing (visible in the node's Properties tooltip). Create a permanent nonclustered index on those columns. Use `/sqlplan-index-advisor` to generate the DDL. Related: C7 (Key Lookup), C9 (Sort added).
+Identify the columns the spool is indexing (visible in the node's Properties tooltip). Create a permanent nonclustered index on those columns. Use `/sqlindex-advisor` to generate the DDL. Related: C7 (Key Lookup), C9 (Sort added).
 
 ---
 

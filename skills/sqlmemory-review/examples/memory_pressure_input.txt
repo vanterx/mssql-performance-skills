@@ -1,0 +1,50 @@
+-- sys.dm_os_performance_counters — PLE
+object_name                       counter_name              instance_name   cntr_value
+--------------------------------- ------------------------- --------------- ----------
+SQLServer:Buffer Manager          Page life expectancy                      47
+SQLServer:Buffer Node             Page life expectancy      000             47
+SQLServer:SQL Statistics          SQL Compilations/sec                      1248
+SQLServer:SQL Statistics          SQL Re-Compilations/sec                   312
+
+-- sys.dm_os_memory_clerks — top 10 by pages_kb
+type                              name                      pages_kb
+--------------------------------- ------------------------- ----------
+MEMORYCLERK_SQLBUFFERPOOL         Default                   62,914,560
+COLUMNSTORE_OBJECT_POOL           Default                   25,165,824
+LOCK                              Default                   437,248
+CACHESTORE_SQLCP                  SQL Plans                 3,276,800
+MEMORYCLERK_XTP                   Default                   8,388,608
+MEMORYCLERK_SOSNODE               Default                   1,048,576
+MEMORYCLERK_SQLLOGPOOL            Default                   524,288
+MEMORYCLERK_SQLCLR                Default                   131,072
+OBJECTSTORE_LOCK_MANAGER          Default                   131,072
+MEMORYCLERK_SQLTRACE              Default                   65,536
+
+-- committed_target_kb (from sys.dm_os_sys_info)
+committed_kb        committed_target_kb
+------------------  -------------------
+86,394,880          107,374,182
+
+-- sys.configurations — max server memory
+name                        value_in_use
+--------------------------- ---------------
+max server memory (MB)      2147483647
+
+-- Plan cache single-use analysis
+single_use_mb   total_plan_cache_mb   single_use_plans   total_plans
+-----------     -------------------   ----------------   -----------
+2,184           2,540                 48,312             51,204
+
+-- sys.dm_exec_query_memory_grants — active
+session_id   grant_time               granted_memory_kb   used_memory_kb   wait_order
+----------   ----------------------   -----------------   --------------   ----------
+82           2024-06-05 09:12:44      4,194,304           318,720          NULL
+91           NULL                     NULL                NULL             1
+105          NULL                     NULL                NULL             2
+117          NULL                     NULL                NULL             3
+122          NULL                     NULL                NULL             4
+
+-- sys.dm_os_sys_memory
+total_physical_memory_kb   available_physical_memory_kb   system_memory_state_desc
+------------------------   ---------------------------    -------------------------
+134,217,728                2,621,440                      Available physical memory is low

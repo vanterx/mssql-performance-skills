@@ -32,8 +32,8 @@
     },
     {
       "filename": "03-query-store-instability.sql",
-      "source": "skills/query-store-review/scripts/01_capture_queries.sql",
-      "target_skill": "query-store-review",
+      "source": "skills/sqlquerystore-review/scripts/01_capture_queries.sql",
+      "target_skill": "sqlquerystore-review",
       "paste_section": "03-query-store-instability",
       "estimated_run_time_sec": 2,
       "estimated_output_tokens": 2000,

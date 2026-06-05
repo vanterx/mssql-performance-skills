@@ -5,17 +5,17 @@ import { buildAnalysisPrompt } from "./prompt-builder.js";
 
 const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   tsql:        ["tsql-review"],
-  sqlplan:     ["sqlplan-review", "sqlplan-index-advisor"],
-  deadlock:    ["sqlplan-deadlock"],
+  sqlplan:     ["sqlplan-review", "sqlindex-advisor"],
+  deadlock:    ["sqldeadlock-review"],
   waits:       ["sqlwait-review"],
   trace:       ["sqltrace-review"],
   stats:       ["sqlstats-review"],
-  querystore:  ["query-store-review"],
-  procstats:   ["procstats-review"],
-  hadr:        ["hadr-health-review"],
-  clusterlog:  ["clusterlog-review"],
-  errorlog:    ["errorlog-review"],
-  spn:         ["spn-review"],
+  querystore:  ["sqlquerystore-review"],
+  procstats:   ["sqlprocstats-review"],
+  hadr:        ["sqlhadr-review"],
+  clusterlog:  ["sqlclusterlog-review"],
+  errorlog:    ["sqlerrorlog-review"],
+  spn:         ["sqlspn-review"],
   mixed:       ["mssql-performance-review"],
 };
 

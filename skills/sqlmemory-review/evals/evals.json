@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlmemory-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "PLE is 87 seconds and falling. Memory clerks show LOCK at 420 MB and COLUMNSTORE_OBJECT_POOL at 38% of committed memory. Max Server Memory is not set. What is happening and how do I fix it?",
+      "expected_output": "O1 Critical (PLE 87 s), O9 Warning (LOCK clerk 420 MB), O16 Critical (ColumnStore 38%), O20 Critical (Max Server Memory default). Root cause hypothesis: unbounded Max Server Memory allowing ColumnStore and lock clerk to starve the buffer pool. Fix priority: O20 first (set Max Server Memory), O16 second (review ColumnStore index usage), O9 third (investigate long-running transactions).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "sys.dm_exec_query_memory_grants shows 8 sessions with grant_time IS NULL. One session has granted_memory_kb = 4,194,304 but max_used_memory_kb = 312,000.",
+      "expected_output": "O11 Critical (8 sessions queuing for grants), O13 Warning (one session used only 7.4% of its 4 GB grant). Root cause: oversized grant request from cardinality misestimate starving 8 other sessions. Recommend O12 check for timeout risk, run /sqlplan-review on the large-grant query for N21, update statistics on the join tables.",
+      "files": []
+    }
+  ]
+}

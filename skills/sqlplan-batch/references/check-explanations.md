@@ -26,7 +26,7 @@ A plain-English guide to when batch analysis is the right tool, what each sectio
 - You need to prioritise: "which 3 plans should I fix first?"
 - You want a consolidated missing index script for the whole workload, not individual suggestions per query
 
-Think of batch as **triage**: it tells you where to look, then you use `/sqlplan-review` to look deeply at the specific plans it surfaces, and `/sqlplan-index-advisor` to act on the index recommendations it aggregates.
+Think of batch as **triage**: it tells you where to look, then you use `/sqlplan-review` to look deeply at the specific plans it surfaces, and `/sqlindex-advisor` to act on the index recommendations it aggregates.
 
 ---
 
@@ -157,7 +157,7 @@ For each plan in this list, run `/sqlplan-review` on it specifically and look fo
 
 ### Consolidated Missing Index Script
 
-The batch skill applies the same merge rules as `/sqlplan-index-advisor` across all plans simultaneously. This is more powerful than per-plan suggestions because:
+The batch skill applies the same merge rules as `/sqlindex-advisor` across all plans simultaneously. This is more powerful than per-plan suggestions because:
 
 - A suggestion that appears in 12 different plans ranks much higher than one appearing in 1 plan (the `MergedQueryCount` in the ranking formula)
 - Overlapping suggestions across many plans are merged into one index
@@ -207,7 +207,7 @@ The batch report is designed to feed directly into the other skills:
 
 **Want a deployment-ready index script from the consolidated suggestions?**
 ```
-/sqlplan-index-advisor plans/
+/sqlindex-advisor plans/
 ```
 This re-runs the index advisor specifically on all plans in the folder, applying the full merge and ranking logic with more detail than the batch summary.
 
@@ -218,6 +218,6 @@ This re-runs the index advisor specifically on all plans in the folder, applying
 
 **Seeing deadlock errors alongside the slow queries?**
 ```
-/sqlplan-deadlock deadlock.xdl
+/sqldeadlock-review deadlock.xdl
 ```
 Deadlocks and slow queries often share a root cause — missing indexes cause both page-level lock contention (deadlocks) and expensive scans (slow queries).

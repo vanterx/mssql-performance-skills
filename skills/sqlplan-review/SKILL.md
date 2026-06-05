@@ -195,7 +195,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 ### S27 — Excessive Missing Index Suggestions
 - **Trigger:** `<MissingIndexes>` element contains > 5 `<MissingIndexGroup>` children
 - **Severity:** Warning
-- **Fix:** More than 5 distinct missing index suggestions indicate the query touches many under-indexed tables. Prioritize by the `Impact` attribute descending (not document order). Use the `sqlplan-index-advisor` skill to consolidate and de-duplicate suggestions before creating indexes.
+- **Fix:** More than 5 distinct missing index suggestions indicate the query touches many under-indexed tables. Prioritize by the `Impact` attribute descending (not document order). Use the `sqlindex-advisor` skill to consolidate and de-duplicate suggestions before creating indexes.
 ### S28 — Large Cached Plan (Plan Cache Bloat)
 - **Trigger:** `CachedPlanSize` attribute on `<QueryPlan>` ≥ 1,024 KB
 - **Severity:** Info if < 5,120 KB; Warning if ≥ 5,120 KB
@@ -227,11 +227,11 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 ### S35 — ADR Long-Transaction Version Store Accumulation
 - **Trigger:** Accelerated Database Recovery (ADR) is active on the database (inferred from plan XML DB context or user description) AND `logused` or transaction duration signals a long-running transaction — SQL 2019+ only
 - **Severity:** Warning
-- **Fix:** ADR moves the persistent version store (PVS) to TempDB. Long-running transactions under ADR cause PVS to grow continuously until the transaction commits or rolls back. Keep transactions short and monitor PVS size with `sys.dm_tran_persistent_version_store_stats`. Cross-reference E29 in errorlog-review.
+- **Fix:** ADR moves the persistent version store (PVS) to TempDB. Long-running transactions under ADR cause PVS to grow continuously until the transaction commits or rolls back. Keep transactions short and monitor PVS size with `sys.dm_tran_persistent_version_store_stats`. Cross-reference E29 in sqlerrorlog-review.
 ### S36 — Cardinality Estimation Feedback Applied
 - **Trigger:** `ContainsCEFeedback="true"` attribute on `StmtSimple` — SQL 2022+ only
 - **Severity:** Info
-- **Fix:** The CE model was automatically adjusted by feedback across prior executions. This is generally beneficial but means the plan's cardinality estimates no longer reflect the base CE model. Monitor stability: if query performance fluctuates across executions after CE feedback applies, the feedback model may be oscillating. Use Query Store to track plan history. Related: Q27 in query-store-review.
+- **Fix:** The CE model was automatically adjusted by feedback across prior executions. This is generally beneficial but means the plan's cardinality estimates no longer reflect the base CE model. Monitor stability: if query performance fluctuates across executions after CE feedback applies, the feedback model may be oscillating. Use Query Store to track plan history. Related: Q27 in sqlquerystore-review.
 
 ---
 
@@ -744,10 +744,10 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - **tsql-review** — Analyze the T-SQL source code of this query before capturing a plan. Catches static anti-patterns (SQL injection, non-sargable predicates, cursor usage, deprecated syntax) that are detectable without execution.
 - **sqlstats-review** — Parse and analyze `SET STATISTICS IO, TIME ON` output for the same query. Provides per-table IO counts and timing that cross-reference operator behavior visible in this plan.
 - **sqlplan-compare** — Diff two execution plans (baseline vs regression) to identify what changed in join strategies, memory grants, and operator topology.
-- **sqlplan-index-advisor** — Consolidate and de-duplicate missing index recommendations from one or more plans into a ranked, ready-to-run `CREATE INDEX` script.
-- **sqlplan-deadlock** — Analyze SQL Server deadlock XML to identify root cause (lock order, missing index, isolation level) and produce a remediation plan.
+- **sqlindex-advisor** — Consolidate and de-duplicate missing index recommendations from one or more plans into a ranked, ready-to-run `CREATE INDEX` script.
+- **sqldeadlock-review** — Analyze SQL Server deadlock XML to identify root cause (lock order, missing index, isolation level) and produce a remediation plan.
 - **sqlplan-batch** — Batch-analyze a folder of `.sqlplan` files and produce a summary dashboard of top issues, most common violations, and deduplicated missing indexes across all plans.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.
 

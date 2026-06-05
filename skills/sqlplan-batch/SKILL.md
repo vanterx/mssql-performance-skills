@@ -25,7 +25,7 @@ Accept any of:
 1. Enumerate all `.sqlplan` files in the input
 2. Apply the full check ruleset to each plan (same logic as `sqlplan-review`)
 3. Aggregate findings into the summary structures below
-4. Generate a consolidated missing index script via the same merge rules as `sqlplan-index-advisor`
+4. Generate a consolidated missing index script via the same merge rules as `sqlindex-advisor`
 5. Write output to `batch-analysis.md` in the same directory
 
 ---
@@ -94,7 +94,7 @@ List all plans with confirmed spills:
 
 ### 6. Consolidated Missing Index Report
 
-Apply the same merge rules as `sqlplan-index-advisor`:
+Apply the same merge rules as `sqlindex-advisor`:
 - Group by table
 - Merge overlapping suggestions
 - Rank by Impact × occurrence count
@@ -232,7 +232,7 @@ NodeId column: populate for operator-level findings (N-prefix check IDs) using t
 - If a plan file is malformed or cannot be parsed, log it in a "Skipped Plans" section and continue.
 - For very large directories (> 100 plans), report only the top findings to keep the output actionable. Note the total plan count and that full per-plan data is in the Per-Plan Summary table.
 - The `batch-analysis.md` output file should be placed in the same directory as the input plans (or a specified output path) so it stays with the workload capture.
-- After generating the batch report, offer to run `/sqlplan-index-advisor` on the consolidated missing indexes for a deployment-ready script, or `/sqlplan-review` on any specific high-cost plan for detailed analysis.
+- After generating the batch report, offer to run `/sqlindex-advisor` on the consolidated missing indexes for a deployment-ready script, or `/sqlplan-review` on any specific high-cost plan for detailed analysis.
 
 ---
 
@@ -287,10 +287,10 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 ## Companion Skills
 
 - **sqlplan-review** — Deep-dive analysis on any individual plan from the batch. Apply the full 99-check ruleset to the highest-cost or most-critical plan.
-- **sqlplan-index-advisor** — Generate a deployment-ready `CREATE INDEX` script from the consolidated missing index recommendations in the batch report.
+- **sqlindex-advisor** — Generate a deployment-ready `CREATE INDEX` script from the consolidated missing index recommendations in the batch report.
 - **sqlplan-compare** — Diff the worst-performing plan against a known-good baseline to explain why a specific query regressed.
-- **sqlplan-deadlock** — If deadlock graphs were captured alongside the `.sqlplan` files, analyze them with this companion skill.
+- **sqldeadlock-review** — If deadlock graphs were captured alongside the `.sqlplan` files, analyze them with this companion skill.
 - **sqltrace-review** — If a Profiler or Extended Events trace was captured from the same workload, cross-reference trace findings with batch plan findings.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

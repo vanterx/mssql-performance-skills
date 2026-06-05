@@ -49,7 +49,7 @@
 **[C1] Long-Duration Query — GetMonthlyReport** (X1)
 - Observed: `EXEC dbo.GetMonthlyReport @month = '2025-04'` — **284,906 ms (4m 44s)** elapsed, CPU 84,200 ms, Reads ~2,568,900, Writes 45,280
 - Impact: Single query consumed 4m 44s and 2.5M reads. Writes = 45,280 on a SELECT confirms a Sort or Hash spill to tempdb (corroborated by X9 finding). Every session blocked on `Orders` or `OrderLines` during this execution cannot proceed.
-- Fix: Capture execution plan with `/sqlplan-review`. The 45K writes signal a memory grant spill — update statistics to fix row estimates, add covering index on the highest-read table. Run `/sqlplan-index-advisor` for DDL.
+- Fix: Capture execution plan with `/sqlplan-review`. The 45K writes signal a memory grant spill — update statistics to fix row estimates, add covering index on the highest-read table. Run `/sqlindex-advisor` for DDL.
 
 **[C2] Long-Duration Query — Orders by CustomerId** (X1)
 - Observed: `SELECT … FROM dbo.Orders WHERE CustomerId = ?` — avg **141,614 ms** across 7 executions, avg **48,270 reads** per call. Duration range: 136,200–144,100 ms (tight — not sniffing, just slow).

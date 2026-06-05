@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlclusterlog-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We had an unplanned AG failover at 03:42 last night. I generated CLUSTER.LOG covering 03:30-04:00 using Get-ClusterLog. Why did it fail over?",
+      "expected_output": "Timeline reconstruction with lease timeout (L1) or health check failure (L2) detection. Root cause analysis (L3-L8 RHS crashes, L9-L12 network partition). References /sqlerrorlog-review and /sqlhadr-review as companions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Cluster log shows quorum loss messages. Did we actually lose quorum?",
+      "expected_output": "L6 Quorum Loss confirmation with timeline, vote count, witness state. Cross-references node state changes leading up to quorum loss. Recommendations for quorum config review.",
+      "files": []
+    }
+  ]
+}

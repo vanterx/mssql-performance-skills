@@ -41,7 +41,7 @@ Every consolidated finding in the orchestrator's report is backed by a structure
       "threshold_severity": "Warning"
     },
     {
-      "skill": "query-store-review",
+      "skill": "sqlquerystore-review",
       "check_id": "Q7",
       "source_artifact": "query-store-output.txt",
       "source_location": "query_hash 0xA1B2C3D4",
@@ -101,7 +101,7 @@ The same record renders in the report as:
     - Source: stats-iotime.txt (Statement 1, Table 'Orders')
     - Observed: 1,842,734 logical reads
     - Threshold: > 1,000,000 = Warning
-  - query-store-review Q7 corroborates
+  - sqlquerystore-review Q7 corroborates
     - Source: query-store-output.txt (query_hash 0xA1B2C3D4)
     - Observed: 3 plans in 24h window
     - Threshold: >= 2 plans = plan instability

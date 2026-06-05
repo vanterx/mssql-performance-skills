@@ -11,7 +11,7 @@ This example shows the orchestrator's output when the user returns 24 hours afte
 ## Summary
 
 - Files analyzed: 4 (`slow-proc.sql`, `slow-proc.sqlplan`, `stats-iotime.txt`, `wait-stats.txt`)
-- Skills applied: 5 (tsql-review, sqlstats-review, sqlwait-review, sqlplan-review, sqlplan-index-advisor)
+- Skills applied: 5 (tsql-review, sqlstats-review, sqlwait-review, sqlplan-review, sqlindex-advisor)
 - Baseline recommendations evaluated: 4
 - Verification metric: **3 verified-effective / 1 partial / 0 no-change / 0 regressed-elsewhere / 0 cannot-evaluate**
 - New findings: 1 Info (one new minor finding emerged after the fix)
@@ -128,16 +128,16 @@ None detected.
 | Skill | Reason |
 |-------|--------|
 | sqlplan-compare | Compared the baseline plan to current implicitly via baseline-diff |
-| sqlplan-deadlock | No deadlock XML |
+| sqldeadlock-review | No deadlock XML |
 | sqlplan-batch | Single-plan input |
-| query-store-review | Not in this run's input (would strengthen the partial tag on Rec 2 — recommend adding Query Store output next time) |
-| procstats-review | Not in this run's input |
+| sqlquerystore-review | Not in this run's input (would strengthen the partial tag on Rec 2 — recommend adding Query Store output next time) |
+| sqlprocstats-review | Not in this run's input |
 | sqltrace-review | Not in this run's input |
-| hadr-health-review, clusterlog-review, errorlog-review, spn-review | No AG/cluster/auth signals in input |
+| sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review | No AG/cluster/auth signals in input |
 
 ## Missing Artifacts
 
-- [ ] Query Store output for query_hash 0xA1B2C3D4 — would strengthen the Rec 2 partial tag with cross-period stability data (capture: `skills/query-store-review/scripts/01_capture_queries.sql`).
+- [ ] Query Store output for query_hash 0xA1B2C3D4 — would strengthen the Rec 2 partial tag with cross-period stability data (capture: `skills/sqlquerystore-review/scripts/01_capture_queries.sql`).
 
 ## Passed Checks
 

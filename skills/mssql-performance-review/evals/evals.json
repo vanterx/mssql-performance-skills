@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "Symptom-only: CPU is pegged at 95% on PROD-SQL01 since 09:00, no recent deploy, users complaining about slowness. I have no artifacts captured yet. What should I capture and in what order, and what hypotheses are you considering?",
-      "expected_output": "Symptom-driven response listing 2 or 3 ranked hypotheses (likely: server-wide CPU bottleneck driven by parameter sniffing or a runaway query); a capture order matching the symptom-to-probe-sequence map (sqlwait-review first, then procstats-review, then sqlplan-review on top consumer); explicit note that the orchestrator will not contact the SQL Server and the user must run the captures themselves.",
+      "expected_output": "Symptom-driven response listing 2 or 3 ranked hypotheses (likely: server-wide CPU bottleneck driven by parameter sniffing or a runaway query); a capture order matching the symptom-to-probe-sequence map (sqlwait-review first, then sqlprocstats-review, then sqlplan-review on top consumer); explicit note that the orchestrator will not contact the SQL Server and the user must run the captures themselves.",
       "files": []
     },
     {

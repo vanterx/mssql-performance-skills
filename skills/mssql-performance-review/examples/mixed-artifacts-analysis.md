@@ -3,7 +3,7 @@
 ## Summary
 
 - Files analyzed: 4 (`slow-proc.sql`, `slow-proc.sqlplan`, `stats-iotime.txt`, `wait-stats.txt`)
-- Skills applied: 5 (tsql-review, sqlstats-review, sqlwait-review, sqlplan-review, sqlplan-index-advisor)
+- Skills applied: 5 (tsql-review, sqlstats-review, sqlwait-review, sqlplan-review, sqlindex-advisor)
 - Hypotheses considered: 2 (primary + 1 adversarial alternative)
 - Findings: 2 Critical, 3 Warning, 2 Info
 - Primary bottleneck: Parameter sniffing on `dbo.usp_GetOrdersByCustomer` — single cached plan scans 1.84M rows regardless of parameter cardinality
@@ -46,13 +46,13 @@
 - Impact: Low-cardinality calls (single-row lookup by CustomerId) execute in 7.1s instead of < 100ms because they re-use a plan optimised for high-cardinality. Affects p99 latency on the orders API; users report timeouts during peak.
 
 [C2] Missing covering index on `Orders(CustomerId, OrderDate) INCLUDE (Status, TotalAmount)`
-- Confidence: HIGH (primary skill: sqlplan-index-advisor)
+- Confidence: HIGH (primary skill: sqlindex-advisor)
 - Evidence:
   - sqlplan-review N5 fired
     - Source: `slow-proc.sqlplan` (Stmt 1, NodeId 1)
     - Observed: Clustered Index Scan on PK_Orders reading 1.84M rows; no useful seekable index for the `CustomerId = ? AND OrderDate >= ?` predicate
     - Threshold: predicate selectivity < 5% with no supporting index = Critical scan
-  - sqlplan-index-advisor (optimizer suggestion) corroborates
+  - sqlindex-advisor (optimizer suggestion) corroborates
     - Source: `slow-proc.sqlplan` (MissingIndexGroup)
     - Observed: optimizer Impact 93.2 on EQUALITY(CustomerId), INEQUALITY(OrderDate), INCLUDE(Status, TotalAmount)
     - Threshold: Impact >= 75 = Warning; Impact >= 90 = Critical
@@ -138,7 +138,7 @@
   - S1 Passed — plan is parallel
   - N4 Passed — Clustered Index Scan is on the access path, just over-broad
 
-### sqlplan-index-advisor
+### sqlindex-advisor
 - Recommendation: `CREATE NONCLUSTERED INDEX IX_Orders_CustomerId_OrderDate ON [OrdersDB].[dbo].[Orders] ([CustomerId], [OrderDate]) INCLUDE ([Status], [TotalAmount]) WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);`
 - Source: optimizer suggestion (Impact 93.2) + operator-derived (N5 elimination)
 
@@ -146,7 +146,7 @@
 
 | Finding | Source skills | Evidence link | Impact |
 |---------|---------------|---------------|--------|
-| Parameter sniffing + missing index together | sqlplan-review + sqlstats-review + sqlwait-review + sqlplan-index-advisor | C1, C2 | The index fix [C2] structurally reduces the damage from sniffing [C1] — even with the wrong plan, the operator becomes a Seek not a Scan |
+| Parameter sniffing + missing index together | sqlplan-review + sqlstats-review + sqlwait-review + sqlindex-advisor | C1, C2 | The index fix [C2] structurally reduces the damage from sniffing [C1] — even with the wrong plan, the operator becomes a Seek not a Scan |
 | CXPACKET share will drop after index | sqlwait-review + sqlplan-review | W2, C2 | The 1.84M-row scan currently goes parallel; the seek-based plan after [C2] will be serial, removing CXPACKET coordination overhead |
 
 ## Recommendation Conflicts
@@ -164,8 +164,8 @@ None detected.
 
 ## Missing Artifacts
 
-- [ ] Query Store output for `query_hash` of `usp_GetOrdersByCustomer` — would confirm plan instability over time and back the sniffing diagnosis with cross-period evidence (capture: `skills/query-store-review/scripts/01_capture_queries.sql`)
-- [ ] Procstats snapshot showing usp_GetOrdersByCustomer execution counts and CPU share — would confirm the procedure is in the top consumers (capture: `skills/procstats-review/scripts/collection/04_report_queries.sql`)
+- [ ] Query Store output for `query_hash` of `usp_GetOrdersByCustomer` — would confirm plan instability over time and back the sniffing diagnosis with cross-period evidence (capture: `skills/sqlquerystore-review/scripts/01_capture_queries.sql`)
+- [ ] Procstats snapshot showing usp_GetOrdersByCustomer execution counts and CPU share — would confirm the procedure is in the top consumers (capture: `skills/sqlprocstats-review/scripts/collection/04_report_queries.sql`)
 - [ ] Trace excerpt covering the slow window — would catch any other procedure on the same hot path (capture: `skills/sqltrace-review/scripts/01_create_xe_session.sql`)
 
 ## Passed Checks
@@ -187,7 +187,7 @@ None detected.
 - V13 Poison waits PASS (no THREADPOOL/RESOURCE_SEMAPHORE_QUERY_COMPILE pressure)
 - ... (full list elided)
 
-### sqlplan-index-advisor
+### sqlindex-advisor
 - D1 PASS, D6 PASS, D8 PASS (consolidation rules applied without conflict)
 
 ## Skills Skipped
@@ -195,15 +195,15 @@ None detected.
 | Skill | Reason |
 |-------|--------|
 | sqlplan-compare | Only one plan provided (no regression pair) |
-| sqlplan-deadlock | No deadlock XML in input |
+| sqldeadlock-review | No deadlock XML in input |
 | sqlplan-batch | Only one plan provided (use sqlplan-review directly) |
-| query-store-review | No Query Store DMV output in input (listed in Missing Artifacts) |
-| procstats-review | No `sys.dm_exec_procedure_stats` output in input (listed in Missing Artifacts) |
+| sqlquerystore-review | No Query Store DMV output in input (listed in Missing Artifacts) |
+| sqlprocstats-review | No `sys.dm_exec_procedure_stats` output in input (listed in Missing Artifacts) |
 | sqltrace-review | No trace data in input (listed in Missing Artifacts) |
-| hadr-health-review | No AG DMV output in input; no AG context in the symptom |
-| clusterlog-review | No CLUSTER.LOG in input |
-| errorlog-review | No ERRORLOG excerpt in input |
-| spn-review | No Kerberos / login signals in any artifact |
+| sqlhadr-review | No AG DMV output in input; no AG context in the symptom |
+| sqlclusterlog-review | No CLUSTER.LOG in input |
+| sqlerrorlog-review | No ERRORLOG excerpt in input |
+| sqlspn-review | No Kerberos / login signals in any artifact |
 
 ---
 *Analyzed by: Claude Sonnet 4.6 · 2026-05-17 09:42 NZST*

@@ -60,7 +60,7 @@ The adversarial pass is mandatory for every Critical finding and every HIGH-conf
    - Refuting: an existing index has the same leading column but is unused — investigate why before recommending a new one (statistics? predicate type mismatch? trace flag?).
 
 3. Check whether the parent query is the actual hot path.
-   - Expected if missing index: procstats-review or sqltrace-review confirms the calling procedure is in the top consumers.
+   - Expected if missing index: sqlprocstats-review or sqltrace-review confirms the calling procedure is in the top consumers.
    - Refuting: the query is rarely called; the slow path is elsewhere — the new index has carrying cost but no benefit.
 
 **Refutation strength.**

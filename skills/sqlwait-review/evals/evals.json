@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Server feels slow but CPU is only 30%. Here is a sys.dm_os_wait_stats snapshot over the last 15 minutes. Where is the bottleneck?\n\nwait_type, waiting_tasks_count, wait_time_ms, signal_wait_time_ms\nPAGEIOLATCH_SH, 18432, 6234521, 142331\nLCK_M_S, 2841, 823442, 18221\nWRITELOG, 9281, 342118, 12442\nCXPACKET, 481, 82221, 3221",
-      "expected_output": "Primary bottleneck PAGEIOLATCH_SH (V1) disk read latency. Secondary LCK_M_S (V2) blocking. Signal wait ratio low. Recommend /sqlplan-review and /sqlplan-index-advisor for the worst readers.",
+      "expected_output": "Primary bottleneck PAGEIOLATCH_SH (V1) disk read latency. Secondary LCK_M_S (V2) blocking. Signal wait ratio low. Recommend /sqlplan-review and /sqlindex-advisor for the worst readers.",
       "files": []
     },
     {

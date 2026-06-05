@@ -532,10 +532,10 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 ## Companion Skills
 
 - **sqlplan-review** — Analyze the execution plan of this same query at runtime to catch what only surfaces when SQL Server compiles and executes it (memory grants, spills, bad row estimates, join choices).
-- **sqlplan-index-advisor** — Derive CREATE INDEX recommendations from the execution plan once `sqlplan-review` has identified scan or lookup patterns.
+- **sqlindex-advisor** — Derive CREATE INDEX recommendations from the execution plan once `sqlplan-review` has identified scan or lookup patterns.
 - **sqlplan-compare** — Diff two execution plans (baseline vs regression) if a query that passed `tsql-review` is still slow in production.
-- **sqlplan-deadlock** — Analyze deadlock XML if the query participates in a locking conflict at runtime.
+- **sqldeadlock-review** — Analyze deadlock XML if the query participates in a locking conflict at runtime.
 - **sqlplan-batch** — Batch-analyze a folder of `.sqlplan` files produced from queries that were first reviewed with `tsql-review`.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.
