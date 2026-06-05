@@ -59,7 +59,7 @@ I/O pressure is the dominant and worsening bottleneck — PAGEIOLATCH_SH has gro
 - Observed: `PAGEIOLATCH_SH` 81.5%, 284,800 tasks, 9,420,800 ms delta wait. Up from 48.8% in the first period — see Trend Analysis for full progression.
 - **User impact:** 4 out of 5 seconds of query latency was disk wait in the final period. Queries that should take 100 ms were taking 500 ms or more because pages were not in memory.
 - Impact: The working set is growing beyond buffer pool capacity, or a query generating increasing read volume is being executed repeatedly. This is the primary bottleneck and the root cause for several secondary findings.
-- Fix: Run `/sqlstats-review` on `SET STATISTICS IO, TIME ON` output for the heaviest concurrent queries. Run `/sqlplan-index-advisor` to generate covering indexes. Priority: do this before any other tuning.
+- Fix: Run `/sqlstats-review` on `SET STATISTICS IO, TIME ON` output for the heaviest concurrent queries. Run `/sqlindex-advisor` to generate covering indexes. Priority: do this before any other tuning.
 
 **[C2] Log Space Exhaustion — LOGMGR_RESERVE_APPEND Appeared in Final Period** (V16 — Critical)
 - Observed: `LOGMGR_RESERVE_APPEND` — 84 waiting tasks, 18,420 ms in the 10:45–11:00 window. Absent in all prior periods (see V23 — Emerging Wait Type).
@@ -131,7 +131,7 @@ The server shows a **consistently degrading I/O pattern** — PAGEIOLATCH_SH has
 - Observed: PAGEIOLATCH_SH grew every period: 48.8% → 53.7% → 59.7% → 81.5%. The final period jump (+36.9 percentage points) is 2.5× the average per-period change — an acceleration, not just a linear trend.
 - **User impact:** What started as 2–4 second query delays in the first period became 5–8 second delays by the final period. If uncorrected, the server will likely see PAGEIOLATCH exceeding 90% within the next 30 minutes.
 - Timing: Consistent across all 4 periods; accelerating in period 4 (10:45–11:00).
-- Fix: This is the primary root cause of the entire session. Run `/sqlstats-review` on concurrent queries to identify the highest-read tables, then `/sqlplan-index-advisor` for covering indexes. The acceleration in the final period suggests a growing batch or accumulating scan volume — investigate whether a scheduled job started at ~10:45.
+- Fix: This is the primary root cause of the entire session. Run `/sqlstats-review` on concurrent queries to identify the highest-read tables, then `/sqlindex-advisor` for covering indexes. The acceleration in the final period suggests a growing batch or accumulating scan volume — investigate whether a scheduled job started at ~10:45.
 
 **[T2] IO_RETRY — Transient Spike at 10:15–10:30, Resolved** (V20 + V25)
 - Observed: `IO_RETRY` appeared in the 10:15–10:30 period only (28,420 ms, 420 tasks), then returned to zero.
@@ -199,7 +199,7 @@ However, the PAGEIOLATCH acceleration and LOGMGR_RESERVE_APPEND emergence in the
 | 3 — Today | Enable RCSI: `ALTER DATABASE ProdDB SET READ_COMMITTED_SNAPSHOT ON` | C4, T4 | 5 min |
 | 4 — Today | Add TempDB data files (2→8) and raise CTPfP to 50 | W1, PAGELATCH | 20 min |
 | 5 — Today | Investigate what started or escalated around 10:45 (job, batch, new connections) | T1 (acceleration) | 30 min |
-| 6 — This sprint | Add covering indexes on highest-read tables (`/sqlstats-review` + `/sqlplan-index-advisor`) | C1, T1, W1, W2 | Days |
+| 6 — This sprint | Add covering indexes on highest-read tables (`/sqlstats-review` + `/sqlindex-advisor`) | C1, T1, W1, W2 | Days |
 | 7 — This sprint | Update statistics with FULLSCAN on heavy tables | C3 | Hours |
 
 **Trend summary:** The single root cause behind the worsening trend is missing indexes — they force full scans that generate the PAGEIOLATCH reads, the parallel scan CXPACKET overhead, the large memory grants driving RESOURCE_SEMAPHORE, and — in the final period — the DML volume that exhausted log space. The IO_RETRY transient event was unrelated (storage glitch) and resolved. Fixing the indexes addresses 5 of the 7 action items as side effects.

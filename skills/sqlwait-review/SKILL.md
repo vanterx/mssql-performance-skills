@@ -805,13 +805,13 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 ## Companion Skills
 
 - **sqlblock-review** — If `LCK_M_*` waits are dominant (V2), use this skill on `sys.dm_exec_requests` output to identify the head blocker and the full blocking chain.
-- **sqlplan-deadlock** — If `LCK_M_*` includes deadlock-related locks, use this skill to analyze the deadlock XML graph.
+- **sqldeadlock-review** — If `LCK_M_*` includes deadlock-related locks, use this skill to analyze the deadlock XML graph.
 - **sqlplan-review** — If `RESOURCE_SEMAPHORE` waits are dominant (V4), capture the execution plans of the memory-intensive queries and use this skill to find oversized memory grants (S2, S3, S4).
 - **sqlstats-review** — If `PAGEIOLATCH_*` is dominant (V1), run `SET STATISTICS IO, TIME ON` on the heaviest queries to identify which tables drive the most physical reads.
 - **sqltrace-review** — If `ASYNC_NETWORK_IO` (V6) or `OLEDB` (V11) is high, use a Profiler/XE trace to identify which specific queries generate the most of these waits.
 - **sqlconfig-review** — If `CXPACKET` (V3) is dominant and MAXDOP or Cost Threshold for Parallelism is misconfigured, use this skill to audit and correct the server-level settings.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
-- **clusterlog-review** — If HADR_WORK_QUEUE or HADR_SYNC_COMMIT waits are dominant (V3X range), correlate with WSFC CLUSTER.LOG to identify the cluster-level root cause (lease timeout, node eviction, network partition).
-- **hadr-health-review** — If AG-related waits appear, cross-reference with `sys.dm_hadr_*` DMV output to confirm replica sync state, redo queue depth, and secondary lag.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlclusterlog-review** — If HADR_WORK_QUEUE or HADR_SYNC_COMMIT waits are dominant (V3X range), correlate with WSFC CLUSTER.LOG to identify the cluster-level root cause (lease timeout, node eviction, network partition).
+- **sqlhadr-review** — If AG-related waits appear, cross-reference with `sys.dm_hadr_*` DMV output to confirm replica sync state, redo queue depth, and secondary lag.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

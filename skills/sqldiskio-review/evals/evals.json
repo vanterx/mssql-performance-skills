@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqldiskio-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "sys.dm_io_virtual_file_stats shows: Orders.mdf avg_read_ms=47, Orders_log.ldf avg_write_ms=31. sys.master_files shows Orders.mdf and Orders_log.ldf both on D:\\Data\\. Three auto-growth events on Orders_log.ldf in the last 24 hours, each 64 MB.",
+      "expected_output": "Z1 Critical (data read 47 ms), Z3 Critical (log write 31 ms), Z6 Warning (data and log on same D:\\Data\\ volume), Z11 Critical (3 log auto-grow events in 24 h), Z13 Warning (log growth increment 64 MB). Root cause: log and data competing for same volume I/O, undersized log growth. Priority fixes: separate log to dedicated volume (Z6/Z3), increase log growth to 256+ MB (Z13), pre-size log to avoid growth events (Z11).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "TempDB has 4 data files: tempdev (20 GB), tempdev1 (4 GB), tempdev2 (4 GB), tempdev3 (4 GB). tempdev handles 71% of all TempDB I/O. TempDB data files are on the same volume as the ProductionDB data files.",
+      "expected_output": "Z4 Critical (tempdev handles 71% of TempDB I/O), Z7 Warning (TempDB co-located with user database). Z9 Warning (file size imbalance — tempdev 5x larger than secondaries causing proportional fill imbalance). Fix: equalize TempDB file sizes (DBCC SHRINKFILE + MODIFY FILE) and move TempDB to dedicated volume.",
+      "files": []
+    }
+  ]
+}

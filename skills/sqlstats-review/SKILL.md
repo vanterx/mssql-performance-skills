@@ -124,7 +124,7 @@ Evaluate per-statement and per-table IO metrics.
 ### I5 — Single Table Dominates Logical Reads
 - **Trigger:** One table accounts for ≥ 80% (warning) or ≥ 95% (critical) of statement total logical reads
 - **Severity:** Warning (≥ 80%); Critical (≥ 95%)
-- **Fix:** Focus all index tuning effort on this table. A covering index eliminating a scan or key lookup here has the highest marginal impact. Run `/sqlplan-review` and `/sqlplan-index-advisor` targeted at this table.
+- **Fix:** Focus all index tuning effort on this table. A covering index eliminating a scan or key lookup here has the highest marginal impact. Run `/sqlplan-review` and `/sqlindex-advisor` targeted at this table.
 ### I6 — Worktable or Workfile Detected
 - **Trigger:** Table name is exactly `Worktable` or `Workfile`
 - **Severity:** Warning
@@ -381,9 +381,9 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 - **tsql-review** — Review the T-SQL source code of the query for static anti-patterns (non-sargable predicates, cursor loops, dynamic SQL) before the query runs.
 - **sqlplan-review** — Analyze the execution plan for the same query to understand operator choices, join strategies, and row estimate quality that drove the I/O seen in STATISTICS output.
-- **sqlplan-index-advisor** — Derive `CREATE INDEX` recommendations from the execution plan to reduce the logical reads identified here.
-- **sqlplan-deadlock** — If high I/O correlates with long elapsed times and low CPU (W1), investigate deadlock or blocking as a root cause.
+- **sqlindex-advisor** — Derive `CREATE INDEX` recommendations from the execution plan to reduce the logical reads identified here.
+- **sqldeadlock-review** — If high I/O correlates with long elapsed times and low CPU (W1), investigate deadlock or blocking as a root cause.
 - **sqlplan-batch** — If you have `.sqlplan` files for the same workload, batch-analyze them alongside this STATISTICS review.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

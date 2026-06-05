@@ -189,7 +189,7 @@ Root cause: Statistics are stale — all nodes estimate 100 rows. Update statist
 
 ## Recommended Next Steps
 
-1. **`horrible.sqlplan`** — Fix implicit conversion first (restores cardinality estimates → eliminates spills); then run `/sqlplan-index-advisor skills/sqlplan-review/examples/horrible.sqlplan` for DDL. Full check: `/sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan`.
+1. **`horrible.sqlplan`** — Fix implicit conversion first (restores cardinality estimates → eliminates spills); then run `/sqlindex-advisor skills/sqlplan-review/examples/horrible.sqlplan` for DDL. Full check: `/sqlplan-review skills/sqlplan-review/examples/horrible.sqlplan`.
 2. **`order_report.sqlplan`** — Update statistics on Orders, Customers, OrderLines immediately. Deploy `IX_OrderLines_OrderId`. Recapture actual plan (this plan has estimated-rows-only at runtime context — confirm with `Ctrl+M` in SSMS).
 3. **Index deployment** — Run consolidated script above in a maintenance window. Validate with `/sqlplan-compare` against pre-index baseline.
 4. **`customer_lookup.sqlplan`** — No action needed; 1 info-level note only.

@@ -91,7 +91,7 @@ This server has **three concurrent bottlenecks requiring immediate action**: phy
 - Impact: The working set exceeds buffer pool capacity, or queries are performing full scans that force large sequential reads. Combined with C1 (IO_RETRY), the storage subsystem is under severe dual stress.
 - Fix:
   1. **Root cause is inefficient queries, not storage** — identify the heaviest-read queries: run `/sqlstats-review` on `SET STATISTICS IO, TIME ON` output; look for tables with scan count > 1 and hundreds of thousands of reads per execution
-  2. Run `/sqlplan-index-advisor` on execution plans to generate covering indexes — missing indexes are the primary driver of unnecessary reads
+  2. Run `/sqlindex-advisor` on execution plans to generate covering indexes — missing indexes are the primary driver of unnecessary reads
   3. After index tuning, if PAGEIOLATCH remains above 20%: check buffer pool pressure via `sys.dm_os_buffer_descriptors`; RAM expansion is a valid secondary fix
   4. Resolve C1 (IO_RETRY) in parallel — index tuning does not fix hardware failures
 
@@ -199,7 +199,7 @@ V6 ✓ (ASYNC_NETWORK_IO 0.6% < 20%), V8 ✓ (THREADPOOL absent), V10 ✓ (signa
 | 3 — Today | Enable RCSI: `ALTER DATABASE ProdDB SET READ_COMMITTED_SNAPSHOT ON` | C3, W4 | 5 min (requires brief exclusive access) |
 | 4 — Today | Add TempDB data files 3–8 (all equal size, 4 GB each) | W5 | 15 min |
 | 5 — Today | Raise CTPfP from 5 to 50: `EXEC sp_configure 'cost threshold for parallelism', 50; RECONFIGURE` | W2 | 5 min |
-| 6 — This sprint | Add covering indexes on heaviest-read tables (`/sqlstats-review` + `/sqlplan-index-advisor`) | C1, C4, W2, W1 | Days |
+| 6 — This sprint | Add covering indexes on heaviest-read tables (`/sqlstats-review` + `/sqlindex-advisor`) | C1, C4, W2, W1 | Days |
 | 7 — This sprint | Update statistics with FULLSCAN on heavy tables | C5 | Hours |
 | 8 — Next sprint | Move transaction log to dedicated storage | W3, W6 | Infrastructure |
 

@@ -279,9 +279,9 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 ## Companion Skills
 
 - **sqlplan-review** — Run the full 99-check analysis on each plan individually before comparing. Findings from sqlplan-review provide context for why the regression occurred.
-- **sqlplan-index-advisor** — If the regression introduced a new Key Lookup or expensive scan, use this skill to generate the covering index that would resolve it.
+- **sqlindex-advisor** — If the regression introduced a new Key Lookup or expensive scan, use this skill to generate the covering index that would resolve it.
 - **sqltrace-review** — If a workload trace showed the query regressing in production, cross-reference trace duration variance (X14) with the plan diff.
 - **tsql-review** — If the regression was triggered by a schema or code change, review the T-SQL source for the anti-pattern that caused the plan change.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

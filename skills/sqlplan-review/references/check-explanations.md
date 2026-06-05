@@ -1134,7 +1134,7 @@ SQL Server generates missing index suggestions independently per access pattern.
 Creating all suggestions verbatim is almost always wrong.
 
 **Fix**  
-Use the `sqlplan-index-advisor` skill (or follow its merge rules manually):
+Use the `sqlindex-advisor` skill (or follow its merge rules manually):
 
 1. Group suggestions by table
 2. Check if any suggested key columns overlap — merge overlapping suggestions
@@ -3519,7 +3519,7 @@ Check `sys.query_store_query_variant` to verify variants and their boundaries. I
 Accelerated Database Recovery (ADR) moves the version store from the log to a Persistent Version Store (PVS) in user-defined filegroups or TempDB. Unlike the traditional version store, PVS entries do not block log truncation but they do grow continuously for the lifetime of any open transaction. A long-running transaction causes PVS to accumulate rows at the rate of all concurrent DML. SQL 2019+ only.
 
 **How to spot it**
-Long transaction duration combined with high DML activity on the database. Cross-reference `sys.dm_tran_persistent_version_store_stats` for PVS size and `E29` in errorlog-review for PVS cleanup stall messages.
+Long transaction duration combined with high DML activity on the database. Cross-reference `sys.dm_tran_persistent_version_store_stats` for PVS size and `E29` in sqlerrorlog-review for PVS cleanup stall messages.
 
 **Fix**
 Keep transactions short and commit promptly. Monitor PVS size with:
@@ -3539,7 +3539,7 @@ CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardin
 `ContainsCEFeedback="true"` attribute on `StmtSimple` in the plan XML.
 
 **Fix**
-CE Feedback is generally beneficial. Monitor query stability using Query Store: if the plan shape or performance oscillates after feedback applies, the workload characteristics are changing too frequently for the feedback model to converge. Related: Q27 in query-store-review.
+CE Feedback is generally beneficial. Monitor query stability using Query Store: if the plan shape or performance oscillates after feedback applies, the workload characteristics are changing too frequently for the feedback model to converge. Related: Q27 in sqlquerystore-review.
 
 ---
 

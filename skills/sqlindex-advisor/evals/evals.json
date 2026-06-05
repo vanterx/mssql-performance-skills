@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlindex-advisor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Here is my execution plan. Generate a deployment-ready CREATE INDEX script for the most impactful indexes. I need to take it to my DBA tomorrow.",
+      "expected_output": "Ranked Index Advisor Report with CREATE INDEX DDL using ONLINE = ON, SORT_IN_TEMPDB = ON. Each with Source (operator-derived D1-D8 vs optimizer suggestion), Impact score, and rationale. Deduplication where derived and suggested overlap.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I have 12 .sqlplan files from a workload trace. Give me one consolidated index script.",
+      "expected_output": "Cross-plan merge with deduplication, ranked by aggregate impact across all 12 plans. CREATE INDEX statements grouped by table, with comments showing which plans drove each recommendation.",
+      "files": []
+    }
+  ]
+}

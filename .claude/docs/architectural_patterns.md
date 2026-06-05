@@ -48,20 +48,22 @@ triggers:
 |-----------|---------|-------------|
 | `skills/sqlplan-review/` | `/sqlplan-review` | S, N |
 | `skills/sqlplan-compare/` | `/sqlplan-compare` | C |
-| `skills/sqlplan-index-advisor/` | `/sqlplan-index-advisor` | D |
-| `skills/sqlplan-deadlock/` | `/sqlplan-deadlock` | P |
+| `skills/sqlindex-advisor/` | `/sqlindex-advisor` | D |
+| `skills/sqldeadlock-review/` | `/sqldeadlock-review` | P |
 | `skills/sqlplan-batch/` | `/sqlplan-batch` | (dispatcher — aggregates S/N) |
 | `skills/tsql-review/` | `/tsql-review` | T |
 | `skills/sqlstats-review/` | `/sqlstats-review` | I, W |
 | `skills/sqltrace-review/` | `/sqltrace-review` | X |
 | `skills/sqlwait-review/` | `/sqlwait-review` | V |
-| `skills/query-store-review/` | `/query-store-review` | Q |
-| `skills/procstats-review/` | `/procstats-review` | R |
-| `skills/hadr-health-review/` | `/hadr-health-review` | H |
-| `skills/clusterlog-review/` | `/clusterlog-review` | L |
-| `skills/errorlog-review/` | `/errorlog-review` | E |
-| `skills/spn-review/` | `/spn-review` | K |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 15) |
+| `skills/sqlquerystore-review/` | `/sqlquerystore-review` | Q |
+| `skills/sqlprocstats-review/` | `/sqlprocstats-review` | R |
+| `skills/sqlhadr-review/` | `/sqlhadr-review` | H |
+| `skills/sqlclusterlog-review/` | `/sqlclusterlog-review` | L |
+| `skills/sqlerrorlog-review/` | `/sqlerrorlog-review` | E |
+| `skills/sqlspn-review/` | `/sqlspn-review` | K |
+| `skills/sqlmemory-review/` | `/sqlmemory-review` | O |
+| `skills/sqldiskio-review/` | `/sqldiskio-review` | Z |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 17) |
 
 ---
 
@@ -87,26 +89,28 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 
 | Prefix | Skill | Scope | Count |
 |--------|-------|-------|-------|
-| `S` | `sqlplan-review` | Statement-level (once per query) | S1–S33 |
-| `N` | `sqlplan-review` | Node-level (per operator) | N1–N66 |
-| `C` | `sqlplan-compare` | Regression comparison checks | C1–C10 |
-| `D` | `sqlplan-index-advisor` | Derived index rules (operator patterns) | D1–D8 |
-| `P` | `sqlplan-deadlock` | Deadlock patterns | P1–P8 |
-| `T` | `tsql-review` | T-SQL static analysis checks | T1–T78 |
-| `I` | `sqlstats-review` | IO metrics checks | I1–I15 |
-| `W` | `sqlstats-review` | Time/wait metrics checks | W1–W7 |
-| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X20 |
-| `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V40 |
-| `Q` | `query-store-review` | Query Store health and regression checks | Q1–Q25 |
-| `R` | `procstats-review` | Procedure/trigger/function runtime stats | R1–R20 |
-| `H` | `hadr-health-review` | Always On AG health checks | H1–H22 |
-| `L` | `clusterlog-review` | WSFC cluster log checks | L1–L25 |
-| `E` | `errorlog-review` | SQL Server ERRORLOG checks | E1–E28 |
-| `K` | `spn-review` | SPN and Kerberos delegation checks | K1–K30 |
+| `S` | `sqlplan-review` | Statement-level (once per query) | S1–S36 |
+| `N` | `sqlplan-review` | Node-level (per operator) | N1–N72 |
+| `C` | `sqlplan-compare` | Regression comparison checks | C1–C20 |
+| `D` | `sqlindex-advisor` | Derived index rules (operator patterns) | D1–D8 |
+| `P` | `sqldeadlock-review` | Deadlock patterns | P1–P16 |
+| `T` | `tsql-review` | T-SQL static analysis checks | T1–T85 |
+| `I` | `sqlstats-review` | IO metrics checks | I1–I18 |
+| `W` | `sqlstats-review` | Time/wait metrics checks | W1–W9 |
+| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X25 |
+| `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V44 |
+| `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
+| `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
+| `H` | `sqlhadr-review` | Always On AG health checks | H1–H27 |
+| `L` | `sqlclusterlog-review` | WSFC cluster log checks | L1–L30 |
+| `E` | `sqlerrorlog-review` | SQL Server ERRORLOG checks | E1–E33 |
+| `K` | `sqlspn-review` | SPN and Kerberos delegation checks | K1–K40 |
+| `O` | `sqlmemory-review` | Memory pressure: PLE, plan cache, grants, clerks | O1–O20 |
+| `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 15 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to all 17 specialised skills | n/a |
 
-**Available prefixes for new skills:** A, B, F, G, J, M, O, U, Y, Z.
+**Available prefixes for new skills:** A, B, F, G, J, M, U, Y.
 
 ---
 
@@ -233,14 +237,14 @@ Skills compose into a pipeline ordered by diagnostic depth:
 /sqlwait-review waits.txt            — server: identify dominant bottleneck (I/O, locks, CPU, memory)
 /sqlstats-review                     — runtime I/O: measure reads, scans, timing per table
 /sqltrace-review trace.txt           — workload: N+1 patterns, sniffing, top consumers
-/query-store-review qs_output.txt    — QS: regressed queries, plan instability, top consumers
-/procstats-review proc_stats.txt     — objects: top CPU/IO procedures, triggers, functions
+/sqlquerystore-review qs_output.txt    — QS: regressed queries, plan instability, top consumers
+/sqlprocstats-review proc_stats.txt     — objects: top CPU/IO procedures, triggers, functions
     ↓
 /sqlplan-review plan.sqlplan         — deep: operator choices, row estimates, memory, spills
-/sqlplan-index-advisor plan.sqlplan  — indexes: ranked CREATE INDEX script
+/sqlindex-advisor plan.sqlplan  — indexes: ranked CREATE INDEX script
     ↓
 /sqlplan-compare a.sqlplan b.sqlplan — regression: what changed and why
-/sqlplan-deadlock deadlock.xml       — deadlocks: lock cycle root cause and fix
+/sqldeadlock-review deadlock.xml       — deadlocks: lock cycle root cause and fix
     ↓
 /sqlplan-batch folder/               — workload: aggregate dashboard across many plans
 ```
@@ -290,17 +294,17 @@ This applies to any content inside fenced code blocks (` ``` `) as well as inlin
 
 ## 11. Example Folder Convention
 
-**Where:** `example/` directory at repo root
+**Where:** `skills/<name>/examples/` — co-located with each skill.
 
-Each skill has a dedicated subfolder under `example/` containing:
+Each skill has an `examples/` subfolder containing:
 
 | File pattern | Purpose |
 |-------------|---------|
-| `example/<skill-name>/<input-file>` | Realistic auto-generated input demonstrating multiple check triggers |
-| `example/<skill-name>/<input-file>-analysis.md` | Expected skill output for that input — serves as a reference and regression baseline |
+| `skills/<name>/examples/<input-file>` | Realistic input demonstrating multiple check triggers |
+| `skills/<name>/examples/<input-file>-analysis.md` | Expected skill output — serves as a reference and regression baseline |
 
 **Naming:**
-- Input files use the natural extension for the skill: `.sql` (tsql-review), `.txt` (sqlstats-review, sqltrace-review), `.sqlplan` (plan skills), `.xml` (deadlock)
+- Input files use the natural extension for the skill: `.sql` (tsql-review), `.txt` (sqlstats-review, sqltrace-review), `.sqlplan` (plan skills), `.xml` / `.xdl` (deadlock)
 - Analysis files append `-analysis.md` to the input file's stem
 
-**Convention:** Input files must trigger a representative spread of severities (at least one Critical, multiple Warnings, at least one Info). Analysis files must follow the skill's `## Output Format` exactly — they serve as ground-truth examples for validating skill output quality. All examples live in skill-specific subfolders under `example/<skill-name>/`.
+**Convention:** Input files must trigger a representative spread of severities (at least one Critical, multiple Warnings, at least one Info). Analysis files must follow the skill's `## Output Format` exactly — they serve as ground-truth examples for validating skill output quality.

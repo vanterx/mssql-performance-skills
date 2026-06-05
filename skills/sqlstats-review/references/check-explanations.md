@@ -123,7 +123,7 @@ INCLUDE (OrderId, CustomerId, OrderDate, Total);
 ```
 
 **Fix options (ranked by impact)**
-1. Add a covering index on the highest-read table — use `/sqlplan-index-advisor` for the DDL.
+1. Add a covering index on the highest-read table — use `/sqlindex-advisor` for the DDL.
 2. Add predicates to the query to filter earlier (reduce rows scanned).
 3. Move computation to a pre-aggregated summary table or indexed view.
 
@@ -255,7 +255,7 @@ Table 'Orders'. Scan count 1, logical reads 84,210, ...     → 8%
 ```
 
 **Fix options**
-1. Use `/sqlplan-review` and `/sqlplan-index-advisor` targeting the dominant table.
+1. Use `/sqlplan-review` and `/sqlindex-advisor` targeting the dominant table.
 2. Check I2 (scan count) and I4 (read-ahead) for the dominant table — the type of reads gives direction.
 3. If the dominant table is `Worktable` or `Workfile`, see I6.
 

@@ -200,9 +200,9 @@ for skill_dir in skills/*/; do
     expl_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
     # sqlplan-batch: aggregates sqlplan-review checks, no checks of its own
     [ "$name" = "sqlplan-batch" ] && continue
-    # sqlplan-index-advisor: check-explanations.md explains the merge/ranking pipeline,
+    # sqlindex-advisor: check-explanations.md explains the merge/ranking pipeline,
     # not individual D-checks — structured differently by design
-    [ "$name" = "sqlplan-index-advisor" ] && continue
+    [ "$name" = "sqlindex-advisor" ] && continue
     if [ "$skill_count" != "$expl_count" ]; then
         fail "$name: SKILL.md has $skill_count checks but references/check-explanations.md has $expl_count — they must match"
         check11_ok=0
@@ -353,7 +353,7 @@ done
 #   - Analysis skills must have a Passed Checks mandate
 #   - Priority-table skills must have a fix-sequence/action-order mandate
 #   - sqlplan-compare must mandate Root Cause Summary
-#   - sqlplan-deadlock must mandate Deadlock Summary table + Pattern Match
+#   - sqldeadlock-review must mandate Deadlock Summary table + Pattern Match
 #   - sqlplan-batch must mandate Memory Grant Summary + Cardinality Accuracy Report
 #   - sqlplan-review must mandate check ID suffix in finding labels
 # ---------------------------------------------------------------------------
@@ -362,7 +362,7 @@ echo "[20 ] Output Format structural markers (regression guard)"
 check20_ok=1
 
 # Skills that must mandate Passed Checks
-for name in tsql-review sqlstats-review sqltrace-review sqlwait-review sqlplan-review query-store-review; do
+for name in tsql-review sqlstats-review sqltrace-review sqlwait-review sqlplan-review sqlquerystore-review; do
     skill_file="skills/$name/SKILL.md"
     [ ! -f "$skill_file" ] && continue
     if ! grep -q "Passed Checks" "$skill_file" 2>/dev/null; then
@@ -372,7 +372,7 @@ for name in tsql-review sqlstats-review sqltrace-review sqlwait-review sqlplan-r
 done
 
 # Skills that must mandate a priority/fix table
-for name in sqlplan-review sqlwait-review query-store-review sqlplan-deadlock; do
+for name in sqlplan-review sqlwait-review sqlquerystore-review sqldeadlock-review; do
     skill_file="skills/$name/SKILL.md"
     [ ! -f "$skill_file" ] && continue
     if ! grep -qE "Prioritized Fix Sequence|Recommended Action Order|Remediation Priority" "$skill_file" 2>/dev/null; then
@@ -387,13 +387,13 @@ if ! grep -q "Root Cause Summary" "skills/sqlplan-compare/SKILL.md" 2>/dev/null;
     check20_ok=0
 fi
 
-# sqlplan-deadlock: must mandate Deadlock Summary table and Pattern Match section
-if ! grep -q "Deadlock Summary" "skills/sqlplan-deadlock/SKILL.md" 2>/dev/null; then
-    fail "sqlplan-deadlock/SKILL.md: Output Format lost 'Deadlock Summary' table mandate"
+# sqldeadlock-review: must mandate Deadlock Summary table and Pattern Match section
+if ! grep -q "Deadlock Summary" "skills/sqldeadlock-review/SKILL.md" 2>/dev/null; then
+    fail "sqldeadlock-review/SKILL.md: Output Format lost 'Deadlock Summary' table mandate"
     check20_ok=0
 fi
-if ! grep -q "Pattern Match" "skills/sqlplan-deadlock/SKILL.md" 2>/dev/null; then
-    fail "sqlplan-deadlock/SKILL.md: Output Format lost 'Pattern Match' section mandate"
+if ! grep -q "Pattern Match" "skills/sqldeadlock-review/SKILL.md" 2>/dev/null; then
+    fail "sqldeadlock-review/SKILL.md: Output Format lost 'Pattern Match' section mandate"
     check20_ok=0
 fi
 
@@ -513,8 +513,8 @@ while IFS= read -r skill_file; do
     actual=$(grep -c "^### [A-Z][0-9]" "$skill_file" 2>/dev/null || echo 0)
     # sqlplan-batch has no original checks (aggregator) — skip
     [ "$name" = "sqlplan-batch" ] && continue
-    # sqlplan-index-advisor uses derivation rules, not ### headers — skip
-    [ "$name" = "sqlplan-index-advisor" ] && continue
+    # sqlindex-advisor uses derivation rules, not ### headers — skip
+    [ "$name" = "sqlindex-advisor" ] && continue
     # Look for "N checks" in the Skills at a Glance table row for this skill
     guide_count=$(awk '/^## Skills at a Glance/{f=1;next} f && /^---/{exit} f{print}' \
         PERFORMANCE_TUNING_GUIDE.md 2>/dev/null \
@@ -691,11 +691,12 @@ declare -A P2S=(
     [I]="sqlstats-review" [W]="sqlstats-review"
     [X]="sqltrace-review" [V]="sqlwait-review"
     [S]="sqlplan-review"  [N]="sqlplan-review"
-    [T]="tsql-review"     [Q]="query-store-review"
-    [R]="procstats-review" [H]="hadr-health-review"
-    [L]="clusterlog-review" [E]="errorlog-review"
-    [K]="spn-review"      [C]="sqlplan-compare"
-    [P]="sqlplan-deadlock" [D]="sqlplan-index-advisor"
+    [T]="tsql-review"     [Q]="sqlquerystore-review"
+    [R]="sqlprocstats-review" [H]="sqlhadr-review"
+    [L]="sqlclusterlog-review" [E]="sqlerrorlog-review"
+    [K]="sqlspn-review"      [C]="sqlplan-compare"
+    [P]="sqldeadlock-review" [D]="sqlindex-advisor"
+    [O]="sqlmemory-review"   [Z]="sqldiskio-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
@@ -797,7 +798,7 @@ if [ -n "$matches" ]; then
     check39_ok=0
 fi
 # Extra: catch any line that has a skill name and a digit
-extra=$(grep -nE 'sqlplan-(review|compare|batch|deadlock|index-advisor)|tsql-review|sqlstats-review|sqltrace-review|sqlwait-review|query-store-review|procstats-review|clusterlog-review|errorlog-review|hadr-health-review|spn-review|mssql-performance-review' AGENTS.md 2>/dev/null | grep -E '[0-9]{1,3}' || true)
+extra=$(grep -nE 'sqlplan-(review|compare|batch|deadlock|index-advisor)|tsql-review|sqlstats-review|sqltrace-review|sqlwait-review|sqlquerystore-review|sqlprocstats-review|sqlclusterlog-review|sqlerrorlog-review|sqlhadr-review|spn-review|mssql-performance-review' AGENTS.md 2>/dev/null | grep -E '[0-9]{1,3}' || true)
 if [ -n "$extra" ]; then
     fail "AGENTS.md contains skill names with numeric counts — remove them; detail belongs in CLAUDE.md only"
     echo "$extra" | sed 's/^/    /'

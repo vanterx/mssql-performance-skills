@@ -212,10 +212,10 @@ When `facts.version` is set (e.g., `"SQL Server 2016 SP3 (13.0.6435.1)"`), the o
 **Practical example:** on SQL Server 2016, suppress `NOT ASSESSED` rows for:
 - V41–V44 (`sqlwait-review`): PSP selector wait, DOP Feedback wait, ADR PVS, TempDB metadata — all SQL 2019+/2022+
 - S34–S36, N67–N70 (`sqlplan-review`): PSP dispatcher, CE Feedback, ADR, DOP feedback nodes — all SQL 2019+/2022+
-- Q26–Q32 (`query-store-review`): IQP/PSP/DOP/CE feedback, QS hints, auto-tuning — SQL 2017–2022
-- E29–E32 (`errorlog-review`): ADR PVS, DOP feedback, Ledger verification, CE feedback — SQL 2019+/2022+
-- H23 (`hadr-health-review`): Contained AG — SQL 2022+
-- L28 (`clusterlog-review`): Contained AG system DB offline — SQL 2022+
+- Q26–Q32 (`sqlquerystore-review`): IQP/PSP/DOP/CE feedback, QS hints, auto-tuning — SQL 2017–2022
+- E29–E32 (`sqlerrorlog-review`): ADR PVS, DOP feedback, Ledger verification, CE feedback — SQL 2019+/2022+
+- H23 (`sqlhadr-review`): Contained AG — SQL 2022+
+- L28 (`sqlclusterlog-review`): Contained AG system DB offline — SQL 2022+
 
 **Suppression behaviour:** change the row status from `NOT ASSESSED` to `SKIP (version)` in the Check Evaluation Log when `--verbose` is requested. Omit suppressed rows entirely from the standard (non-verbose) report. Do not suppress `NOT ASSESSED` rows caused by missing input data — only suppress when the check version gate exceeds `facts.version`.
 

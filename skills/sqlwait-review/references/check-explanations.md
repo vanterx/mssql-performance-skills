@@ -73,7 +73,7 @@ PAGEIOLATCH_EX      1,204          84,210         2.0%
 Combined 64.4% → Critical (≥ 40% threshold)
 
 **Fix options (ranked by impact)**
-1. **Add indexes** — the primary driver of PAGEIOLATCH is table/index scans reading large numbers of pages. A covering index reduces 48,000 pages to 3. Use `/sqlplan-index-advisor` on the worst plans.
+1. **Add indexes** — the primary driver of PAGEIOLATCH is table/index scans reading large numbers of pages. A covering index reduces 48,000 pages to 3. Use `/sqlindex-advisor` on the worst plans.
 2. **Add RAM** — more buffer pool = more pages cached = fewer physical reads. Use `sys.dm_os_buffer_descriptors` to find what's consuming buffer pool.
 3. **Faster storage** — move data files to NVMe (0.1 ms latency vs 5 ms for SATA SSD). Especially effective when RAM-based fixes aren't feasible.
 4. **Partition hot tables** — if one table dominates buffer pool, partition it so only the hot partition stays in cache.
@@ -113,7 +113,7 @@ UPDATE dbo.Orders SET Status = 'Processing' WHERE CustomerId = 42;
 3. **Shorten transactions** — COMMIT faster, do less work per transaction. Don't hold transactions open during network calls or user interaction.
 4. **Use `/sqlblock-review`** — paste `sys.dm_exec_requests` to identify the head blocker (session with no `blocking_session_id`) and its running query.
 
-**Related checks:** `/sqlplan-deadlock` (if LCK includes deadlock patterns), `/sqlblock-review`
+**Related checks:** `/sqldeadlock-review` (if LCK includes deadlock patterns), `/sqlblock-review`
 
 ---
 

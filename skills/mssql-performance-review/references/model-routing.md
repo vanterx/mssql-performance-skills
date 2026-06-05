@@ -33,7 +33,7 @@ Typical mixed-artifact review (one `.sql` + one `.sqlplan` + STATISTICS output +
 | Triage | 2,500 | Haiku 4.5 | 0.002 |
 | Parallel probes (4 sub-skill subagents) | 20,000 | Haiku 4.5 | 0.016 |
 | Deep-dive sqlplan-review | 15,000 | Sonnet 4.6 | 0.045 |
-| sqlplan-index-advisor | 8,000 | Sonnet 4.6 | 0.024 |
+| sqlindex-advisor | 8,000 | Sonnet 4.6 | 0.024 |
 | Synthesis | 8,000 | Sonnet 4.6 | 0.024 |
 | Adversarial | 6,000 | Opus 4.7 | 0.090 |
 | Cost summary + rendering | 1,500 | Haiku 4.5 | 0.001 |
@@ -62,17 +62,17 @@ When the orchestrator dispatches a sub-skill via the Agent tool, it explicitly s
 | sqlwait-review | Haiku | yes |
 | sqlstats-review | Haiku | yes |
 | sqltrace-review | Haiku | yes |
-| query-store-review | Haiku | yes |
-| procstats-review | Haiku | yes |
+| sqlquerystore-review | Haiku | yes |
+| sqlprocstats-review | Haiku | yes |
 | sqlplan-review | Sonnet | yes |
 | sqlplan-batch | Sonnet | yes |
 | sqlplan-compare | Sonnet | yes |
-| sqlplan-index-advisor | Sonnet | yes |
-| sqlplan-deadlock | Sonnet | yes |
-| hadr-health-review | Haiku | yes |
-| clusterlog-review | Sonnet | yes |
-| errorlog-review | Haiku | yes |
-| spn-review | Haiku | yes |
+| sqlindex-advisor | Sonnet | yes |
+| sqldeadlock-review | Sonnet | yes |
+| sqlhadr-review | Haiku | yes |
+| sqlclusterlog-review | Sonnet | yes |
+| sqlerrorlog-review | Haiku | yes |
+| sqlspn-review | Haiku | yes |
 
 Override rules:
 - `--model-tier economy` forces all sub-skills to Haiku

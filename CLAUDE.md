@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides sixteen slash-command skills — fifteen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, and SQL Server SPN and Kerberos delegation configuration. No application code — content is Markdown only.
+Provides eighteen slash-command skills — seventeen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, and file-level I/O latency analysis. No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -25,15 +25,17 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 44 checks (V1–V44) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency, IQP/PSP/ADR waits, TempDB metadata |
 | [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 108 checks (S1–S36, N1–N72), thresholds, output format |
 | [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C20) |
-| [skills/sqlplan-index-advisor/SKILL.md](skills/sqlplan-index-advisor/SKILL.md) | Index recommendations: `sqlplan-index-advisor`. Derive indexes from operator patterns (D1–D8) + optimizer suggestions |
-| [skills/sqlplan-deadlock/SKILL.md](skills/sqlplan-deadlock/SKILL.md) | Deadlock analysis: `sqlplan-deadlock`. 16 patterns (P1–P16), lock cycle extraction, remediation |
+| [skills/sqlindex-advisor/SKILL.md](skills/sqlindex-advisor/SKILL.md) | Index recommendations: `sqlindex-advisor`. Derive indexes from operator patterns (D1–D8) + optimizer suggestions |
+| [skills/sqldeadlock-review/SKILL.md](skills/sqldeadlock-review/SKILL.md) | Deadlock analysis: `sqldeadlock-review`. 16 patterns (P1–P16), lock cycle extraction, remediation |
 | [skills/sqlplan-batch/SKILL.md](skills/sqlplan-batch/SKILL.md) | Batch workload: `sqlplan-batch`. Aggregate dashboard across many `.sqlplan` files |
-| [skills/query-store-review/SKILL.md](skills/query-store-review/SKILL.md) | Query Store analysis: `query-store-review`. 32 checks (Q1–Q32) — regressed queries, plan instability, resource hotspots, query waits, operational health, IQP/PSP/DOP/CE feedback, QS hints, auto-tuning |
-| [skills/procstats-review/SKILL.md](skills/procstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `procstats-review`. 25 checks (R1–R25) — top consumers, per-execution efficiency, pattern detection, trend analysis |
-| [skills/clusterlog-review/SKILL.md](skills/clusterlog-review/SKILL.md) | WSFC cluster log analysis: `clusterlog-review`. 30 checks (L1–L30) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
-| [skills/hadr-health-review/SKILL.md](skills/hadr-health-review/SKILL.md) | Always On AG health analysis: `hadr-health-review`. 27 checks (H1–H27) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
-| [skills/errorlog-review/SKILL.md](skills/errorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `errorlog-review`. 33 checks (E1–E33) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
-| [skills/spn-review/SKILL.md](skills/spn-review/SKILL.md) | SPN and Kerberos delegation analysis: `spn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
+| [skills/sqlquerystore-review/SKILL.md](skills/sqlquerystore-review/SKILL.md) | Query Store analysis: `sqlquerystore-review`. 32 checks (Q1–Q32) — regressed queries, plan instability, resource hotspots, query waits, operational health, IQP/PSP/DOP/CE feedback, QS hints, auto-tuning |
+| [skills/sqlprocstats-review/SKILL.md](skills/sqlprocstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `sqlprocstats-review`. 25 checks (R1–R25) — top consumers, per-execution efficiency, pattern detection, trend analysis |
+| [skills/sqlclusterlog-review/SKILL.md](skills/sqlclusterlog-review/SKILL.md) | WSFC cluster log analysis: `sqlclusterlog-review`. 30 checks (L1–L30) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
+| [skills/sqlhadr-review/SKILL.md](skills/sqlhadr-review/SKILL.md) | Always On AG health analysis: `sqlhadr-review`. 27 checks (H1–H27) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
+| [skills/sqlerrorlog-review/SKILL.md](skills/sqlerrorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `sqlerrorlog-review`. 33 checks (E1–E33) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
+| [skills/sqlspn-review/SKILL.md](skills/sqlspn-review/SKILL.md) | SPN and Kerberos delegation analysis: `sqlspn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
+| [skills/sqlmemory-review/SKILL.md](skills/sqlmemory-review/SKILL.md) | Memory pressure analysis: `sqlmemory-review`. 20 checks (O1–O20) — PLE, plan cache bloat, memory grants, memory clerks, ColumnStore/XTP footprint, OS pressure, LPIM, Max Server Memory |
+| [skills/sqldiskio-review/SKILL.md](skills/sqldiskio-review/SKILL.md) | File-level I/O latency and auto-growth analysis: `sqldiskio-review`. 15 checks (Z1–Z15) — data/log latency, hot files, stall ratio, storage placement, auto-growth events and sizing |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -46,34 +48,36 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 44 V-checks with wait type descriptions, capture queries, and category quick reference |
 | [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 108 S/N checks with XML examples and fix recipes |
 | [skills/sqlplan-compare/references/check-explanations.md](skills/sqlplan-compare/references/check-explanations.md) | C1–C20 regression checks explained — what each change means and why it causes a slowdown |
-| [skills/sqlplan-index-advisor/references/check-explanations.md](skills/sqlplan-index-advisor/references/check-explanations.md) | Merge rules, Impact score, ranking formula, width check, and output guide |
-| [skills/sqlplan-deadlock/references/check-explanations.md](skills/sqlplan-deadlock/references/check-explanations.md) | P1–P16 deadlock patterns, lock concepts, how to capture XML |
+| [skills/sqlindex-advisor/references/check-explanations.md](skills/sqlindex-advisor/references/check-explanations.md) | Merge rules, Impact score, ranking formula, width check, and output guide |
+| [skills/sqldeadlock-review/references/check-explanations.md](skills/sqldeadlock-review/references/check-explanations.md) | P1–P16 deadlock patterns, lock concepts, how to capture XML |
 | [skills/sqlplan-batch/references/check-explanations.md](skills/sqlplan-batch/references/check-explanations.md) | How to read each dashboard section, prioritisation guide, next-step workflow |
-| [skills/query-store-review/references/check-explanations.md](skills/query-store-review/references/check-explanations.md) | Plain-English explanation of all 32 Q-checks with Query Store DMV examples and fix recipes |
-| [skills/procstats-review/references/check-explanations.md](skills/procstats-review/references/check-explanations.md) | Plain-English explanation of all 25 R-checks with collection table examples and fix recipes |
-| [skills/clusterlog-review/references/check-explanations.md](skills/clusterlog-review/references/check-explanations.md) | Plain-English explanation of all 30 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
-| [skills/hadr-health-review/references/check-explanations.md](skills/hadr-health-review/references/check-explanations.md) | Plain-English explanation of all 27 H-checks with DMV examples, fix recipes, and Quick Reference table |
-| [skills/errorlog-review/references/check-explanations.md](skills/errorlog-review/references/check-explanations.md) | Plain-English explanation of all 33 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
-| [skills/spn-review/references/check-explanations.md](skills/spn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
+| [skills/sqlquerystore-review/references/check-explanations.md](skills/sqlquerystore-review/references/check-explanations.md) | Plain-English explanation of all 32 Q-checks with Query Store DMV examples and fix recipes |
+| [skills/sqlprocstats-review/references/check-explanations.md](skills/sqlprocstats-review/references/check-explanations.md) | Plain-English explanation of all 25 R-checks with collection table examples and fix recipes |
+| [skills/sqlclusterlog-review/references/check-explanations.md](skills/sqlclusterlog-review/references/check-explanations.md) | Plain-English explanation of all 30 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
+| [skills/sqlhadr-review/references/check-explanations.md](skills/sqlhadr-review/references/check-explanations.md) | Plain-English explanation of all 27 H-checks with DMV examples, fix recipes, and Quick Reference table |
+| [skills/sqlerrorlog-review/references/check-explanations.md](skills/sqlerrorlog-review/references/check-explanations.md) | Plain-English explanation of all 33 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
+| [skills/sqlspn-review/references/check-explanations.md](skills/sqlspn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
+| [skills/sqlmemory-review/references/check-explanations.md](skills/sqlmemory-review/references/check-explanations.md) | Plain-English explanation of all 20 O-checks with DMV examples, fix recipes, and Quick Reference table |
+| [skills/sqldiskio-review/references/check-explanations.md](skills/sqldiskio-review/references/check-explanations.md) | Plain-English explanation of all 15 Z-checks with sys.dm_io_virtual_file_stats examples, fix recipes, and Quick Reference table |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 16 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 520-check ID reference |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 18 skills |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 555-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 520 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 555 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
-| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 16 SKILL.md files are discovered by the plugin system |
+| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 18 SKILL.md files are discovered by the plugin system |
 | [mcp-server/src/index.ts](mcp-server/src/index.ts) | MCP server entry point — CORS preflight, `GET /health`, error handling, then Cloudflare Workers fetch handler using `WebStandardStreamableHTTPServerTransport` (stateless, one server per request) |
 | [mcp-server/src/skill-loader.ts](mcp-server/src/skill-loader.ts) | `SkillMeta` interface — no fs access; all skill data pre-bundled into `skills-data.ts` at deploy time |
 | [mcp-server/src/skills-data.ts](mcp-server/src/skills-data.ts) | Generated file — run `npm run bundle` to regenerate from `skills/*/SKILL.md`. Do not edit manually |
 | [mcp-server/scripts/bundle-skills.ts](mcp-server/scripts/bundle-skills.ts) | Build-time codegen: reads all SKILL.md files + PERFORMANCE_TUNING_GUIDE.md → writes `skills-data.ts` |
 | [mcp-server/wrangler.toml](mcp-server/wrangler.toml) | Cloudflare Workers config — worker name `mssql-mcp`, live at `https://mssql-mcp.tsx113.workers.dev` |
 | [mcp-server/src/tools.ts](mcp-server/src/tools.ts) | MCP tools: `list_skills`, `get_skill`, `route_artifact` (13 artifact types including `mixed` → orchestrator) |
-| [mcp-server/src/resources.ts](mcp-server/src/resources.ts) | MCP resources: `mssql://skills`, `mssql://skills/{name}` (×16), `mssql://guide` |
+| [mcp-server/src/resources.ts](mcp-server/src/resources.ts) | MCP resources: `mssql://skills`, `mssql://skills/{name}` (×18), `mssql://guide` |
 | [mcp-server/src/prompts.ts](mcp-server/src/prompts.ts) | MCP prompts: one per skill, accepts `{ input }` and returns analysis prompt via shared `buildAnalysisPrompt` |
 | [mcp-server/src/prompt-builder.ts](mcp-server/src/prompt-builder.ts) | Shared `buildAnalysisPrompt(skillName, skillContent, input)` helper used by both `tools.ts` and `prompts.ts` |
 | [.github/workflows/deploy-mcp.yml](.github/workflows/deploy-mcp.yml) | GitHub Actions CD — auto-deploys to Cloudflare Workers on push when `mcp-server/`, `skills/`, or `PERFORMANCE_TUNING_GUIDE.md` changes |
@@ -87,17 +91,19 @@ Provides sixteen slash-command skills — fifteen specialised review skills plus
 | [skills/tsql-review/examples/](skills/tsql-review/examples/) | `slow_proc.sql` with 12 anti-patterns + expected analysis |
 | [skills/sqlstats-review/examples/](skills/sqlstats-review/examples/) | SSMS STATISTICS IO/TIME output + expected analysis |
 | [skills/sqlplan-compare/examples/](skills/sqlplan-compare/examples/) | Baseline + regression `.sqlplan` pair + diff analysis |
-| [skills/sqlplan-deadlock/examples/](skills/sqlplan-deadlock/examples/) | P1 lock-order deadlock XML + analysis |
+| [skills/sqldeadlock-review/examples/](skills/sqldeadlock-review/examples/) | P1 lock-order deadlock XML + analysis |
 | [skills/sqltrace-review/examples/](skills/sqltrace-review/examples/) | `fn_trace_gettable` output with N+1, sniffing, spills + analysis |
 | [skills/sqlwait-review/examples/](skills/sqlwait-review/examples/) | `sys.dm_os_wait_stats` output with I/O, lock, memory, CXPACKET + analysis |
-| [skills/sqlplan-index-advisor/examples/](skills/sqlplan-index-advisor/examples/) | Index advisor output for `horrible.sqlplan` |
+| [skills/sqlindex-advisor/examples/](skills/sqlindex-advisor/examples/) | Index advisor output for `horrible.sqlplan` |
 | [skills/sqlplan-batch/examples/](skills/sqlplan-batch/examples/) | Aggregate dashboard for a 3-plan batch |
-| [skills/query-store-review/examples/](skills/query-store-review/examples/) | Query Store DMV output with plan instability, forced plan failure, N+1 + analysis |
-| [skills/procstats-review/examples/](skills/procstats-review/examples/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
-| [skills/clusterlog-review/examples/](skills/clusterlog-review/examples/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
-| [skills/hadr-health-review/examples/](skills/hadr-health-review/examples/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
-| [skills/errorlog-review/examples/](skills/errorlog-review/examples/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
-| [skills/spn-review/examples/](skills/spn-review/examples/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
+| [skills/sqlquerystore-review/examples/](skills/sqlquerystore-review/examples/) | Query Store DMV output with plan instability, forced plan failure, N+1 + analysis |
+| [skills/sqlprocstats-review/examples/](skills/sqlprocstats-review/examples/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
+| [skills/sqlclusterlog-review/examples/](skills/sqlclusterlog-review/examples/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
+| [skills/sqlhadr-review/examples/](skills/sqlhadr-review/examples/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
+| [skills/sqlerrorlog-review/examples/](skills/sqlerrorlog-review/examples/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
+| [skills/sqlspn-review/examples/](skills/sqlspn-review/examples/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
+| [skills/sqlmemory-review/examples/](skills/sqlmemory-review/examples/) | Memory clerk + PLE + grant queue output: ColumnStore pressure, single-use plan bloat, oversized grant blocking 4 sessions + analysis |
+| [skills/sqldiskio-review/examples/](skills/sqldiskio-review/examples/) | sys.dm_io_virtual_file_stats + auto-growth trace: 47 ms data reads, 31 ms log writes, 3 auto-grow events on same volume + analysis |
 
 ## Installing Skills
 
@@ -115,7 +121,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Option 3: Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 16 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 18 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -174,18 +180,20 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 |--------|-------|
 | `S`, `N` | `sqlplan-review` |
 | `C` | `sqlplan-compare` |
-| `D` | `sqlplan-index-advisor` |
-| `P` | `sqlplan-deadlock` |
+| `D` | `sqlindex-advisor` |
+| `P` | `sqldeadlock-review` |
 | `T` | `tsql-review` |
 | `I`, `W` | `sqlstats-review` |
 | `X` | `sqltrace-review` |
 | `V` | `sqlwait-review` |
-| `Q` | `query-store-review` |
-| `R` | `procstats-review` |
-| `H` | `hadr-health-review` |
-| `L` | `clusterlog-review` |
-| `E` | `errorlog-review` |
-| `K` | `spn-review` |
+| `Q` | `sqlquerystore-review` |
+| `R` | `sqlprocstats-review` |
+| `H` | `sqlhadr-review` |
+| `L` | `sqlclusterlog-review` |
+| `E` | `sqlerrorlog-review` |
+| `K` | `sqlspn-review` |
+| `O` | `sqlmemory-review` |
+| `Z` | `sqldiskio-review` |
 | (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
 New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.

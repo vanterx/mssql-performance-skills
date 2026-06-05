@@ -1,6 +1,6 @@
 ---
 name: mssql-performance-review
-description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, query-store-review, procstats-review, sqlplan-deadlock, hadr-health-review, clusterlog-review, errorlog-review, spn-review, sqlplan-compare, sqlplan-index-advisor, sqlplan-batch), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
+description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
 triggers:
   - /mssql-performance-review
   - /mssql-perf-review
@@ -60,13 +60,13 @@ Content-based, not extension-reliant:
 | `Table '...'. Scan count ... logical reads ...` lines | sqlstats-review |
 | `EventClass`, `Duration`, `CPU`, `TextData` tabular headers, `.trc` / `.xel` files | sqltrace-review |
 | `wait_type`, `wait_time_ms`, `waiting_tasks_count` columns | sqlwait-review |
-| `<deadlock>` root + `<victim-list>` | sqlplan-deadlock |
-| `query_store_*` table refs, plan_id / runtime_stats columns | query-store-review |
-| `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | procstats-review |
-| `replica_id`, `synchronization_state` columns | hadr-health-review |
-| `RES_EVENT`, `00000a1c` GUID prefixes, `Cluster.Resource` lines | clusterlog-review |
-| `spid` prefixes with `Logon`, `Server`, `Backup` markers | errorlog-review |
-| `MSSQLSvc/`, `setspn` output, `Existing SPN found for` | spn-review |
+| `<deadlock>` root + `<victim-list>` | sqldeadlock-review |
+| `query_store_*` table refs, plan_id / runtime_stats columns | sqlquerystore-review |
+| `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | sqlprocstats-review |
+| `replica_id`, `synchronization_state` columns | sqlhadr-review |
+| `RES_EVENT`, `00000a1c` GUID prefixes, `Cluster.Resource` lines | sqlclusterlog-review |
+| `spid` prefixes with `Logon`, `Server`, `Backup` markers | sqlerrorlog-review |
+| `MSSQLSvc/`, `setspn` output, `Existing SPN found for` | sqlspn-review |
 | Ambiguous `.txt` | Inspect first 100 lines, pick the highest-priority match; ask the user if still ambiguous |
 
 ## Hypothesis Generation
@@ -77,12 +77,12 @@ Example hypotheses:
 
 | Hypothesis class | Trigger signals | Probe sequence |
 |------------------|----------------|----------------|
-| Parameter sniffing | Wide duration variance in stats / trace; multiple plans for same query_hash | sqlstats-review → sqlplan-review → query-store-review → sqlplan-compare |
-| Missing index | Key Lookup or large scan visible in plan; high logical reads on one table | sqlplan-review → sqlplan-index-advisor → sqlplan-batch (if folder) |
+| Parameter sniffing | Wide duration variance in stats / trace; multiple plans for same query_hash | sqlstats-review → sqlplan-review → sqlquerystore-review → sqlplan-compare |
+| Missing index | Key Lookup or large scan visible in plan; high logical reads on one table | sqlplan-review → sqlindex-advisor → sqlplan-batch (if folder) |
 | Server-wide I/O bottleneck | PAGEIOLATCH_SH dominant in wait stats | sqlwait-review → sqlstats-review → sqlplan-review on top reader |
-| Deadlock loop | error 1205 reported, deadlock XML present | sqlplan-deadlock → sqlplan-review on victim |
-| AG failover root cause | ERRORLOG shows lease expiry, CLUSTER.LOG present | errorlog-review → clusterlog-review → hadr-health-review |
-| Kerberos auth fail | NTLM fallback, login burst, setspn output present | spn-review → errorlog-review (login burst correlation) |
+| Deadlock loop | error 1205 reported, deadlock XML present | sqldeadlock-review → sqlplan-review on victim |
+| AG failover root cause | ERRORLOG shows lease expiry, CLUSTER.LOG present | sqlerrorlog-review → sqlclusterlog-review → sqlhadr-review |
+| Kerberos auth fail | NTLM fallback, login burst, setspn output present | sqlspn-review → sqlerrorlog-review (login burst correlation) |
 | Workload regression | Two plans for same query, dates differ, durations diverge | sqlplan-compare → sqlplan-review on both |
 
 Record hypotheses with initial confidence (HIGH / MEDIUM / LOW). Confidence updates as probes complete.
@@ -100,13 +100,13 @@ The full DAG construction rules and the catalogue of static + dynamic edges are 
 The default DAG starts with these static edges (loaded into context here for the common case):
 
 - `tsql-review` first on any `.sql` files (no execution data needed)
-- `sqlwait-review`, `sqltrace-review`, `sqlstats-review`, `query-store-review`, `procstats-review` in parallel (triage breadth)
-- `sqlplan-review` per `.sqlplan` (or `sqlplan-batch` for folders), feeding `sqlplan-index-advisor`
-- `sqlplan-compare` for plan pairs; `sqlplan-deadlock` for deadlock XML
-- `errorlog-review` → `clusterlog-review` → `hadr-health-review` for AG / failover questions
-- `spn-review` for Kerberos / login signals
+- `sqlwait-review`, `sqltrace-review`, `sqlstats-review`, `sqlquerystore-review`, `sqlprocstats-review` in parallel (triage breadth)
+- `sqlplan-review` per `.sqlplan` (or `sqlplan-batch` for folders), feeding `sqlindex-advisor`
+- `sqlplan-compare` for plan pairs; `sqldeadlock-review` for deadlock XML
+- `sqlerrorlog-review` → `sqlclusterlog-review` → `sqlhadr-review` for AG / failover questions
+- `sqlspn-review` for Kerberos / login signals
 
-Dynamic edges open during the walk — e.g., `sqlplan-review` firing S9 opens an edge to `query-store-review` for plan-instability confirmation even when Query Store is not in the initial DAG (resulting in a Missing Artifact entry if no Query Store output is in the input).
+Dynamic edges open during the walk — e.g., `sqlplan-review` firing S9 opens an edge to `sqlquerystore-review` for plan-instability confirmation even when Query Store is not in the initial DAG (resulting in a Missing Artifact entry if no Query Store output is in the input).
 
 `--phases` flag forces tier-1 fixed-phase behavior for environments where DAG variability is undesirable.
 
@@ -121,7 +121,7 @@ Each phase runs on a specific model tier. The default routing minimises cost wit
 Default model assignments (the common case):
 
 - Classification, hypothesis generation, cost summary, follow-up Q&A: **Haiku 4.5**
-- Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlplan-index-advisor, sqlplan-deadlock, clusterlog-review)
+- Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlindex-advisor, sqldeadlock-review, sqlclusterlog-review)
 - Synthesis, conflict detection, deep-dive analysis: **Sonnet 4.6**
 - Adversarial root-cause pass: **Opus 4.7** (cannot be downgraded even on `--model-tier economy` — quality-critical)
 
@@ -221,7 +221,7 @@ Finding C1 — Parameter sniffing on dbo.usp_GetOrders
     - Source: stats-iotime.txt
     - Observed: 1,842,734 logical reads on Orders
     - Threshold: > 1,000,000 = Warning
-  - query-store-review Q7 corroborates
+  - sqlquerystore-review Q7 corroborates
     - Source: query-store-output.txt
     - Observed: 3 plans for query_hash 0xA1B2C3D4 over 24h
     - Threshold: >= 2 distinct plans in same window = plan instability
@@ -252,7 +252,7 @@ Recommendations without explicit rollback are rejected — "just do this" is not
 After the primary hypothesis is identified, run a deliberate pass that **tries to disprove it**. Load `references/adversarial-prompts.md` and apply the relevant template for the hypothesis class. Examples:
 
 - Primary: parameter sniffing. Adversarial probe: "If parameter sniffing was the root cause, the wait profile should be CPU-dominant. If wait stats show PAGEIOLATCH_SH dominant instead, the bottleneck is I/O — reconsider whether sniffing matters here."
-- Primary: missing index. Adversarial probe: "If a missing index was the root cause, fixing it should drop logical reads ~10x. If query-store-review shows the same plan was fast last month, the regression is something else — stats, parameter values, or a config change."
+- Primary: missing index. Adversarial probe: "If a missing index was the root cause, fixing it should drop logical reads ~10x. If sqlquerystore-review shows the same plan was fast last month, the regression is something else — stats, parameter values, or a config change."
 - Primary: deadlock from lock order. Adversarial probe: "If lock order was the cause, the deadlock graph should show two transactions taking the same two resources in opposite orders. If a third resource appears, the pattern may be different (escalation, page-level conflict)."
 
 If the contradicting evidence is strong, surface the alternative hypothesis at equal or higher priority. If weak, note it as a caveat in the report. The adversarial pass is mandatory in tier 1 — it catches the most common failure mode (confirmation bias on the first hypothesis).
@@ -358,7 +358,7 @@ The reference files are progressive disclosure — keep SKILL.md compact; load d
 |---------|---------------|---------------|--------|
 
 ### Recommendation Conflicts
-[If any: e.g., sqlplan-index-advisor recommends index X but sqlplan-batch shows that table over-indexed.
+[If any: e.g., sqlindex-advisor recommends index X but sqlplan-batch shows that table over-indexed.
 Each conflict explicit with both sides cited. Empty section if no conflicts detected.]
 
 ### Consolidated Fix Priority
@@ -375,8 +375,8 @@ Each conflict explicit with both sides cited. Empty section if no conflicts dete
 ### Skills Skipped
 | Skill | Reason |
 |-------|--------|
-| sqlplan-deadlock | No deadlock XML in input |
-| clusterlog-review | No CLUSTER.LOG in input |
+| sqldeadlock-review | No deadlock XML in input |
+| sqlclusterlog-review | No CLUSTER.LOG in input |
 | ... | ... |
 
 ### Verification — After Deploying Fixes
@@ -455,7 +455,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 ## Notes
 
 - The orchestrator never opens a network connection to SQL Server. The capture-bundle generator (tier 3) emits scripts for the user to run; result files come back to the orchestrator as inputs.
-- If a single artifact triggers multiple skills (e.g., a `.sqlplan` for both sqlplan-review and sqlplan-index-advisor), invoke them in the documented order (review before advisor) so the advisor can reference the review's findings.
+- If a single artifact triggers multiple skills (e.g., a `.sqlplan` for both sqlplan-review and sqlindex-advisor), invoke them in the documented order (review before advisor) so the advisor can reference the review's findings.
 - For inputs where classification is ambiguous (e.g., a `.txt` that matches two skill signals), prefer the higher-cost skill — analysis cost is bounded by the cost budget but missed findings are unbounded.
 - The "Skills Skipped" section is required so the user can see at a glance which areas had no input data. Missing data is itself a finding.
 
@@ -467,12 +467,12 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlwait-review` — Server-wide wait statistics. The cheapest informative skill for "server feels slow" with no other artifacts.
 - `/sqlplan-review` — Single-plan deep-dive. The orchestrator routes per `.sqlplan` after triage skills complete.
 - `/sqlplan-compare` — Two-plan diff for regression cases. Routed when two plans for the same query are provided.
-- `/sqlplan-index-advisor` — Index DDL recommendations. Runs after sqlplan-review to consolidate suggestions.
-- `/sqlplan-deadlock` — Deadlock graph analysis. Routed on `.xdl` / system_health XE output.
+- `/sqlindex-advisor` — Index DDL recommendations. Runs after sqlplan-review to consolidate suggestions.
+- `/sqldeadlock-review` — Deadlock graph analysis. Routed on `.xdl` / system_health XE output.
 - `/sqlplan-batch` — Folder-of-plans dashboard. Routed when more than ~10 `.sqlplan` files are present, instead of per-plan sqlplan-review.
-- `/query-store-review` — Query Store DMV analysis. Routed when Query Store output is present; informs regression hypotheses.
-- `/procstats-review` — Procedure / trigger / function runtime stats. Routed when `sys.dm_exec_procedure_stats` output is present.
-- `/hadr-health-review` — Always On AG state. Routed for AG topology questions or failover root cause.
-- `/clusterlog-review` — WSFC cluster log. Routed alongside hadr-health-review and errorlog-review for failover analysis.
-- `/errorlog-review` — SQL Server ERRORLOG. Routed for outage timelines, login bursts, memory pressure, I/O warnings.
-- `/spn-review` — SPN and Kerberos delegation. Routed when Kerberos / login failure signals are present.
+- `/sqlquerystore-review` — Query Store DMV analysis. Routed when Query Store output is present; informs regression hypotheses.
+- `/sqlprocstats-review` — Procedure / trigger / function runtime stats. Routed when `sys.dm_exec_procedure_stats` output is present.
+- `/sqlhadr-review` — Always On AG state. Routed for AG topology questions or failover root cause.
+- `/sqlclusterlog-review` — WSFC cluster log. Routed alongside sqlhadr-review and sqlerrorlog-review for failover analysis.
+- `/sqlerrorlog-review` — SQL Server ERRORLOG. Routed for outage timelines, login bursts, memory pressure, I/O warnings.
+- `/sqlspn-review` — SPN and Kerberos delegation. Routed when Kerberos / login failure signals are present.

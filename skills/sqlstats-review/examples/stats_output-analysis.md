@@ -74,7 +74,7 @@
 **[C1] Excessive Scan Count on OrderLines** (I2)
 - Observed: `OrderLines` — scan count **48,291**, logical reads 2,568,900 (90.5% of all reads). The table was accessed 48,291 times — once per row from the outer input.
 - Impact: This is the inner side of a Nested Loops join iterating once per order. At ~53 logical reads per iteration × 48,291 iterations = 2.5M reads. This single pattern accounts for 90% of all I/O in the batch.
-- Fix: `CREATE NONCLUSTERED INDEX IX_OrderLines_OrderId ON dbo.OrderLines (OrderId) INCLUDE (LineTotal, ProductId, Quantity)` — converts each inner-side scan to a seek. Expected reduction: 2,568,900 reads → ~97,000 reads (97% reduction). Run `/sqlplan-index-advisor` on the execution plan for the full DDL.
+- Fix: `CREATE NONCLUSTERED INDEX IX_OrderLines_OrderId ON dbo.OrderLines (OrderId) INCLUDE (LineTotal, ProductId, Quantity)` — converts each inner-side scan to a seek. Expected reduction: 2,568,900 reads → ~97,000 reads (97% reduction). Run `/sqlindex-advisor` on the execution plan for the full DDL.
 
 **[C2] Worktable Present — TempDb Spill** (I6)
 - Observed: `Worktable` — scan count 4, logical reads 182,140. SQL Server created a temporary work structure in tempdb for a sort or hash join that exceeded its memory grant.

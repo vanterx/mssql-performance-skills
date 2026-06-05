@@ -92,11 +92,11 @@ Evaluate per-event rows. A check fires if any single event meets its trigger con
 ### X2 — High CPU Query
 - **Trigger:** Any completed query event where `cpu ≥ 5,000 ms`
 - **Severity:** Warning
-- **Fix:** High CPU indicates scans, large sorts, hash joins, or implicit conversions. Use `/sqlplan-review` to find the dominant operator. Use `/sqlplan-index-advisor` for covering index recommendations.
+- **Fix:** High CPU indicates scans, large sorts, hash joins, or implicit conversions. Use `/sqlplan-review` to find the dominant operator. Use `/sqlindex-advisor` for covering index recommendations.
 ### X3 — High Logical Reads Query
 - **Trigger:** Any completed query event where `logical_reads ≥ 100,000` (warning) or `≥ 1,000,000` (critical)
 - **Severity:** Warning (≥ 100 K); Critical (≥ 1 M)
-- **Fix:** Run `/sqlstats-review` on this query's STATISTICS IO output to identify the highest-read table. Run `/sqlplan-index-advisor` to get a covering index. Each 8 KB page read = ~8 MB of data accessed.
+- **Fix:** Run `/sqlstats-review` on this query's STATISTICS IO output to identify the highest-read table. Run `/sqlindex-advisor` to get a covering index. Each 8 KB page read = ~8 MB of data accessed.
 ### X4 — High Write Count
 - **Trigger:** Any completed query event where `writes ≥ 10,000 pages`
 - **Severity:** Warning
@@ -108,7 +108,7 @@ Evaluate per-event rows. A check fires if any single event meets its trigger con
 ### X6 — Lock Timeout Event
 - **Trigger:** Any event with class 54 (`Lock:Timeout`) or XE event `lock_timeout`
 - **Severity:** Warning
-- **Fix:** A session waited for a lock and timed out (LOCK_TIMEOUT setting > 0). The blocking session holds a lock this query needs. Investigate: add a missing index to reduce lock duration, switch to READ_COMMITTED_SNAPSHOT isolation, or use `/sqlplan-deadlock` if deadlock graphs are also present.
+- **Fix:** A session waited for a lock and timed out (LOCK_TIMEOUT setting > 0). The blocking session holds a lock this query needs. Investigate: add a missing index to reduce lock duration, switch to READ_COMMITTED_SNAPSHOT isolation, or use `/sqldeadlock-review` if deadlock graphs are also present.
 ### X7 — Recompile Event
 - **Trigger:** ≥ 3 recompile events (class 37 or 50, XE `sql_statement_recompile`) for the same stored procedure or normalized query within the trace window
 - **Severity:** Warning
@@ -158,7 +158,7 @@ Evaluate aggregated patterns across all events in the trace.
 ### X17 — Top Resource Consumers Summary
 - **Trigger:** Always fires — this check always produces output
 - **Severity:** Info
-- **Fix:** No fix required for this check — it surfaces the top 5 queries by total CPU, total logical reads, and max duration. These are the highest-leverage targets for tuning. Run `/sqlplan-review` and `/sqlplan-index-advisor` on the top 1–3 entries.
+- **Fix:** No fix required for this check — it surfaces the top 5 queries by total CPU, total logical reads, and max duration. These are the highest-leverage targets for tuning. Run `/sqlplan-review` and `/sqlindex-advisor` on the top 1–3 entries.
 ### X18 — Workload Concentration (Few Queries Dominate)
 - **Trigger:** Top 3 normalized query patterns account for > 80% of total CPU time across all events
 - **Severity:** Info
@@ -271,7 +271,7 @@ X5 ✓ (brief reason), X6 ✓ (brief reason) [list every check verified clean wi
 - If the trace window is very short (< 1 minute), high-frequency thresholds may not be meaningful — note the window duration and adjust interpretation.
 - If the trace contains only a few hundred events, workload-level aggregate checks (X13–X18) may not produce statistically meaningful results — note the sample size.
 - If ShowPlan XML events are present (X20), prioritize extracting and reviewing those plans over relying solely on trace metrics.
-- Deadlock events (class 59 / `xml_deadlock_report`) in the trace should be extracted and passed to `/sqlplan-deadlock` — do not attempt full deadlock analysis within this skill.
+- Deadlock events (class 59 / `xml_deadlock_report`) in the trace should be extracted and passed to `/sqldeadlock-review` — do not attempt full deadlock analysis within this skill.
 
 ---
 
@@ -327,11 +327,11 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 - **tsql-review** — Review the source code of the most problematic queries identified by the trace for static anti-patterns (non-sargable predicates, cursor loops, dynamic SQL injection risk).
 - **sqlplan-review** — Analyze the execution plan of the top CPU or read consumers identified here. Capture with `Ctrl+M` in SSMS or from ShowPlan XML events in the trace itself (X20).
-- **sqlplan-index-advisor** — Derive `CREATE INDEX` recommendations from execution plans of the top resource consumers.
+- **sqlindex-advisor** — Derive `CREATE INDEX` recommendations from execution plans of the top resource consumers.
 - **sqlplan-compare** — If X14 (parameter sniffing signal) fires, capture the fast and slow plans and diff them to understand what changes between executions.
 - **sqlstats-review** — Run `SET STATISTICS IO, TIME ON` on the top-CPU or top-reads query identified here for per-table I/O breakdown.
-- **sqlplan-deadlock** — If deadlock events (class 59) appear in the trace, extract the deadlock XML and analyze with this companion skill.
+- **sqldeadlock-review** — If deadlock events (class 59) appear in the trace, extract the deadlock XML and analyze with this companion skill.
 - **sqlplan-batch** — If the trace contains ShowPlan XML for many queries (X20), export those plans to `.sqlplan` files and batch-analyze with this skill.
-- **query-store-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
+- **sqlquerystore-review** — Analyze Query Store data to find regressed queries, plan instability, and the top resource consumers across the whole workload. Use after running a workload capture to prioritize which queries to tune with /sqlplan-review.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

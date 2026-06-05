@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I captured 47 execution plans from a production workload trace this morning. Give me a dashboard showing the top issues across the whole workload.",
-      "expected_output": "Aggregate dashboard with Per-Plan Summary table, Top Findings ranked, Consolidated Missing Indexes (cross-plan dedup), Memory Grant Summary, Cardinality Accuracy Report. References /sqlplan-review and /sqlplan-index-advisor as drill-down paths.",
+      "expected_output": "Aggregate dashboard with Per-Plan Summary table, Top Findings ranked, Consolidated Missing Indexes (cross-plan dedup), Memory Grant Summary, Cardinality Accuracy Report. References /sqlplan-review and /sqlindex-advisor as drill-down paths.",
       "files": []
     },
     {

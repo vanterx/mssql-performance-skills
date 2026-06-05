@@ -31,13 +31,13 @@ Each step is chosen so the next step's input is as well-scoped as possible.
 |------|---------------------------|
 | `tsql-review` first | Static analysis needs no execution data. Defects found here can change which plan you should capture. Cheapest informative skill. |
 | `sqlwait-review` next (breadth) | Identifies the dominant bottleneck class (CPU vs I/O vs lock vs memory vs network) for the whole instance. Cheap to run, narrows the deep-dive scope. |
-| `sqltrace-review` / `sqlstats-review` / `query-store-review` / `procstats-review` in parallel where independent | Each reveals workload-level patterns that change which specific plan deserves deep analysis. They do not depend on each other. |
+| `sqltrace-review` / `sqlstats-review` / `sqlquerystore-review` / `sqlprocstats-review` in parallel where independent | Each reveals workload-level patterns that change which specific plan deserves deep analysis. They do not depend on each other. |
 | `sqlplan-review` per plan (or `sqlplan-batch` for folder) | Deep operator-level analysis. By now we know which plan to focus on. |
-| `sqlplan-index-advisor` | Consolidates missing-index suggestions across plans. Needs sqlplan-review findings to validate. |
+| `sqlindex-advisor` | Consolidates missing-index suggestions across plans. Needs sqlplan-review findings to validate. |
 | `sqlplan-compare` | Only meaningful when two plans for the same query exist. Routed after sqlplan-review identifies the regressed query. |
-| `sqlplan-deadlock` | Specialised input (deadlock XML). Routed if `.xdl` or system_health XE output present. |
-| `errorlog-review` → `clusterlog-review` → `hadr-health-review` | AG / failover root cause chain. Read in this order because ERRORLOG often points at the WSFC event, and WSFC events explain the AG state change. |
-| `spn-review` | Kerberos / login auth specialty. Routed only when login failures or Kerberos signals are present. |
+| `sqldeadlock-review` | Specialised input (deadlock XML). Routed if `.xdl` or system_health XE output present. |
+| `sqlerrorlog-review` → `sqlclusterlog-review` → `sqlhadr-review` | AG / failover root cause chain. Read in this order because ERRORLOG often points at the WSFC event, and WSFC events explain the AG state change. |
+| `sqlspn-review` | Kerberos / login auth specialty. Routed only when login failures or Kerberos signals are present. |
 
 The order is a default. The hypothesis loop can shortcut by jumping straight to the skill most likely to confirm the top hypothesis.
 
@@ -47,13 +47,13 @@ When the user describes a symptom but supplies no (or insufficient) artifacts, t
 
 | Symptom | Probe sequence |
 |---------|----------------|
-| High CPU, low waits | sqlwait-review → procstats-review → sqlplan-review on top consumer |
+| High CPU, low waits | sqlwait-review → sqlprocstats-review → sqlplan-review on top consumer |
 | Slow specific procedure | tsql-review on source → sqlplan-review on plan from cache → sqlstats-review |
-| Recent regression (worked yesterday, slow today) | query-store-review → sqlplan-compare (before/after) |
-| AG failover | errorlog-review → clusterlog-review → hadr-health-review |
-| Deadlock errors | system_health XE (capture) → sqlplan-deadlock |
+| Recent regression (worked yesterday, slow today) | sqlquerystore-review → sqlplan-compare (before/after) |
+| AG failover | sqlerrorlog-review → sqlclusterlog-review → sqlhadr-review |
+| Deadlock errors | system_health XE (capture) → sqldeadlock-review |
 | Mystery slowness | sqlwait-review first (cheapest), then drill based on dominant wait |
-| Login failures / Kerberos | errorlog-review (burst detection) → spn-review |
+| Login failures / Kerberos | sqlerrorlog-review (burst detection) → sqlspn-review |
 | "Server is hung" | sqlwait-review → check blocking signals → sqlplan-review on head blocker |
 
 Each row is also the order in which captures should be taken if the user is still gathering data. The tier-3 capture-bundle generator emits scripts in this order.
@@ -81,12 +81,12 @@ The mandatory Recommendation Conflicts section detects these classes:
 
 | Conflict | How to detect | Resolution rule |
 |----------|---------------|-----------------|
-| Index add vs index unused | sqlplan-index-advisor recommends index on table T; sqlplan-batch usage stats show T over-indexed; an existing index is unused | Recommend dropping the unused index first; reassess advisor output |
+| Index add vs index unused | sqlindex-advisor recommends index on table T; sqlplan-batch usage stats show T over-indexed; an existing index is unused | Recommend dropping the unused index first; reassess advisor output |
 | RECOMPILE hint vs stable plan | tsql-review suggests OPTION RECOMPILE for sniffing; sqlplan-compare history shows plan is stable | Surface contradiction; recommend OPTIMIZE FOR or plan guide instead of RECOMPILE |
 | Index suggested vs covered by computed-column index | Advisor suggests index on column C; sqlplan-review notes plan already uses a covering computed-column index | Reject the suggestion; cite the existing covering index |
 | MAXDOP change vs domain memory | Recommendation: change MAXDOP; domain memory facts.json says current value already matches Microsoft recommendation for server size | Reject the recommendation; cite the facts.json value |
-| Isolation change vs AG mode | Recommendation: enable RCSI; hadr-health-review shows AG in synchronous mode (RCSI on AG primary works but increases version store pressure on secondaries) | Surface side effect; require explicit confirmation |
-| Force plan vs sniffing fix | query-store-review suggests forcing a plan; tsql-review or sqlplan-review identified the root cause as something the forced plan also has | Reject the forced-plan workaround; recommend root-cause fix |
+| Isolation change vs AG mode | Recommendation: enable RCSI; sqlhadr-review shows AG in synchronous mode (RCSI on AG primary works but increases version store pressure on secondaries) | Surface side effect; require explicit confirmation |
+| Force plan vs sniffing fix | sqlquerystore-review suggests forcing a plan; tsql-review or sqlplan-review identified the root cause as something the forced plan also has | Reject the forced-plan workaround; recommend root-cause fix |
 
 The catalogue grows as new conflict patterns are observed. Each conflict in the report must cite both sides explicitly.
 

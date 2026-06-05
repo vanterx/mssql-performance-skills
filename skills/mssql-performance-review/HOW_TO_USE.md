@@ -51,7 +51,7 @@ Eleven cross-cutting primitives distinguish this from a naive dispatcher:
 | Verification checklist | Every recommendation specifies which capture to re-run and the expected metric change |
 | Baseline-diff feedback loop | After deploy, `--baseline` tags each prior recommendation as verified-effective / partial / no-change / regressed-elsewhere |
 
-> **What is a DAG?** A Directed Acyclic Graph is a set of nodes connected by one-way edges with no cycles — you can never follow edges back to where you started. Here the nodes are the 15 sub-skills and the edges are dependencies or findings-triggered follow-ups. *Directed* means `sqlwait-review` finding a missing-index signal can open an edge *to* `sqlplan-index-advisor` — not the other way around. *Acyclic* means the analysis always terminates. The orchestrator walks this graph in dependency order and runs independent nodes in parallel, so a simple input might dispatch 2–3 sub-skills while a complex mixed-artifact input dispatches 8–10.
+> **What is a DAG?** A Directed Acyclic Graph is a set of nodes connected by one-way edges with no cycles — you can never follow edges back to where you started. Here the nodes are the 15 sub-skills and the edges are dependencies or findings-triggered follow-ups. *Directed* means `sqlwait-review` finding a missing-index signal can open an edge *to* `sqlindex-advisor` — not the other way around. *Acyclic* means the analysis always terminates. The orchestrator walks this graph in dependency order and runs independent nodes in parallel, so a simple input might dispatch 2–3 sub-skills while a complex mixed-artifact input dispatches 8–10.
 
 ---
 
@@ -67,7 +67,7 @@ Eleven cross-cutting primitives distinguish this from a naive dispatcher:
 
 ### Use a specialised skill directly when:
 
-- **You have one artifact and you know what it is.** A single `.sqlplan` → `/sqlplan-review`. A wait-stats capture → `/sqlwait-review`. A deadlock XML → `/sqlplan-deadlock`. Faster turnaround; no synthesis overhead.
+- **You have one artifact and you know what it is.** A single `.sqlplan` → `/sqlplan-review`. A wait-stats capture → `/sqlwait-review`. A deadlock XML → `/sqldeadlock-review`. Faster turnaround; no synthesis overhead.
 - **You want the specialised skill's full raw output.** The orchestrator summarises into a Per-Skill section; the specialised skill's standalone output is more detailed.
 - **You're doing a narrow targeted analysis** (e.g., index advisor from a single plan). The orchestrator would still work but adds unnecessary cost.
 
@@ -253,9 +253,9 @@ You've captured: `slow-proc.sql` (procedure source), `slow-proc.sqlplan` (actual
 
 1. **Classification** (Haiku, ~2 sec). The orchestrator identifies each file: tsql source, execution plan, statistics output, wait stats.
 2. **Hypothesis generation** (Haiku, ~3 sec). Two ranked hypotheses: parameter sniffing (MEDIUM) and missing index (MEDIUM).
-3. **Parallel triage** (Haiku × 4 subagents, ~30 sec). tsql-review on the `.sql`, sqlstats-review on stats, sqlwait-review on waits, query-store-review skipped (no QS artifact).
+3. **Parallel triage** (Haiku × 4 subagents, ~30 sec). tsql-review on the `.sql`, sqlstats-review on stats, sqlwait-review on waits, sqlquerystore-review skipped (no QS artifact).
 4. **Plan deep dive** (Sonnet, ~45 sec). sqlplan-review on the `.sqlplan`. Fires S9 (parameter sniffing) and N5 (missing index).
-5. **Index advisor** (Sonnet, ~20 sec). sqlplan-index-advisor consolidates the missing-index suggestion.
+5. **Index advisor** (Sonnet, ~20 sec). sqlindex-advisor consolidates the missing-index suggestion.
 6. **Synthesis** (Sonnet, ~25 sec). Cross-references findings; builds evidence chain; ranks recommendations.
 7. **Adversarial pass** (Opus, ~15 sec). Tries to disprove the parameter-sniffing hypothesis. Wait profile is CPU-dominant (SOS_SCHEDULER_YIELD) — consistent with sniffing. No contradiction.
 8. **Report** (Sonnet, ~5 sec). Renders the full report.
@@ -395,7 +395,7 @@ This is the orchestrator showing its work on disproving its own conclusion. If y
     - Source: stats-iotime.txt (Statement 1, Table 'Orders')
     - Observed: 1,842,734 logical reads
     - Threshold: > 1,000,000 = Warning
-  - query-store-review Q7 corroborates
+  - sqlquerystore-review Q7 corroborates
     - ...
 - Impact: Runtime varies from 200ms to 8s depending on first-compile parameters.
 ```
@@ -408,13 +408,13 @@ Raw outputs from each specialised skill that ran. Used for drill-down when the c
 
 ### 8.6 Cross-Cutting Findings
 
-Findings that span multiple skills. For example: "CXPACKET share will drop after the missing-index fix" — combining sqlwait-review and sqlplan-index-advisor signals.
+Findings that span multiple skills. For example: "CXPACKET share will drop after the missing-index fix" — combining sqlwait-review and sqlindex-advisor signals.
 
 ### 8.7 Recommendation Conflicts
 
 **Mandatory section** — if no conflicts, the orchestrator states "None detected" explicitly. Silent omission isn't acceptable. Conflicts look like:
 
-> sqlplan-index-advisor recommends `IX_A` on table `T`. sqlplan-batch's usage stats show 3 existing unused indexes on `T`. **Conflict:** drop the unused indexes first before adding more.
+> sqlindex-advisor recommends `IX_A` on table `T`. sqlplan-batch's usage stats show 3 existing unused indexes on `T`. **Conflict:** drop the unused indexes first before adding more.
 
 ### 8.8 Consolidated Fix Priority
 
@@ -458,7 +458,7 @@ After your wait period: `/mssql-performance-review --baseline ./state/<this-run>
 
 What the orchestrator would have run if you'd provided more data. Each entry cites the suggested capture script:
 
-> - [ ] Query Store output for `query_hash` of `usp_GetOrders` — would confirm plan instability over time (capture: `skills/query-store-review/scripts/01_capture_queries.sql`)
+> - [ ] Query Store output for `query_hash` of `usp_GetOrders` — would confirm plan instability over time (capture: `skills/sqlquerystore-review/scripts/01_capture_queries.sql`)
 
 ### 8.11 Passed Checks
 
@@ -696,7 +696,7 @@ When the orchestrator detects missing artifacts (or you invoke `/sql-triage` wit
 ├── README.md                       # Generated from assets/bundle-readme-template.md
 ├── 01-wait-stats.sql               # Copy of skills/sqlwait-review/scripts/01_capture_wait_stats.sql
 ├── 02-plan-from-cache.sql          # Copy of skills/sqlplan-review/scripts/01_capture_from_cache.sql
-├── 03-query-store-instability.sql  # Copy of skills/query-store-review/scripts/01_capture_queries.sql
+├── 03-query-store-instability.sql  # Copy of skills/sqlquerystore-review/scripts/01_capture_queries.sql
 ├── PASTE-RESULTS-HERE.md           # Generated from assets/paste-results-template.md
 └── manifest.json                   # Machine-readable bundle metadata
 ```
@@ -944,18 +944,18 @@ The orchestrator composes the 15 specialised review skills. To use a specialised
 - [`/tsql-review`](../tsql-review/) — T-SQL static analysis
 - [`/sqlplan-review`](../sqlplan-review/) — execution plan deep dive
 - [`/sqlplan-compare`](../sqlplan-compare/) — diff two plans
-- [`/sqlplan-index-advisor`](../sqlplan-index-advisor/) — ranked CREATE INDEX script
-- [`/sqlplan-deadlock`](../sqlplan-deadlock/) — deadlock root cause + pattern match
+- [`/sqlindex-advisor`](../sqlindex-advisor/) — ranked CREATE INDEX script
+- [`/sqldeadlock-review`](../sqldeadlock-review/) — deadlock root cause + pattern match
 - [`/sqlplan-batch`](../sqlplan-batch/) — folder of plans, dashboard summary
 - [`/sqlstats-review`](../sqlstats-review/) — STATISTICS IO/TIME parser
 - [`/sqltrace-review`](../sqltrace-review/) — Profiler/XE trace analysis
 - [`/sqlwait-review`](../sqlwait-review/) — wait statistics
-- [`/query-store-review`](../query-store-review/) — Query Store DMV analysis
-- [`/procstats-review`](../procstats-review/) — `sys.dm_exec_procedure_stats` analysis
-- [`/hadr-health-review`](../hadr-health-review/) — Always On AG state
-- [`/clusterlog-review`](../clusterlog-review/) — WSFC CLUSTER.LOG
-- [`/errorlog-review`](../errorlog-review/) — SQL Server ERRORLOG
-- [`/spn-review`](../spn-review/) — SPN / Kerberos delegation
+- [`/sqlquerystore-review`](../sqlquerystore-review/) — Query Store DMV analysis
+- [`/sqlprocstats-review`](../sqlprocstats-review/) — `sys.dm_exec_procedure_stats` analysis
+- [`/sqlhadr-review`](../sqlhadr-review/) — Always On AG state
+- [`/sqlclusterlog-review`](../sqlclusterlog-review/) — WSFC CLUSTER.LOG
+- [`/sqlerrorlog-review`](../sqlerrorlog-review/) — SQL Server ERRORLOG
+- [`/sqlspn-review`](../sqlspn-review/) — SPN / Kerberos delegation
 
 ---
 

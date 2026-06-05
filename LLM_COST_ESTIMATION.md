@@ -39,16 +39,18 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlwait-review` | ~22,600 |
 | `sqltrace-review` | ~7,100 |
 | `sqlstats-review` | ~6,700 |
-| `query-store-review` | ~8,900 |
-| `sqlplan-index-advisor` | ~4,800 |
-| `procstats-review` | ~7,300 |
-| `sqlplan-deadlock` | ~5,200 |
+| `sqlquerystore-review` | ~8,900 |
+| `sqlindex-advisor` | ~4,800 |
+| `sqlprocstats-review` | ~7,300 |
+| `sqldeadlock-review` | ~5,200 |
 | `sqlplan-compare` | ~4,200 |
 | `sqlplan-batch` | ~3,100 |
-| `clusterlog-review` | ~8,800 |
-| `hadr-health-review` | ~7,800 |
-| `errorlog-review` | ~8,800 |
-| `spn-review` | ~7,400 |
+| `sqlclusterlog-review` | ~8,800 |
+| `sqlhadr-review` | ~7,800 |
+| `sqlerrorlog-review` | ~8,800 |
+| `sqlspn-review` | ~7,400 |
+| `sqlmemory-review` | ~5,800 |
+| `sqldiskio-review` | ~4,600 |
 | `mssql-performance-review` | ~7,900 |
 
 ### Your input artifact
@@ -141,7 +143,7 @@ Cost (Sonnet 4.6):
   Total per call:            $0.816
 ```
 
-### Full tuning session (tsql-review → sqlstats-review → sqlplan-review → sqlplan-index-advisor)
+### Full tuning session (tsql-review → sqlstats-review → sqlplan-review → sqlindex-advisor)
 
 ```
 4 skill invocations × ~$0.07–$0.11 each
@@ -173,16 +175,16 @@ For plans above ~100,000 characters, Sonnet 4.6 input cost alone exceeds **$0.30
 
 | Skill | Skill overhead | Typical total input | Cost per call (Sonnet 4.6) |
 |-------|--------------|---------------------|---------------------------|
-| `sqlplan-deadlock` | ~5,200 tok | 10,000–13,000 | **$0.04–$0.06** |
+| `sqldeadlock-review` | ~5,200 tok | 10,000–13,000 | **$0.04–$0.06** |
 | `sqlplan-compare` | ~4,200 tok | 12,000–38,000 | **$0.05–$0.13** |
 | `sqlstats-review` | ~6,700 tok | 12,000–18,000 | **$0.05–$0.07** |
-| `spn-review` (setspn + AD attributes) | ~7,400 tok | 13,000–16,000 | **$0.05–$0.07** |
+| `sqlspn-review` (setspn + AD attributes) | ~7,400 tok | 13,000–16,000 | **$0.05–$0.07** |
 | `sqltrace-review` (small trace, ~500 events) | ~7,100 tok | 15,000–24,000 | **$0.06–$0.10** |
-| `query-store-review` (top 20 queries) | ~8,900 tok | 16,000–22,000 | **$0.06–$0.09** |
-| `errorlog-review` | ~8,800 tok | 16,000–25,000 | **$0.06–$0.10** |
-| `clusterlog-review` | ~8,800 tok | 15,000–26,000 | **$0.06–$0.10** |
-| `hadr-health-review` | ~7,800 tok | 14,000–22,000 | **$0.05–$0.09** |
-| `procstats-review` | ~7,300 tok | 14,000–22,000 | **$0.05–$0.09** |
+| `sqlquerystore-review` (top 20 queries) | ~8,900 tok | 16,000–22,000 | **$0.06–$0.09** |
+| `sqlerrorlog-review` | ~8,800 tok | 16,000–25,000 | **$0.06–$0.10** |
+| `sqlclusterlog-review` | ~8,800 tok | 15,000–26,000 | **$0.06–$0.10** |
+| `sqlhadr-review` | ~7,800 tok | 14,000–22,000 | **$0.05–$0.09** |
+| `sqlprocstats-review` | ~7,300 tok | 14,000–22,000 | **$0.05–$0.09** |
 | `tsql-review` | ~15,000 tok | 21,000–30,000 | **$0.08–$0.12** |
 | `sqlwait-review` (single snapshot) | ~22,600 tok | 27,000–30,000 | **$0.10–$0.12** |
 | `sqlwait-review` (trend, 4+ snapshots) | ~22,600 tok | 31,000–38,000 | **$0.12–$0.16** |
@@ -203,9 +205,9 @@ Output tokens ($15/M on Sonnet 4.6) are significant — a detailed 3,000-token r
 
 **Order of cost (cheapest first):**
 ```
-/sqlplan-deadlock ≈ /sqlplan-compare ≈ /sqlstats-review ≈ /spn-review
-  < /sqltrace-review (small) ≈ /query-store-review ≈ /errorlog-review
-  ≈ /clusterlog-review ≈ /hadr-health-review ≈ /procstats-review
+/sqldeadlock-review ≈ /sqlplan-compare ≈ /sqlstats-review ≈ /sqlspn-review
+  < /sqltrace-review (small) ≈ /sqlquerystore-review ≈ /sqlerrorlog-review
+  ≈ /sqlclusterlog-review ≈ /sqlhadr-review ≈ /sqlprocstats-review
   < /tsql-review < /sqlwait-review < /sqlplan-review (small)
   < /sqlplan-review (large) ≈ /sqltrace-review (large) < /sqlplan-batch
 ```
@@ -242,7 +244,7 @@ For `/sqlplan-batch` across many plans, ask for the executive summary and top 5 
 
 ## Prompt Caching — How It Reduces Repeat Costs
 
-Claude's prompt cache has a **5-minute TTL**. If you run `/sqlplan-review` on plan A, then immediately run `/sqlplan-index-advisor` on the same plan, the 18,400-token SKILL.md for `sqlplan-review` is still cached — but `sqlplan-index-advisor`'s SKILL.md is new. Within one tuning session, skills called multiple times on similar inputs benefit the most from caching.
+Claude's prompt cache has a **5-minute TTL**. If you run `/sqlplan-review` on plan A, then immediately run `/sqlindex-advisor` on the same plan, the 18,400-token SKILL.md for `sqlplan-review` is still cached — but `sqlindex-advisor`'s SKILL.md is new. Within one tuning session, skills called multiple times on similar inputs benefit the most from caching.
 
 Cache write cost: **$3.75/M tokens** (one-time on first call).  
 Cache read cost: **$0.30/M tokens** (on subsequent hits within TTL).
@@ -286,13 +288,13 @@ Call 4 — /sqltrace-review (small XE trace):
   ─────────────────────────────────
   Input:          19,100    Output: 2,000
 
-Call 5 — /errorlog-review:
+Call 5 — /sqlerrorlog-review:
   SKILL.md:        8,800 tokens in
   ERRORLOG text:   3,000 tokens in
   ─────────────────────────────────
   Input:          15,800    Output: 2,000
 
-Call 6 — /hadr-health-review:
+Call 6 — /sqlhadr-review:
   SKILL.md:        7,800 tokens in
   DMV output:      2,000 tokens in
   ─────────────────────────────────
@@ -328,18 +330,20 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/sqlplan-review/SKILL.md` | 69,993 | 18,419 |
 | `skills/tsql-review/SKILL.md` | 56,773 | 14,940 |
 | `skills/mssql-performance-review/SKILL.md` | 30,128 | 7,928 |
-| `skills/hadr-health-review/SKILL.md` | 29,755 | 7,830 |
-| `skills/spn-review/SKILL.md` | 27,960 | 7,358 |
-| `skills/procstats-review/SKILL.md` | 27,612 | 7,266 |
+| `skills/sqlhadr-review/SKILL.md` | 29,755 | 7,830 |
+| `skills/sqlspn-review/SKILL.md` | 27,960 | 7,358 |
+| `skills/sqlprocstats-review/SKILL.md` | 27,612 | 7,266 |
 | `skills/sqltrace-review/SKILL.md` | 26,862 | 7,069 |
 | `skills/sqlstats-review/SKILL.md` | 25,389 | 6,681 |
-| `skills/clusterlog-review/SKILL.md` | 33,533 | 8,824 |
-| `skills/errorlog-review/SKILL.md` | 33,598 | 8,841 |
-| `skills/query-store-review/SKILL.md` | 33,876 | 8,915 |
-| `skills/sqlplan-index-advisor/SKILL.md` | 18,126 | 4,770 |
-| `skills/sqlplan-deadlock/SKILL.md` | 19,780 | 5,205 |
+| `skills/sqlclusterlog-review/SKILL.md` | 33,533 | 8,824 |
+| `skills/sqlerrorlog-review/SKILL.md` | 33,598 | 8,841 |
+| `skills/sqlquerystore-review/SKILL.md` | 33,876 | 8,915 |
+| `skills/sqlindex-advisor/SKILL.md` | 18,126 | 4,770 |
+| `skills/sqldeadlock-review/SKILL.md` | 19,780 | 5,205 |
 | `skills/sqlplan-compare/SKILL.md` | 16,037 | 4,220 |
 | `skills/sqlplan-batch/SKILL.md` | 11,646 | 3,065 |
+| `skills/sqlmemory-review/SKILL.md` | ~22,000 | ~5,800 |
+| `skills/sqldiskio-review/SKILL.md` | ~17,500 | ~4,600 |
 
 `references/check-explanations.md` files are progressive-disclosure reference material — they are **not** loaded into the LLM context automatically. Only `SKILL.md` is loaded by the skill loader. Claude may load `references/check-explanations.md` on demand (e.g., when a user asks "explain check X" or wants deeper fix-option detail).
 
@@ -350,16 +354,16 @@ If a user asks "explain check X" — for example, "explain S21" or "explain N44"
 | `skills/sqlplan-review/references/check-explanations.md` | 161,371 | 42,466 | On demand |
 | `skills/tsql-review/references/check-explanations.md` | 120,038 | 31,589 | On demand |
 | `skills/sqlwait-review/references/check-explanations.md` | 94,164 | 24,780 | On demand |
-| `skills/spn-review/references/check-explanations.md` | 62,181 | 16,363 | On demand |
-| `skills/clusterlog-review/references/check-explanations.md` | 61,286 | 16,128 | On demand |
+| `skills/sqlspn-review/references/check-explanations.md` | 62,181 | 16,363 | On demand |
+| `skills/sqlclusterlog-review/references/check-explanations.md` | 61,286 | 16,128 | On demand |
 | `skills/sqltrace-review/references/check-explanations.md` | 43,529 | 11,455 | On demand |
 | `skills/sqlstats-review/references/check-explanations.md` | 43,103 | 11,343 | On demand |
-| `skills/query-store-review/references/check-explanations.md` | 42,067 | 11,070 | On demand |
-| `skills/errorlog-review/references/check-explanations.md` | 49,198 | 12,947 | On demand |
-| `skills/hadr-health-review/references/check-explanations.md` | 39,737 | 10,457 | On demand |
-| `skills/procstats-review/references/check-explanations.md` | 33,982 | 8,943 | On demand |
-| `skills/sqlplan-deadlock/references/check-explanations.md` | 24,632 | 6,482 | On demand |
+| `skills/sqlquerystore-review/references/check-explanations.md` | 42,067 | 11,070 | On demand |
+| `skills/sqlerrorlog-review/references/check-explanations.md` | 49,198 | 12,947 | On demand |
+| `skills/sqlhadr-review/references/check-explanations.md` | 39,737 | 10,457 | On demand |
+| `skills/sqlprocstats-review/references/check-explanations.md` | 33,982 | 8,943 | On demand |
+| `skills/sqldeadlock-review/references/check-explanations.md` | 24,632 | 6,482 | On demand |
 | `skills/sqlplan-compare/references/check-explanations.md` | 24,014 | 6,320 | On demand |
-| `skills/sqlplan-index-advisor/references/check-explanations.md` | 9,952 | 2,619 | On demand |
+| `skills/sqlindex-advisor/references/check-explanations.md` | 9,952 | 2,619 | On demand |
 | `skills/sqlplan-batch/references/check-explanations.md` | 10,878 | 2,863 | On demand |
 | `skills/mssql-performance-review/references/check-explanations.md` | 10,481 | 2,758 | On demand |

@@ -129,11 +129,11 @@ import type { SkillMeta } from "./skill-loader.js";
 
 export const SKILLS: SkillMeta[] = [
   {
-    "name": "clusterlog-review",
+    "name": "sqlclusterlog-review",
     "description": "Analyzes Windows Server Failover Cluster...",
-    "triggers": ["/clusterlog-review"],
+    "triggers": ["/sqlclusterlog-review"],
     "checkCount": 30,
-    "content": "---\r\nname: clusterlog-review\r\n..."   // full raw SKILL.md
+    "content": "---\r\nname: sqlclusterlog-review\r\n..."   // full raw SKILL.md
   },
   // ... 15 more entries, sorted alphabetically
 ];
@@ -277,17 +277,17 @@ The 16 skills in alphabetical order:
 
 | # | Name | Checks |
 |---|------|--------|
-| 1 | clusterlog-review | 30 |
-| 2 | errorlog-review | 33 |
-| 3 | hadr-health-review | 27 |
+| 1 | sqlclusterlog-review | 30 |
+| 2 | sqlerrorlog-review | 33 |
+| 3 | sqlhadr-review | 27 |
 | 4 | mssql-performance-review | 0 (dispatcher) |
-| 5 | procstats-review | 25 |
-| 6 | query-store-review | 32 |
-| 7 | spn-review | 40 |
+| 5 | sqlprocstats-review | 25 |
+| 6 | sqlquerystore-review | 32 |
+| 7 | sqlspn-review | 40 |
 | 8 | sqlplan-batch | 0 (dispatcher) |
 | 9 | sqlplan-compare | 20 |
-| 10 | sqlplan-deadlock | 16 |
-| 11 | sqlplan-index-advisor | 8 |
+| 10 | sqldeadlock-review | 16 |
+| 11 | sqlindex-advisor | 8 |
 | 12 | sqlplan-review | 108 |
 | 13 | sqlstats-review | 27 |
 | 14 | sqltrace-review | 25 |
@@ -349,17 +349,17 @@ The routing table is a static `Record<string, string[]>` at the top of the file:
 ```ts
 const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   tsql:        ["tsql-review"],
-  sqlplan:     ["sqlplan-review", "sqlplan-index-advisor"],
-  deadlock:    ["sqlplan-deadlock"],
+  sqlplan:     ["sqlplan-review", "sqlindex-advisor"],
+  deadlock:    ["sqldeadlock-review"],
   waits:       ["sqlwait-review"],
   trace:       ["sqltrace-review"],
   stats:       ["sqlstats-review"],
-  querystore:  ["query-store-review"],
-  procstats:   ["procstats-review"],
-  hadr:        ["hadr-health-review"],
-  clusterlog:  ["clusterlog-review"],
-  errorlog:    ["errorlog-review"],
-  spn:         ["spn-review"],
+  querystore:  ["sqlquerystore-review"],
+  procstats:   ["sqlprocstats-review"],
+  hadr:        ["sqlhadr-review"],
+  clusterlog:  ["sqlclusterlog-review"],
+  errorlog:    ["sqlerrorlog-review"],
+  spn:         ["sqlspn-review"],
   mixed:       ["mssql-performance-review"],
 };
 ```
