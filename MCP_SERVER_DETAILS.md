@@ -132,7 +132,7 @@ export const SKILLS: SkillMeta[] = [
     "name": "clusterlog-review",
     "description": "Analyzes Windows Server Failover Cluster...",
     "triggers": ["/clusterlog-review"],
-    "checkCount": 25,
+    "checkCount": 30,
     "content": "---\r\nname: clusterlog-review\r\n..."   // full raw SKILL.md
   },
   // ... 15 more entries, sorted alphabetically
@@ -277,24 +277,24 @@ The 16 skills in alphabetical order:
 
 | # | Name | Checks |
 |---|------|--------|
-| 1 | clusterlog-review | 25 |
-| 2 | errorlog-review | 28 |
-| 3 | hadr-health-review | 22 |
+| 1 | clusterlog-review | 30 |
+| 2 | errorlog-review | 33 |
+| 3 | hadr-health-review | 27 |
 | 4 | mssql-performance-review | 0 (dispatcher) |
-| 5 | procstats-review | 20 |
-| 6 | query-store-review | 25 |
-| 7 | spn-review | 30 |
+| 5 | procstats-review | 25 |
+| 6 | query-store-review | 32 |
+| 7 | spn-review | 40 |
 | 8 | sqlplan-batch | 0 (dispatcher) |
-| 9 | sqlplan-compare | 10 |
-| 10 | sqlplan-deadlock | 8 |
+| 9 | sqlplan-compare | 20 |
+| 10 | sqlplan-deadlock | 16 |
 | 11 | sqlplan-index-advisor | 8 |
-| 12 | sqlplan-review | 99 |
-| 13 | sqlstats-review | 22 |
-| 14 | sqltrace-review | 20 |
-| 15 | sqlwait-review | 40 |
-| 16 | tsql-review | 78 |
+| 12 | sqlplan-review | 108 |
+| 13 | sqlstats-review | 27 |
+| 14 | sqltrace-review | 25 |
+| 15 | sqlwait-review | 44 |
+| 16 | tsql-review | 85 |
 
-**Total: ~435 checks across 14 analytical skills + 2 dispatcher skills**
+**Total: 520 checks across 14 analytical skills + 2 dispatcher skills**
 
 ---
 

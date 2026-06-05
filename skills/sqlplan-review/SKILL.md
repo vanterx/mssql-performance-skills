@@ -761,7 +761,7 @@ The file is 3,500+ lines. Navigate with its Contents table at the top:
 - **Before You Start** — key concepts (execution plans, statistics, memory grants)
 - **Statement-Level Checks (S1–S33)** — XML attribute examples per check
 - **Node-Level Checks (N1–N66)** — ranked fix options per check
-- **Quick Reference Tables** — severity/trigger summary for all 99 checks
+- **Quick Reference Tables** — severity/trigger summary for all 108 checks
 
 Load `references/output-format.md` when producing the Prioritized Fix Sequence,
 Passed Checks table, or parameter-sniffing fix options in the final report.

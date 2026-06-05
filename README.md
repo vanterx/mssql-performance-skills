@@ -1386,7 +1386,7 @@ See [`skills/sqlplan-review/examples/horrible-analysis.md`](skills/sqlplan-revie
 | I1–I18 | 18 | sqlstats-review | Statistics IO checks |
 | W1–W9 | 9 | sqlstats-review | Statistics time/wait checks |
 | X1–X25 | 25 | sqltrace-review | Trace event-level + workload |
-| V1–V43 | 43 | sqlwait-review | Wait statistics + trend analysis + IQP/PSP/ADR waits |
+| V1–V44 | 44 | sqlwait-review | Wait statistics + trend analysis + IQP/PSP/ADR waits |
 | S1–S36 | 36 | sqlplan-review | Execution plan — statement-level |
 | N1–N72 | 72 | sqlplan-review | Execution plan — node-level |
 | C1–C20 | 20 | sqlplan-compare | Plan regression checks |

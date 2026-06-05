@@ -25,5 +25,5 @@ fix options, or code examples. Also when the user asks "explain check XX"
 or "what does this finding mean?"
 
 **What it covers:** The full five-part explanation (What it means / How to
-spot it / Example / Fix options / Related checks) for all 99 checks plus the
+spot it / Example / Fix options / Related checks) for all 108 checks plus the
 Quick Reference table.
