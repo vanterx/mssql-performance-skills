@@ -697,6 +697,7 @@ declare -A P2S=(
     [K]="sqlspn-review"      [C]="sqlplan-compare"
     [P]="sqldeadlock-review" [D]="sqlindex-advisor"
     [O]="sqlmemory-review"   [Z]="sqldiskio-review"
+    [A]="sqlencryption-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
