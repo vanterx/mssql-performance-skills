@@ -1,8 +1,9 @@
 # sqlencryption-review — Check Explanations
 
-Plain-English explanation of all 56 A-checks. Load this file when a user asks "explain check A-N", "why does A-N fire?", "how do I fix A-N?", or needs deeper context beyond the three-part summary in SKILL.md.
+Plain-English explanation of all 80 A-checks. Load this file when a user asks "explain check A-N", "why does A-N fire?", "how do I fix A-N?", or needs deeper context beyond the three-part summary in SKILL.md.
 
 For foundational encryption concepts (symmetric/asymmetric, TLS versions, key hierarchy, PCI-DSS/HIPAA/GDPR), read `concepts.md`.
+For step-by-step operational guides (TDE setup, TLS config, key rotation, crypto-shredding, disaster recovery), read the appropriate `howto-*.md` file in this directory.
 
 ---
 
@@ -82,6 +83,30 @@ For foundational encryption concepts (symmetric/asymmetric, TLS versions, key hi
 | A54 | Compliance | Sensitive-pattern columns without encryption | Warning |
 | A55 | Compliance | Non-FIPS algorithm in encryption hierarchy | Critical / Warning |
 | A56 | Compliance | No audit for cryptographic key access | Info |
+| A57 | TLS Hardening | TLS 1.0 or 1.1 enabled at OS level | Warning |
+| A58 | TLS Hardening | Weak TLS cipher suites enabled | Warning |
+| A59 | TLS Hardening | TLS 1.3 not enforced on SQL 2022+ | Info |
+| A60 | TLS Hardening | IPsec not configured as compensating control | Info |
+| A61 | TLS Hardening | Kerberos armoring (FAST) not enforced | Info |
+| A62 | TLS Hardening | Named Pipes protocol enabled in production | Warning |
+| A63 | AE Advanced | Enclave attestation URL not configured | Warning |
+| A64 | AE Advanced | AE driver version incompatible with enclave | Warning |
+| A65 | AE Advanced | CEK caching disabled or misconfigured | Info |
+| A66 | AE Advanced | Enclave configured but no enclave-enabled queries | Info |
+| A67 | AE Advanced | Relaxed enclave attestation in production | Warning |
+| A68 | Key Lifecycle | DMK/SMK backup password lacks complexity | Warning |
+| A69 | Key Lifecycle | TLS cert not configured for auto-enrollment | Info |
+| A70 | Key Lifecycle | No key archival or escrow procedure | Warning |
+| A71 | Key Lifecycle | TDE scan I/O impact never baselined | Info |
+| A72 | Key Lifecycle | Full-recovery DB without log backup encryption | Info |
+| A73 | Ledger | Ledger not enabled on compliance database | Info |
+| A74 | Ledger | Ledger digest not configured for auto-storage | Warning |
+| A75 | Ledger | Ledger hash algorithm not SHA-256 | Info |
+| A76 | Ledger | Ledger verification not scheduled | Warning |
+| A77 | Azure | TDE protector key vault in different region | Warning |
+| A78 | Azure | Double encryption not enabled | Info |
+| A79 | Azure | Enclave attestation shared across tenants | Warning |
+| A80 | Azure | Audit logs not encrypted at rest | Info |
 
 ---
 
@@ -1553,3 +1578,463 @@ WHERE ag.audit_action_name IN ('SCHEMA_OBJECT_ACCESS_GROUP', 'DATABASE_OBJECT_AC
 3. For even more targeted coverage, add explicit audit actions on specific objects:
    `ADD (SELECT, INSERT, UPDATE, DELETE ON OBJECT::[schema].[encrypted_table] BY [public])`
 4. Verify audit is writing: `SELECT * FROM sys.fn_get_audit_file('D:\AuditLogs\*.sqlaudit', DEFAULT, DEFAULT)`
+
+---
+
+## A57–A62: TLS and Network Encryption Hardening
+
+### A57 — TLS 1.0 / 1.1 enabled at OS level
+
+**What it means**
+SChannel (Windows Secure Channel) is the TLS implementation used by SQL Server. If TLS 1.0 or 1.1 is enabled at the Windows level, SQL Server will negotiate these protocols with clients that request them — even if ForceEncryption is enabled. TLS 1.0 has been prohibited by PCI-DSS since 2018 and is vulnerable to downgrade attacks (POODLE, BEAST). TLS 1.1 lacks protocol-level fixes for known weaknesses.
+
+**How to spot it**
+```sql
+-- Check via xp_regread (requires sysadmin)
+EXEC xp_regread N'HKEY_LOCAL_MACHINE',
+    N'SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server',
+    N'Enabled';
+-- 1 = enabled, NULL or 0 = disabled/not configured
+
+-- Also check SQL Server ERRORLOG for TLS version messages
+-- "The certificate [thumbprint] was successfully loaded for encryption" followed by TLS version
+```
+
+External verification: `nmap --script ssl-enum-ciphers -p 1433 <host>` — lists all TLS versions offered.
+
+**Fix options**
+1. Set registry keys via PowerShell: `Set-ItemProperty -Path 'HKLM:\SYSTEM\...\TLS 1.0\Server' -Name 'Enabled' -Value 0 -Type DWord`
+2. Set `DisabledByDefault = 1` for TLS 1.0 and TLS 1.1
+3. Restart SQL Server
+4. Verify: `openssl s_client -tls1_0 -connect <host>:1433` should fail
+
+**Related checks:** A26 (ForceEncryption), A28 (self-signed TLS cert), A59 (TLS 1.3)
+
+---
+
+### A58 — Weak TLS cipher suites enabled
+
+**What it means**
+Even with TLS 1.2 and a strong certificate, weak cipher suites (RC4, 3DES, NULL, EXPORT) can be negotiated if they are enabled in the SChannel cipher suite order. An attacker who can force a downgrade to a weak cipher can break the encryption. The cipher suite order is managed centrally via Group Policy or locally via registry.
+
+**How to spot it**
+External scan: `nmap --script ssl-enum-ciphers -p 1433 <host>` — look for RC4, 3DES, DES, NULL, EXPORT ciphers in the output.
+
+GPO check: `gpresult /h gpo.html` → Computer Configuration → Administrative Templates → Network → SSL Configuration Settings → SSL Cipher Suite Order.
+
+**Fix options**
+1. Configure cipher suite order via GPO to include only strong ciphers: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`, `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`, `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`, etc.
+2. Disable RC4 completely via registry: `HKLM\...\SCHANNEL\Ciphers\RC4 128/128\Enabled = 0`
+3. Run `gpupdate /force` and restart SQL Server
+4. Re-scan to confirm weak ciphers no longer offered
+
+**Related checks:** A57 (TLS versions), A59 (TLS 1.3)
+
+---
+
+### A59 — TLS 1.3 not enforced on SQL 2022+
+
+**What it means**
+SQL Server 2022 on Windows Server 2022+ supports TLS 1.3, which provides improved handshake performance (1-RTT vs 2-RTT for TLS 1.2), mandatory forward secrecy, and removes all legacy algorithms. If TLS 1.3 is available but not enforced, the server negotiates TLS 1.2 or lower, missing out on these protections.
+
+**How to spot it**
+Check in SQL Server ERRORLOG for "TLS 1.2" as the highest negotiated protocol. Or external: `openssl s_client -tls1_3 -connect <host>:1433` — if it falls back to TLS 1.2, TLS 1.3 is not enforced.
+
+**Fix options**
+1. Verify Windows Server 2022+ and SQL Server 2022+
+2. Ensure TLS 1.3 is enabled in SChannel: `HKLM\...\SCHANNEL\Protocols\TLS 1.3\Server\Enabled = 1`
+3. Update all client drivers to versions supporting TLS 1.3 (ODBC 18+, JDBC 12.4+, .NET 8+)
+4. Restart SQL Server and verify negotiation
+
+**Related checks:** A57 (legacy TLS)
+
+---
+
+### A60 — IPsec not configured as compensating control
+
+**What it means**
+When TLS encryption cannot be immediately enforced (legacy applications, driver incompatibilities), IPsec provides network-layer encryption on TCP port 1433. IPsec encrypts all traffic between the application server and SQL Server regardless of TLS configuration. It is an acceptable compensating control for compliance audits.
+
+**How to spot it**
+Check Windows Firewall Connection Security Rules: `Get-NetIPsecRule | Where-Object {$_.LocalPort -eq 1433}`. If no rules exist, IPsec is not configured for SQL traffic.
+
+**Fix options**
+1. `New-NetIPsecRule -DisplayName "SQL TLS Fallback" -LocalPort 1433 -Protocol TCP -RequireEncryption -Authentication RequireAuthDomain`
+2. Test: `netsh ipsec dynamic show mmsas`
+3. Document as compensating control in compliance evidence
+
+**Related checks:** A26 (ForceEncryption), A27 (unencrypted connections)
+
+---
+
+### A61 — Kerberos armoring (FAST) not enforced
+
+**What it means**
+Kerberos armoring (FAST / RFC 6113) protects the Kerberos pre-authentication exchange from offline brute-force attacks. Without FAST, an attacker who captures a Kerberos AS-REQ can attempt to crack the user's password from the encrypted timestamp. This weakens the authentication layer that TLS depends on.
+
+**How to spot it**
+Check Group Policy: `Computer Configuration → Administrative Templates → System → Kerberos → Support for Kerberos armoring (FAST)`. Verify with `klist get krbtgt` showing `Armor: yes`.
+
+**Fix options**
+1. Requires domain functional level Windows Server 2012+
+2. Enable via GPO: `Support for Kerberos armoring = Enabled and require armoring`
+3. `gpupdate /force` on all SQL Server and domain controllers
+
+**Related checks:** `/sqlspn-review` (K1–K40 for SPN/Kerberos config)
+
+---
+
+### A62 — Named Pipes protocol enabled in production
+
+**What it means**
+Named Pipes transport is not protected by TLS (TLS applies only to TCP/IP). Data traverses SMB/CIFS, which may or may not be encrypted depending on SMB encryption configuration. Named Pipes can be accessed by any host on the same network segment with SMB access.
+
+**How to spot it**
+SQL Server Configuration Manager → SQL Server Network Configuration → Protocols for [Instance] → Named Pipes = Enabled. OR check registry: `sys.dm_server_registry` for `SuperSocketNetLib\Np`.
+
+**Fix options**
+1. Disable in SQL Server Configuration Manager → Named Pipes = Disabled
+2. If required for legacy apps, restrict to local connections and enable SMB Encryption: `Set-SmbServerConfiguration -EncryptData $true`
+3. Ensure all applications use TCP/IP
+
+**Related checks:** A26, A27 (TLS enforcement)
+
+---
+
+## A63–A67: Always Encrypted Advanced
+
+### A63 — Enclave attestation URL not configured
+
+**What it means**
+When a secure enclave is enabled, the client driver must verify the enclave's identity before sending plaintext data for in-enclave computation. Without a configured attestation URL, the client cannot perform this verification, defeating the purpose of enclave attestation.
+
+**How to spot it**
+Check client connection strings for `Enclave Attestation Url` parameter. Verify attestation endpoint is reachable: `Invoke-WebRequest https://<attest-server>/attest/SgxEnclave`.
+
+**Fix options**
+1. Deploy MAA (Azure) or HGS (on-premises)
+2. Add to connection string: `Enclave Attestation Url=https://<attest-server>/attest/SgxEnclave`
+3. Test: `SELECT GETDATE()` with enclave-enabled connection
+4. Monitor ERRORLOG for attestation failures
+
+**Related checks:** A12 (enclave setup), A67 (relaxed attestation)
+
+---
+
+### A64 — Always Encrypted driver version incompatible
+
+**What it means**
+Older SQL Server drivers lack support for secure enclaves, may use weaker key exchange, and lack CEK caching. They cause excessive AKV round-trips and prevent enclave computations.
+
+**How to spot it**
+```sql
+SELECT session_id, program_name FROM sys.dm_exec_sessions
+WHERE program_name LIKE '%ODBC%' OR program_name LIKE '%JDBC%' OR program_name LIKE '%SqlClient%';
+```
+Check driver versions: ODBC < 17.10, JDBC < 12.2, .NET SqlClient < 5.0 lack full enclave support.
+
+**Fix options**
+1. ODBC Driver 18+, JDBC 12.4+, Microsoft.Data.SqlClient 5.2+
+2. Update connection strings with `Column Encryption Setting=Enabled`
+3. Test all AE queries after update
+
+**Related checks:** A10 (no enclave for randomized columns)
+
+---
+
+### A65 — CEK caching disabled or misconfigured
+
+**What it means**
+Without CEK caching, the driver contacts AKV/HSM to decrypt the CEK on every new connection — adding 50-200 ms latency per connection and AKV API costs. CEK caching with a 2-hour TTL stores the decrypted CEK in the driver's memory.
+
+**How to spot it**
+Check application connection settings for CEK cache TTL. Monitor AKV API call volume per SQL Server connection count.
+
+**Fix options**
+1. ODBC: `Column Encryption Key Cache Time-To-Live=7200`
+2. JDBC: `columnEncryptionKeyCacheTtl=7200`
+3. .NET: `SqlConnection.ColumnEncryptionKeyCacheTtl = TimeSpan.FromHours(2)`
+4. Verify AKV call reduction after enabling
+
+**Related checks:** A64 (driver version)
+
+---
+
+### A66 — Enclave configured but no enclave-enabled queries
+
+**What it means**
+Enabling a secure enclave reserves VBS memory and requires attestation infrastructure. If no workloads actually use enclave computations (LIKE, BETWEEN, range queries on randomized columns), this overhead provides no benefit.
+
+**How to spot it**
+```sql
+SELECT value_in_use FROM sys.configurations WHERE name = 'column encryption enclave type';
+-- 0 = off, 1 = VBS. If 1 but no AE columns use RANDOMIZED + enclave queries, the enclave is unused.
+```
+
+**Fix options**
+1. Audit AE columns for candidates that would benefit from enclave queries
+2. If none exist: `EXEC sp_configure 'column encryption enclave type', 0; RECONFIGURE`
+3. Test AE queries after disabling
+
+**Related checks:** A10 (randomized without enclave), A12 (enclave not configured)
+
+---
+
+### A67 — Relaxed enclave attestation in production
+
+**What it means**
+Relaxed attestation mode means the client accepts any process claiming to be the enclave without cryptographic verification. A compromised host can intercept enclave computations and read plaintext. Only appropriate for development.
+
+**How to spot it**
+Check HGS attestation mode: `Get-HgsAttestationPolicy`. `AttestationMode = None` means relaxed. Or check if MAA/attestation URL is missing from client connection strings.
+
+**Fix options**
+1. Deploy HGS with TPM or host key attestation
+2. Register SQL Server with HGS: `Set-HgsServer -HgsServerName <hgs_fqdn>`
+3. Update connection strings with proper attestation URL
+4. Verify attestation works: `SELECT GETDATE()`
+
+**Related checks:** A12 (enclave setup), A63 (attestation URL)
+
+---
+
+## A68–A72: Operational Key Lifecycle
+
+### A68 — DMK/SMK backup password lacks complexity
+
+**What it means**
+The DMK/SMK backup password is the only protection for the backed-up key file. A weak password (< 14 chars, no special chars) can be brute-forced, giving an attacker full access to the key hierarchy.
+
+**How to spot it**
+Review documented backup procedures, SQL Agent job text, or password vault entries for password complexity. No DMV query can check this.
+
+**Fix options**
+1. Re-backup with strong password: `BACKUP MASTER KEY TO FILE = '...' ENCRYPTION BY PASSWORD = '<32+ char random string with mixed case, digits, special chars>'`
+2. Store in enterprise password vault with access controls
+3. Enforce password policy minimum: 20+ characters, all character classes
+
+**Related checks:** A44 (DMK backup), A47 (SMK backup)
+
+---
+
+### A69 — TLS cert not configured for auto-enrollment
+
+**What it means**
+AD CS auto-enrollment automatically renews TLS certificates before expiry, preventing certificate-expiry outages. Manual certificate management is the primary cause of A30 findings.
+
+**How to spot it**
+Check Group Policy: `Computer Configuration → Windows Settings → Security Settings → Public Key Policies → Certificate Services Client - Auto-Enrollment` — verify Enabled. Check AD CS template configured for the SQL Server.
+
+**Fix options**
+1. Create AD CS template with auto-enrollment permission for SQL Server computer accounts
+2. Enable auto-enrollment via GPO
+3. `certutil -pulse` to trigger enrollment; verify new cert in `certlm.msc` → Personal store
+
+**Related checks:** A30 (TLS cert expiry)
+
+---
+
+### A70 — No key archival or escrow procedure
+
+**What it means**
+Without a documented key escrow procedure, the organization cannot guarantee key recovery if primary custodians are unavailable. PCI-DSS 3.7.6 mandates split-knowledge and dual-control for manual key operations.
+
+**How to spot it**
+Review DR runbook and key management documentation. No DMV tracks this — it's a process audit.
+
+**Fix options**
+1. Designate primary and secondary key custodians
+2. Establish secure escrow location (safe, offline HSM, or escrow service)
+3. Document dual-authorization procedure
+4. Test recovery annually
+
+**Related checks:** A44 (DMK backup), A47 (SMK backup)
+
+---
+
+### A71 — TDE scan I/O impact never baselined
+
+**What it means**
+TDE encryption scans read and rewrite every page in the database. On large databases, this can cause days of elevated I/O. Without a pre-scan baseline, you cannot measure the impact or distinguish scan overhead from workload I/O.
+
+**How to spot it**
+Check if pre-TDE I/O baselines exist (PerfMon logs, `sys.dm_io_virtual_file_stats` snapshots). If TDE was enabled without a baseline, no retrospective quantification is possible.
+
+**Fix options**
+1. Before enabling TDE: capture `SELECT * FROM sys.dm_io_virtual_file_stats(DB_ID('<db>'), NULL)` and PerfMon Physical Disk counters
+2. Enable during maintenance window
+3. Monitor `percent_complete` in `sys.dm_database_encryption_keys`
+4. SQL 2019+: `ALTER DATABASE [db] SET ENCRYPTION SUSPEND` during peak hours
+
+**Related checks:** A2 (scan in progress)
+
+---
+
+### A72 — Full recovery model without log backup encryption
+
+**What it means**
+TDE encrypts the transaction log on disk, but transaction log backup files (`.trn`) are plaintext unless backup encryption is explicitly enabled. Anyone with access to the `.trn` files can restore them and read all transactions.
+
+**How to spot it**
+```sql
+SELECT database_name, key_algorithm
+FROM msdb.dbo.backupset
+WHERE type = 'L' AND backup_start_date > DATEADD(DAY, -7, GETDATE())
+  AND key_algorithm IS NULL;
+```
+
+**Fix options**
+1. Add `WITH ENCRYPTION (ALGORITHM = AES_256, SERVER CERTIFICATE = [backup_cert])` to `BACKUP LOG` statements
+2. Update maintenance plan scripts
+3. Verify next log backup shows `key_algorithm = 'AES_256'`
+
+**Related checks:** A22 (backup encryption), A24 (backup algorithm)
+
+---
+
+## A73–A76: SQL Server Ledger
+
+### A73 — Ledger not enabled on compliance database
+
+**What it means**
+SQL Server Ledger (2022+) provides cryptographic data integrity verification using SHA-256 hash chains and database digests. Databases with compliance requirements (financial, legal, regulatory) benefit from ledger's tamper-evident guarantees.
+
+**How to spot it**
+```sql
+SELECT name, is_ledger_on FROM sys.databases WHERE database_id > 4;
+-- is_ledger_on = 0 for compliance-named databases
+```
+
+**Fix options**
+1. Create new ledger database: `CREATE DATABASE [FinanceLedger] WITH LEDGER = ON`
+2. Migrate tables: `CREATE TABLE [dbo].[T] (...) WITH (LEDGER = ON (APPEND_ONLY = ON))`
+3. Ledger cannot be enabled on existing databases — new database creation required
+
+**Related checks:** A74–A76
+
+---
+
+### A74 — Ledger digest not configured for auto-storage
+
+**What it means**
+Database digests prove data integrity to external auditors. Storing them only on the same server defeats the purpose — a compromised sysadmin can delete or modify digest history.
+
+**How to spot it**
+Check if `sp_generate_database_ledger_digest` is scheduled with `@digest_storage_endpoint` pointing to Azure Storage or ACL. No DMV tracks this — check SQL Agent jobs.
+
+**Fix options**
+1. Create Azure Storage container or ACL instance
+2. Schedule: `EXEC sp_generate_database_ledger_digest @digest_storage_endpoint = 'https://<account>.blob.core.windows.net/<container>'`
+3. Create SQL Agent job running daily
+4. Test verification from external location
+
+**Related checks:** A73 (ledger enablement), A76 (verification)
+
+---
+
+### A75 — Ledger hash algorithm not SHA-256
+
+**What it means**
+SHA-256 is the minimum acceptable hash for cryptographic ledger integrity. Currently only SHA-256 is available in SQL Server 2022 — this check is future-proofing for when weaker algorithms might become available.
+
+**How to spot it**
+```sql
+SELECT hash_algorithm_desc FROM sys.database_ledger_configurations WHERE database_id = DB_ID();
+```
+
+**Fix options**
+1. SHA-256 is the only algorithm in SQL 2022 — accept as compliant
+2. Document for audit evidence
+3. Plan for SHA-384 migration when available for 10+ year retention
+
+**Related checks:** A55 (FIPS compliance)
+
+---
+
+### A76 — Ledger verification not scheduled
+
+**What it means**
+Ledger verification (`sp_verify_database_ledger`) is the only way to detect tampering. If never run, tampered data may go undetected indefinitely. Regular verification by external parties is essential to the ledger security model.
+
+**How to spot it**
+Check SQL Agent jobs for `sp_verify_database_ledger` calls. If none, verification is not scheduled.
+
+**Fix options**
+1. Create SQL Agent job: `EXEC sp_verify_database_ledger FROM '<digest_storage_endpoint>'`
+2. Schedule weekly or monthly
+3. Configure alerts on failure
+4. Have external auditor run verification independently
+
+**Related checks:** A74 (digest storage)
+
+---
+
+## A77–A80: Azure-Specific Encryption
+
+### A77 — TDE protector key vault in different region
+
+**What it means**
+A cross-region Key Vault adds latency to DEK decryption, increases risk of Key Vault unavailability during Azure region outages, and complicates network security boundaries.
+
+**How to spot it**
+Azure Portal → SQL Server → Transparent Data Encryption → check Key Vault region vs SQL Server region. Or `Get-AzSqlServerTransparentDataEncryptionProtector -ServerName <srv> -ResourceGroupName <rg>`.
+
+**Fix options**
+1. Provision Key Vault in same region as SQL Server
+2. Migrate TDE key: `az keyvault key import` or key rotation
+3. Update TDE protector: `Set-AzSqlServerTransparentDataEncryptionProtector ... -KeyId <new_key_uri>`
+4. Verify region affinity in Portal
+
+**Related checks:** A50 (AKV rotation), A51 (service-managed TDE)
+
+---
+
+### A78 — Double encryption not enabled
+
+**What it means**
+Azure SQL's infrastructure encryption provides an additional AES-256 layer at the storage infrastructure level beneath TDE. Combined with customer-managed TDE, it provides defense-in-depth for compliance-sensitive workloads.
+
+**How to spot it**
+Azure Portal → SQL Database → Transparent Data Encryption → "Infrastructure encryption" toggle is off. Only available at database creation or service tier change.
+
+**Fix options**
+1. For new databases: enable during creation
+2. For existing: create new database with infrastructure encryption + migrate via `CREATE DATABASE ... AS COPY OF`
+3. Verify in Azure Portal
+
+**Related checks:** A51 (service-managed vs BYOK)
+
+---
+
+### A79 — Enclave attestation shared across tenants
+
+**What it means**
+A shared MAA/HGS attestation provider allows any registered SQL Server to attest any enclave. In multi-tenant scenarios, a compromised application can impersonate another tenant's enclave.
+
+**How to spot it**
+Check how many SQL Servers/instances are registered with the same MAA/HGS instance. In Azure Portal → MAA → see registered providers.
+
+**Fix options**
+1. Deploy dedicated MAA/HGS per security boundary
+2. Register only servers within that boundary
+3. Update client connection strings with dedicated attestation URL
+4. Test: cross-boundary attestation should fail
+
+**Related checks:** A63 (attestation URL), A67 (relaxed attestation)
+
+---
+
+### A80 — Audit logs not encrypted at rest
+
+**What it means**
+SQL Server Audit logs contain query text, parameters, and user identities. Unencrypted audit logs expose this data to storage account administrators. PCI-DSS Requirement 10 requires audit trail protection.
+
+**How to spot it**
+Azure Portal → Storage Account (audit destination) → Encryption → check if "Microsoft-managed keys" or "Customer-managed keys" is active. `az storage account show --name <account> --query encryption`.
+
+**Fix options**
+1. Enable Storage Service Encryption (on by default for new accounts — verify)
+2. For compliance workloads: configure CMK: `az storage account update --encryption-key-source Microsoft.KeyVault --encryption-key-vault <uri> --encryption-key-name <key>`
+3. Verify: `az storage account show --name <account> --query encryption`
+
+**Related checks:** A56 (audit configuration), A78 (double encryption)

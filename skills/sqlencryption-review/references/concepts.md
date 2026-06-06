@@ -1,6 +1,6 @@
-# SQL Server Encryption — Concepts Reference
+# SQL Server Encryption — Concepts Reference (17 Topics)
 
-This document provides background knowledge for the `sqlencryption-review` skill. Load it when a user asks "what is TDE?", "explain the difference between AE and CLE", "what TLS version should I use?", "what does GDPR require for encryption?", or any conceptual question about SQL Server cryptography.
+This document provides background knowledge for the `sqlencryption-review` skill across 17 topics — from symmetric vs. asymmetric encryption, key hierarchy, and algorithm selection through TDE, Always Encrypted, TLS, backup encryption, and compliance frameworks (PCI-DSS, HIPAA, GDPR, SOX, FedRAMP, ISO 27001) to TDE performance monitoring, disaster recovery, TLS cipher suites, AE performance, SQL Server Ledger, and additional compliance frameworks. Load it when a user asks "what is TDE?", "explain the difference between AE and CLE", "what TLS version should I use?", "what does GDPR require for encryption?", or any conceptual question about SQL Server cryptography.
 
 ---
 
@@ -484,3 +484,604 @@ SQL Server mapping: columns containing any of these data types should be both en
 | Customer-managed keys | Not required | Not required | Supports data sovereignty / right to erasure |
 | Data classification | Required (PAN inventory) | PHI inventory required | Personal data mapping required |
 | Right to erasure support | N/A | N/A | Required — crypto-shredding is a valid approach |
+
+---
+
+## 12. TDE Performance and Monitoring
+
+### Encryption Scan Performance
+
+When TDE is enabled on a database, SQL Server reads every page, encrypts it, and writes it back. This is an online operation — the database remains available — but it generates significant I/O during the scan.
+
+| Storage type | Typical scan rate | Notes |
+|-------------|------------------|-------|
+| Enterprise SSD (NVMe) | 150–200 MB/s | Limited by CPU or storage throughput |
+| Enterprise SSD (SATA) | 80–130 MB/s | Storage throughput is usually the bottleneck |
+| Premium SAN | 70–150 MB/s | Varies by LUN configuration and contention |
+| Standard HDD | 30–60 MB/s | Long scans — schedule carefully |
+
+The scan rate is constrained by the slower of storage throughput and the encryption CPU cost. On modern CPUs with AES-NI acceleration, encryption is rarely the bottleneck — storage I/O is.
+
+### AES-NI Hardware Acceleration
+
+AES-NI (Advanced Encryption Standard New Instructions) is a set of CPU instructions present on Intel Westmere (2010) and AMD Bulldozer (2011) processors onward. When SQL Server uses AES encryption for TDE, the cryptographic operations are offloaded to dedicated hardware circuits rather than computed in software.
+
+In practice, AES-NI reduces the CPU overhead of AES-256 TDE to approximately **2–5%** of total CPU for typical OLTP workloads. Without AES-NI (very old hardware or VMs without passthrough), the overhead can be 15–30%.
+
+To verify AES-NI support:
+
+```sql
+-- Check if AES-NI is available (via sys.dm_os_sys_info)
+-- Not directly exposed; infer from CPU model
+SELECT cpu_count, hyperthread_ratio, cpu_name
+FROM sys.dm_os_sys_info;
+
+-- On Windows, verify via PowerShell:
+-- Get-WmiObject -Class Win32_Processor | Select-Object Name, *AES*
+```
+
+### Monitoring Scan Progress
+
+The `sys.dm_database_encryption_keys` DMV exposes the `percent_complete` and `encryption_state` columns for each database:
+
+```sql
+SELECT
+    DB_NAME(database_id) AS database_name,
+    encryption_state,
+    percent_complete,
+    key_algorithm,
+    key_length
+FROM sys.dm_database_encryption_keys;
+```
+
+| encryption_state | Description |
+|-----------------|-------------|
+| 0 | No database encryption key present |
+| 1 | Unencrypted |
+| 2 | Encryption in progress |
+| 3 | Encrypted |
+| 4 | Key change in progress |
+| 5 | Decryption in progress |
+| 6 | Protection change in progress |
+
+For large databases (1 TB+), encryption scans can take hours. The `percent_complete` value increments as the scan progresses; monitor it via a SQL Agent job that logs progress every 5 minutes during a planned encryption window.
+
+### TempDB Encryption Overhead
+
+Starting with SQL Server 2016, TempDB is automatically encrypted when **any** user database on the instance has TDE enabled. This has performance implications:
+
+- All sort operations, hash joins, and spills that use TempDB now perform encryption and decryption on every TempDB page written and read
+- The CPU overhead is small (~2–5% with AES-NI) but the additional I/O from encrypted TempDB pages can increase latency on already-contended TempDB data files
+- TempDB log write volume increases because encrypted pages produce slightly larger log records
+- If TDE is disabled on all user databases, TempDB encryption is removed after a restart
+
+### Controlling the Scan (SQL 2019+)
+
+SQL Server 2019 introduced the ability to suspend and resume the TDE encryption scan:
+
+```sql
+-- Pause the scan (e.g., during peak hours)
+ALTER DATABASE MyDB SET ENCRYPTION SUSPEND;
+
+-- Resume the scan (e.g., during maintenance window)
+ALTER DATABASE MyDB SET ENCRYPTION RESUME;
+```
+
+This is useful when the initial scan generates enough I/O to affect production workloads. A common pattern: resume the scan at 8 PM, suspend at 6 AM, repeat until complete.
+
+### Performance Monitor Counters
+
+| Counter | What it measures | Significance |
+|---------|-----------------|--------------|
+| `SQLServer:Databases\Log Bytes Flushed/sec` | Log write throughput for each database | Spikes during TDE scan due to encryption log records |
+| `SQLServer:Database Replica\Log Bytes Received/sec` | AG log transport throughput | Secondary replicas process encrypted log blocks; monitor for lag |
+| `SQLServer:Buffer Manager\Page lookups/sec` | Buffer pool read activity | Increases during TDE scan as pages are read for re-encryption |
+| `PhysicalDisk\Avg. Disk sec/Read` | I/O read latency | Should stay under 20ms; spikes may indicate scan contention |
+| `PhysicalDisk\Avg. Disk sec/Write` | I/O write latency | Should stay under 20ms; write-heavy during scan |
+
+### I/O Stall Metrics During Scan
+
+The `sys.dm_io_virtual_file_stats` DMV shows cumulative I/O stall time for each database file. Before and during a TDE scan, capture snapshots to detect scan-induced I/O pressure:
+
+```sql
+SELECT
+    DB_NAME(database_id) AS db_name,
+    file_id,
+    num_of_reads,
+    num_of_writes,
+    io_stall_read_ms,
+    io_stall_write_ms,
+    size_on_disk_bytes / 1024 / 1024 AS size_mb
+FROM sys.dm_io_virtual_file_stats(NULL, NULL)
+WHERE database_id > 4;
+```
+
+A sharp increase in `io_stall_write_ms` during the scan period indicates that the storage subsystem is bottlenecked by the write load. If write stalls exceed 50ms per operation, consider suspending the scan and investigating storage performance.
+
+### Best Practices
+
+1. **Schedule the scan** during a planned maintenance window, not during peak hours
+2. **Baseline I/O** before the scan using `sys.dm_io_virtual_file_stats` snapshots and PerfMon
+3. **Use `SUSPEND` / `RESUME`** (SQL 2019+) to control scan timing across multiple maintenance windows
+4. **Monitor `percent_complete`** to estimate completion time
+5. **Verify AES-NI** is available on the host; if not, budget additional CPU headroom
+6. **Consider TempDB impact**: if TempDB is heavily used, the encryption overhead on TempDB operations may be more noticeable than the scan itself
+
+---
+
+## 13. Encryption and Disaster Recovery
+
+### What Must Be Backed Up
+
+Losing encryption keys during a disaster recovery event is unrecoverable — no SQL Server support ticket or third-party tool can decrypt data without the keys. The following must be included in every disaster recovery backup set:
+
+| Component | Where stored | Backup command | Consequence if lost |
+|-----------|-------------|----------------|-------------------|
+| Service Master Key (SMK) | Instance-level (master DB) | `BACKUP SERVICE MASTER KEY TO FILE = 'path' ENCRYPTION BY PASSWORD = 'strong_pwd'` | All DMKs unreadable; entire key hierarchy broken |
+| Database Master Key (DMK) | Per-database | `BACKUP MASTER KEY TO FILE = 'path' ENCRYPTION BY PASSWORD = 'strong_pwd'` | Certificates and symmetric keys in that database inaccessible |
+| TDE Certificate | master DB (instance-level effect) | `BACKUP CERTIFICATE TdeCert TO FILE = 'path' WITH PRIVATE KEY (FILE = 'key_path', ENCRYPTION BY PASSWORD = 'strong_pwd')` | TDE databases on restored server will not start |
+| Backup Encryption Certificate | master DB | Same as TDE cert backup | Encrypted backups cannot be restored |
+| Always Encrypted Column Master Key | Windows cert store or AKV/HSM | Export from source; import to target | CEKs cannot be decrypted; AE columns unreadable |
+
+### Restore Sequence
+
+When rebuilding a server from backups (disaster recovery or migration), the order is critical:
+
+1. **Import the SMK** from backup using `RESTORE SERVICE MASTER KEY FROM FILE = 'path' DECRYPTION BY PASSWORD = 'strong_pwd'`
+2. **Restore the master database** (which contains the TDE certificate, DMK references, and logins)
+3. **Restore the user database** — the TDE certificate in the restored master database automatically decrypts the DEK
+4. **Restore encrypted backups** using the backup encryption certificate
+5. **Re-import AE Column Master Keys** to the Windows certificate store or AKV on the new server
+
+If the master database is lost and no master backup is available, a new master database must be rebuilt and the SMK and TDE certificate manually imported before any TDE-encrypted user database can be attached or restored.
+
+### Always On Availability Group Considerations
+
+In an AG, TDE certificates must be **identical** across all replicas — same certificate body, same private key, same thumbprint. The process:
+
+1. Enable TDE on the primary replica (creates the DEK protected by the TDE certificate)
+2. Back up the TDE certificate (with private key) from the primary
+3. Restore the certificate on every secondary replica
+4. The DEK is replicated to the secondaries as part of the database; the secondaries must have the cert to open it
+
+When rotating a TDE certificate in an AG:
+
+1. Back up the new certificate
+2. Restore it on all secondary replicas *first*
+3. Rotate the certificate on the primary last
+4. Verify that all replicas show the new certificate in `sys.certificates`
+
+If a secondary does not have the TDE certificate, the secondary database will show a "Recovery pending" state and will not start — the error log will contain "Please create a master key in the database or open the master key."
+
+### Log Shipping
+
+With TDE-enabled databases in a log shipping configuration:
+
+- The TDE certificate must be present on the secondary server (imported from the primary)
+- Log restores do **not** require the DMK to be open on the secondary — the TDE certificate protects the DEK, and the private key is needed at database recovery time (startup or restore WITH RECOVERY), not during log restores
+- If the secondary is in STANDBY / READ-ONLY mode, the database is open and the DEK is decrypted; the certificate must be present and the DMK must be openable
+
+### Replication
+
+SQL Server replication interacts with encryption in specific ways:
+
+- **Snapshot replication**: the snapshot agent reads the published articles in plaintext (SQL Server decrypts TDE-protected data automatically). The snapshot files on disk are **not** encrypted by TDE. Use backup encryption or file-level encryption for snapshot files.
+- **Transactional replication**: data is decrypted at the publisher (by the Log Reader Agent), transmitted as plaintext through the distribution database, and applied as plaintext at the subscriber. TDE on the distributor/subscriber protects data at rest but not in the distribution pipeline.
+- **Column-level encryption**: if a published column is encrypted with CLE, the encrypted ciphertext is replicated — the subscriber must have the same symmetric key to decrypt it. If you want the subscriber to read plaintext, you must decrypt before publishing or provide the key to the subscriber.
+
+### Backup Compression and TDE
+
+TDE-encrypted databases produce backups where the page data is already encrypted. Encrypted data has high entropy (it resembles random data), and compression algorithms rely on patterns and repetition to reduce size:
+
+- **TDE enabled first, compression second**: backup compression is nearly useless (0–3% size reduction) because the encrypted pages are incompressible
+- **Compression enabled first, TDE second**: the data on disk is still plaintext pages; compression works normally; TDE encrypts the compressed pages — this is the recommended order
+- **SQL 2016+ backup compression with TDE**: `BACKUP DATABASE ... WITH COMPRESSION` and `MAXTRANSFERSIZE > 65536` enables a special algorithm that identifies uncompressed regions of TDE pages and applies compression; still less effective than compression-before-TDE but better than nothing
+
+```sql
+-- Recommended: enable backup compression before enabling TDE
+EXEC sp_configure 'backup compression default', 1;
+RECONFIGURE;
+-- Then enable TDE
+```
+
+---
+
+## 14. TLS Deep Dive — Cipher Suites and Forward Secrecy
+
+### Cipher Suite Anatomy
+
+A TLS cipher suite is a named set of algorithms that define how a TLS connection is secured. Each suite specifies four components:
+
+| Component | Purpose | Examples |
+|-----------|---------|----------|
+| Key Exchange | How client and server agree on a shared session key | ECDHE, DHE, RSA |
+| Authentication | How the server proves its identity | RSA, ECDSA |
+| Encryption (bulk cipher) | Symmetric cipher used for the data stream | AES_256_GCM, AES_128_GCM, AES_256_CBC, CHACHA20_POLY1305 |
+| MAC (Message Authentication Code) | Integrity check for each record | SHA384, SHA256 (GCM ciphers bundle this into the AEAD encryption) |
+
+Example: `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384` means:
+- **Key exchange**: ECDHE (Elliptic Curve Diffie-Hellman Ephemeral — forward secrecy)
+- **Authentication**: RSA certificate
+- **Bulk encryption**: AES-256 in GCM mode
+- **Hash / PRF**: SHA-384
+
+### ECDHE vs RSA Key Exchange
+
+| Property | ECDHE | RSA |
+|----------|-------|-----|
+| Forward Secrecy | Yes — session key is ephemeral, not derivable from the certificate's private key | No — session key is encrypted with the certificate's public key; if the private key is later compromised, all past sessions can be decrypted |
+| Performance | Slightly higher CPU cost (EC point multiplication) per handshake | Faster handshake (no ephemeral key generation) |
+| TLS 1.3 support | Required (only ephemeral key exchanges allowed) | Not supported in TLS 1.3 |
+| Recommendation | **Use ECDHE exclusively** for production SQL Server TLS | Avoid for any compliance-required environment |
+
+Forward Secrecy (sometimes called Perfect Forward Secrecy, PFS) means that even if an attacker records all encrypted traffic today and later compromises the server's private key (e.g., via court order, theft, or backup breach), they cannot decrypt the recorded traffic. Each session uses a unique ephemeral key pair discarded after the session ends.
+
+### Recommended Cipher Suite Ordering for SQL Server
+
+Cipher suites are negotiated in the order configured on the server. SQL Server (via Windows SChannel) presents its cipher suite list, and the client selects the first mutually supported suite. Order matters:
+
+1. `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384` (ECDSA cert + ECDHE + AES-256-GCM)
+2. `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384` (RSA cert + ECDHE + AES-256-GCM)
+3. `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
+4. `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`
+5. `TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384` (CBC fallback — no GCM)
+6. `TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384`
+
+Key rules:
+- Always place GCM suites before CBC suites (GCM provides built-in authentication; CBC requires a separate HMAC step)
+- Always place ECDHE suites before non-ECDHE suites (ensures forward secrecy when possible)
+- AES-256 before AES-128 (stronger, negligible performance difference with AES-NI)
+
+### TLS 1.3 Cipher Suites
+
+TLS 1.3 (RFC 8446) radically simplifies cipher suites by removing the key exchange and authentication components from the suite definition. All TLS 1.3 suites use ephemeral key exchange (forward secrecy is mandatory) and AEAD ciphers only — no CBC, no static RSA.
+
+The TLS 1.3 suite names:
+
+- `TLS_AES_256_GCM_SHA384`
+- `TLS_AES_128_GCM_SHA256`
+- `TLS_CHACHA20_POLY1305_SHA256`
+
+SQL Server 2022 on Windows Server 2022 (or Windows 11) supports TLS 1.3.
+
+### Testing Cipher Suites
+
+```bash
+# Enumerate all cipher suites offered by the server
+nmap --script ssl-enum-ciphers -p 1433 <host>
+
+# Test a specific TLS version and cipher
+openssl s_client -connect <host>:1433 -tls1_2 -cipher ECDHE-RSA-AES256-GCM-SHA384
+
+# Check the certificate chain
+openssl s_client -connect <host>:1433 -showcerts
+```
+
+### SChannel Registry Configuration
+
+Windows uses the SChannel SSP (Security Support Provider) for TLS. Cipher suite order is configured in the registry:
+
+```
+HKLM\SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\SSL\00010002
+  Functions (REG_MULTI_SZ) — ordered list of cipher suite strings
+```
+
+Example value:
+```
+TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+```
+
+Cipher suite changes require a server restart to take effect.
+
+### Group Policy vs Local Registry
+
+| Method | Scope | Persistence | Recommendation |
+|--------|-------|-------------|----------------|
+| Group Policy (GPO) | Domain-wide; applies to all servers in the OU | Survives registry resets and OS reinstalls | **Preferred** for enterprise environments — consistent cipher policy across all SQL Servers |
+| Local registry | Single server | Can be overwritten by GPO or OS updates | Use for standalone servers not domain-joined; document manually |
+
+The Group Policy path for cipher suite order is:
+```
+Computer Configuration → Administrative Templates → Network → SSL Configuration Settings → SSL Cipher Suite Order
+```
+
+---
+
+## 15. Always Encrypted Performance Impact
+
+### Query Performance by Encryption Type
+
+Always Encrypted offers two encryption types with very different query performance characteristics:
+
+| Operation | Deterministic encryption | Randomized encryption |
+|-----------|------------------------|----------------------|
+| Equality search (`WHERE col = 'X'`) | Works — ciphertext is deterministic, same plaintext produces same ciphertext | **Fails** without enclave — every row has a different ciphertext due to random IV |
+| Range search (`WHERE col > 'X'`) | Fails without enclave (ciphertext ordering != plaintext ordering) | Fails without enclave |
+| LIKE / pattern matching | Fails without enclave | Fails without enclave |
+| JOIN on encrypted column | Works (equality only, deterministic) | Fails without enclave |
+| GROUP BY on encrypted column | Works (deterministic only) | Fails without enclave |
+| Index seek on encrypted column | Works (deterministic only, on ciphertext) | Fails without enclave |
+
+**CPU overhead**: deterministic encryption adds approximately 10–30% CPU overhead per query due to client-side encryption/decryption. The driver encrypts query parameters and decrypts result columns using the CEK. Network payload size may increase because encrypted values are larger than plaintext.
+
+### Enclave Computation Overhead (SQL 2019+)
+
+Secure enclaves (VBS on Windows, Intel SGX on Linux) allow SQL Server to perform computations on encrypted data without revealing plaintext to the database engine. This enables rich queries (ranges, LIKE, pattern matching) on randomized-encrypted columns.
+
+| Resource | Overhead |
+|----------|----------|
+| Memory (VBS) | 128–512 MB reserved for the enclave; configured via `sp_configure 'column encryption enclave type'` |
+| Per-query enclave call | 1–5 ms latency for the first enclave invocation in a batch; subsequent calls are faster due to caching |
+| Throughput | 5–15% overhead vs deterministic AE for the same query pattern (enclave-side decryption replaces client-side) |
+
+### CEK Caching Behavior
+
+When a client application connects, the driver:
+
+1. Retrieves the encrypted CEK value from `sys.column_encryption_key_values`
+2. Decrypts the CEK using the Column Master Key (from Windows cert store, AKV, or HSM)
+3. Caches the plaintext CEK in memory
+
+| Cache parameter | Default | Notes |
+|----------------|---------|-------|
+| CEK cache TTL | 2 hours | Configurable via `Column Encryption Key Cache TTL` connection string property |
+| Cache scope | Per process / AppDomain | Each application process maintains its own cache |
+| Cache eviction | Time-based only | No size limit; CEK is small (256-bit key) |
+| AKV calls per CEK | 1 per TTL window | Eliminates repeated AKV calls per logical session |
+
+Without caching, every query would require an AKV round-trip (50–200 ms) to decrypt the CEK. The cache reduces this to once per 2-hour window per physical connection.
+
+### Connection Pooling with Always Encrypted
+
+In connection-pooled environments:
+
+- The CEK is decrypted once per **physical connection** (SPID), not per logical session
+- When a connection is returned to the pool (`SqlConnection.Close()` or `Dispose()`), the decrypted CEK remains cached in the driver
+- The next logical session that borrows this physical connection does not re-decrypt the CEK
+- If CMK rotation occurs during the pool lifetime, sessions using the old CEK will continue to work until the cache TTL expires (at which point they fetch the new CEK)
+- Enclave sessions are bound to a specific physical connection and should not be pooled across different enclave-attested connections
+
+### Batch INSERT / UPDATE Performance
+
+Because each row must be encrypted client-side before insertion, batch operations on AE columns have significant throughput reduction:
+
+| Operation type | Throughput vs plaintext | Bottleneck |
+|---------------|------------------------|------------|
+| Single-row INSERT | 30–50% of plaintext (3x slower) | Client-side CPU for encryption |
+| Batch INSERT (1000 rows) | 20–50% of plaintext (2–5x slower) | Client-side CPU; parallelizable across application threads |
+| UPDATE of AE column | 30–50% of plaintext | Client-side CPU |
+| Bulk insert (SqlBulkCopy) | 40–60% of plaintext | Encrypts row-by-row; not fully parallelized |
+
+Mitigation strategies:
+- Increase application parallelism (more threads, each with its own connection) to saturate the database
+- Batch sizes of 500–1000 rows balance throughput and transaction log overhead
+- For ETL workloads, consider using a staging table without AE, then encrypting as a background process
+
+### Index Considerations
+
+Indexes on Always Encrypted columns behave differently from indexes on plaintext columns:
+
+- **Indexes are built on ciphertext**, not plaintext
+- An index on a deterministic-encrypted column supports **equality seeks only** — the optimizer can seek on `WHERE SSN = @ssn` because the driver encrypts `@ssn` to the same ciphertext every time
+- An index on a randomized-encrypted column is effectively **useless for seeking** — every row has a unique ciphertext
+- Composite indexes can include one deterministic AE column + plaintext columns; the AE column can be used for the index seek, and the plaintext columns for additional filtering
+- Index statistics on ciphertext columns are less meaningful than on plaintext columns (the distribution of ciphertext does not reflect the distribution of plaintext)
+- Enclave-enabled indexes (SQL 2019+) behave like plaintext indexes for query purposes but store encrypted data on disk
+
+---
+
+## 16. SQL Server Ledger Concepts
+
+### What Is Ledger?
+
+SQL Server Ledger (introduced in SQL Server 2022) provides cryptographic verification that data in a database has not been tampered with. It does not prevent tampering — it makes tampering provably detectable after the fact. Think of it as a blockchain-style integrity mechanism embedded in the database engine.
+
+Use cases:
+- Financial audit trails (every transaction permanently verifiable)
+- Regulatory compliance (SOX, FDA 21 CFR Part 11, GxP — proof that records have not been altered)
+- Supply chain records (chain of custody for sensitive inventory)
+- Multi-party data sharing (each party can verify the other hasn't modified shared data)
+
+### Hash Chain Architecture
+
+Ledger tables maintain a Merkle-tree-style hash chain:
+
+```
+Row 1: data = {col1, col2, col3}
+       hash = SHA-256(Genesis hash + row 1 data)
+
+Row 2: data = {col1, col2, col3}
+       hash = SHA-256(Row 1 hash + row 2 data + transaction metadata)
+
+Row N: hash = SHA-256(Row N-1 hash + row N data + transaction metadata)
+```
+
+Each row's hash depends on the hash of the previous row. Tampering with any row in the chain changes its hash, which invalidates every subsequent row's hash. The hash chain is stored in the `ledger` schema within hidden system columns.
+
+### Database Digests
+
+A database digest is a periodic snapshot of the hash chain state, published to an external, immutable storage location. The digest contains:
+
+- The hash of the last committed transaction in the ledger table
+- A timestamp
+- The database ID and table metadata
+
+Digests are generated by `sys.sp_generate_database_ledger_digest` and should be stored in:
+
+- Azure Blob Storage (immutable storage with legal hold)
+- Azure Confidential Ledger (ACL — managed blockchain)
+- A write-once, read-many (WORM) file system or third-party blockchain
+
+### Append-Only vs Updatable Ledger Tables
+
+| Property | Append-only ledger | Updatable ledger |
+|----------|-------------------|-----------------|
+| Allowed operations | INSERT only | INSERT, UPDATE, DELETE |
+| UPDATE behavior | N/A | System-generated history row inserted into the history table; current row updated |
+| DELETE behavior | N/A | Current row deleted; history row records the deletion |
+| History table | None | Automatically created; mirrors the main table schema |
+| Use case | Immutable event log (audit log, transactions, certificates issued) | Current state with verifiable history (account balances, inventory levels) |
+
+```sql
+-- Append-only ledger table
+CREATE TABLE dbo.AuditLog (
+    AuditID int IDENTITY PRIMARY KEY,
+    EventType nvarchar(100),
+    EventData nvarchar(max),
+    EventTime datetime2 DEFAULT SYSUTCDATETIME()
+) WITH (LEDGER = ON (APPEND_ONLY = ON));
+
+-- Updatable ledger table
+CREATE TABLE dbo.AccountBalance (
+    AccountID int PRIMARY KEY,
+    Balance decimal(18,2)
+) WITH (LEDGER = ON (APPEND_ONLY = OFF));
+```
+
+### Verification Model
+
+`sys.sp_verify_database_ledger` recomputes the entire hash chain from the current database state and compares it against the published digests:
+
+```sql
+EXEC sys.sp_verify_database_ledger;
+```
+
+- If the recomputed hashes match the published digests: the data has not been tampered with since the digest was generated
+- If the recomputed hashes diverge: either the data was tampered with or a digest was generated for a different database state — forensic investigation required
+
+Verification can be scoped to a specific table or a specific time range using the digest timestamps.
+
+### Sysadmin Bypass Consideration
+
+Ledger protects against tampering performed through the SQL Server engine (T-SQL, SSMS, application queries) — even a sysadmin cannot UPDATE or DELETE a row in an append-only ledger table without the change being recorded in the hash chain.
+
+However, a sysadmin with **operating system access** to the database files (.mdf, .ldf) could theoretically modify pages on disk. This is mitigated by:
+
+1. **External digest storage**: published digests are stored outside SQL Server; even if all database files are tampered with, `sp_verify_database_ledger` will detect the mismatch against the externally stored digest
+2. **Digest signing**: digests can be cryptographically signed, requiring the attacker to compromise both the database files and the signing key
+3. **Immutable storage**: if digests are stored in Azure Confidential Ledger or a public blockchain, they cannot be altered retroactively
+
+### Platform Support
+
+| Platform | Support status |
+|----------|---------------|
+| SQL Server 2022 (on-premises) | Fully supported |
+| Azure SQL Database | Supported in specific regions; requires serverless or provisioned tier |
+| Azure SQL Managed Instance | Supported |
+| SQL Server 2019 and earlier | Not supported |
+
+---
+
+## 17. Additional Compliance Frameworks — SOX, FedRAMP, ISO 27001
+
+### SOX (Sarbanes-Oxley Act)
+
+The Sarbanes-Oxley Act of 2002 applies to all publicly traded companies in the United States. It mandates internal controls over financial reporting to prevent fraud and ensure the accuracy of financial statements.
+
+#### Section 302 — Corporate Responsibility for Financial Reports
+
+CEOs and CFOs must personally certify the accuracy of financial reports and the effectiveness of internal controls. For IT systems, this means the database systems generating financial data must have demonstrable integrity controls.
+
+#### Section 404 — Management Assessment of Internal Controls
+
+Requires management to document, test, and attest to the effectiveness of internal controls over financial reporting. External auditors independently test these controls.
+
+#### Encryption Relevance to SOX
+
+| Control area | SQL Server encryption mapping |
+|-------------|------------------------------|
+| Financial data integrity | Ledger tables for financial transaction logs; hash chain for tamper evidence |
+| Data-at-rest protection | TDE on all databases containing financial data |
+| Key access controls | SQL Audit on certificate/key access; documented key custodians |
+| Separation of duties | DBA role separate from security administrator; CMK in HSM/AKV not accessible to DBA |
+| Audit trails | SQL Server Audit on all financial tables; Ledger for immutable audit history |
+| Backup integrity | Backup encryption + checksum verification on restore |
+
+Key control requirements for SOX:
+- **Documented key management**: who has access, how keys are generated, stored, backed up, and rotated
+- **Access controls**: role-based access to encryption keys; no single person can both modify financial data and manage audit/encryption keys
+- **Rotation policies**: annual key rotation for financial data encryption keys; documented process
+- **Evidence retention**: audit trails retained for 7 years (SOX requirement)
+
+### FedRAMP (Federal Risk and Authorization Management Program)
+
+FedRAMP standardizes security assessment and authorization for cloud services used by US federal agencies. It maps to NIST SP 800-53 controls.
+
+#### Data-at-Rest Encryption (SC-28)
+
+> "The information system protects the confidentiality and integrity of [information at rest]."
+
+| FedRAMP level | Encryption requirement | SQL Server mapping |
+|--------------|----------------------|-------------------|
+| FedRAMP Low | Encryption recommended but not required | TDE recommended as baseline |
+| FedRAMP Moderate | FIPS 140-2 validated encryption for data at rest | TDE with AES-256; FIPS-compliant algorithm set |
+| FedRAMP High | FIPS 140-2 validated encryption; customer-managed keys | TDE + BYOK (Azure Key Vault); HSM-backed CMK for Always Encrypted |
+
+#### FIPS 140-2 Requirement
+
+All cryptography used in FedRAMP environments must be FIPS 140-2 validated. For SQL Server, this means:
+- Windows must be in FIPS-compliant mode
+- AES-256 for symmetric encryption
+- RSA-2048 or higher for asymmetric keys
+- SHA-256 or higher for hashing
+- TLS 1.2+ with FIPS-approved cipher suites
+
+#### Customer-Managed Keys (FedRAMP High)
+
+FedRAMP High requires that encryption keys be managed by the customer, not the cloud provider. In Azure SQL, this is achieved through:
+- **TDE with BYOK**: the TDE protector is an asymmetric key in Azure Key Vault, controlled by the customer
+- **Always Encrypted**: CMK stored in a customer-controlled AKV or on-premises HSM
+- Key rotation, revocation, and access logging are under customer control
+
+#### Azure SQL FedRAMP Compliance
+
+| Azure service | FedRAMP level | Notes |
+|--------------|--------------|-------|
+| Azure SQL Database | High (in Azure Government) | Requires BYOK for High |
+| Azure SQL Managed Instance | High (in Azure Government) | VNet isolation required |
+| Azure Government SQL | High | Separate Azure region with US-personnel access only |
+
+### ISO 27001 — Information Security Management
+
+ISO 27001 is an international standard for information security management systems (ISMS). Annex A contains 114 controls across 14 domains. The following controls are directly relevant to SQL Server encryption:
+
+#### A.10 — Cryptography
+
+| Control | Title | Requirement | SQL Server mapping |
+|---------|-------|-------------|-------------------|
+| A.10.1.1 | Policy on the use of cryptographic controls | Documented encryption policy: what data, what algorithms, under what circumstances | Encryption inventory (A40 audit); algorithm versioning documented |
+| A.10.1.2 | Key management | Key lifecycle: generation, distribution, storage, archival, destruction | SMK/DMK/cert backup procedures; key rotation schedules; documented decommissioning process (`DROP SYMMETRIC KEY`, cert archival) |
+
+#### A.12 — Operations Security
+
+| Control | Title | SQL Server mapping |
+|---------|-------|-------------------|
+| A.12.3.1 | Information backup | Backup encryption for all production databases; off-site backup storage with encrypted media |
+| A.12.4.1 | Event logging | SQL Server Audit on key access, certificate operations, and encryption state changes; log retention per policy |
+
+#### A.13 — Communications Security
+
+| Control | Title | SQL Server mapping |
+|---------|-------|-------------------|
+| A.13.2.1 | Information transfer policies and procedures | TLS 1.2+ enforced on all SQL Server connections; ForceEncryption = Yes |
+| A.13.2.3 | Electronic messaging | Encrypted endpoints for all database connectivity; self-signed certificates only for internal non-production environments |
+
+#### A.14 — System Acquisition, Development, and Maintenance
+
+| Control | Title | SQL Server mapping |
+|---------|-------|-------------------|
+| A.14.2.5 | Secure system engineering principles | Encryption designed into schema from start (Always Encrypted for PII columns); data classification (`ADD SENSITIVITY CLASSIFICATION`) at schema creation |
+
+#### ISO 27001 to SQL Server Feature Mapping Summary
+
+| ISO 27001 control | SQL Server feature | Implementation |
+|------------------|-------------------|----------------|
+| A.10.1.1 — Cryptographic controls policy | Encryption audit | `sys.certificates`, `sys.dm_database_encryption_keys`, CMK inventory |
+| A.10.1.2 — Key management | SMK/DMK/cert backup | `BACKUP SERVICE MASTER KEY`, `BACKUP MASTER KEY`, `BACKUP CERTIFICATE` |
+| A.12.3.1 — Information backup | Backup encryption | `BACKUP DATABASE ... WITH ENCRYPTION (ALGORITHM = AES_256, SERVER CERTIFICATE = ...)` |
+| A.12.4.1 — Event logging | SQL Server Audit | Audit on `SCHEMA_OBJECT_ACCESS_GROUP` for key/cert operations |
+| A.13.2.1 — Information transfer | TLS | `ForceEncryption = Yes`, TLS 1.2+ cipher suites |
+| A.13.2.3 — Electronic messaging | TLS + cert validation | Remove `TrustServerCertificate=True`; deploy CA-issued certificates |

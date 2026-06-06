@@ -36,7 +36,7 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlspn-review/SKILL.md](skills/sqlspn-review/SKILL.md) | SPN and Kerberos delegation analysis: `sqlspn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 | [skills/sqlmemory-review/SKILL.md](skills/sqlmemory-review/SKILL.md) | Memory pressure analysis: `sqlmemory-review`. 20 checks (O1–O20) — PLE, plan cache bloat, memory grants, memory clerks, ColumnStore/XTP footprint, OS pressure, LPIM, Max Server Memory |
 | [skills/sqldiskio-review/SKILL.md](skills/sqldiskio-review/SKILL.md) | File-level I/O latency and auto-growth analysis: `sqldiskio-review`. 15 checks (Z1–Z15) — data/log latency, hot files, stall ratio, storage placement, auto-growth events and sizing |
-| [skills/sqlencryption-review/SKILL.md](skills/sqlencryption-review/SKILL.md) | Full SQL Server encryption infrastructure analysis: `sqlencryption-review`. 56 checks (A1–A56) — TDE, Always Encrypted, CLE symmetric keys, backup encryption, transport/TLS, certificate lifecycle, asymmetric/symmetric key management, DMK/SMK key hierarchy, EKM/AKV, sensitivity-label gaps, FIPS/PCI-DSS/HIPAA/GDPR compliance |
+| [skills/sqlencryption-review/SKILL.md](skills/sqlencryption-review/SKILL.md) | Full SQL Server encryption infrastructure analysis: `sqlencryption-review`. 80 checks (A1–A80) — TDE, Always Encrypted, CLE symmetric keys, backup encryption, transport/TLS, certificate lifecycle, asymmetric/symmetric key management, DMK/SMK key hierarchy, EKM/AKV, TLS/network hardening (cipher suites, TLS 1.3, IPsec, Kerberos armoring), Always Encrypted advanced (enclave attestation, driver compatibility, CEK caching), operational key lifecycle (password strength, auto-enrollment, key escrow, TDE scan impact), SQL Server 2022 Ledger, Azure-specific encryption (double encryption, cross-region key vault, audit log encryption), sensitivity-label gaps, FIPS/PCI-DSS/HIPAA/GDPR/SOX/ISO 27001 compliance |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -60,8 +60,15 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlspn-review/references/check-explanations.md](skills/sqlspn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
 | [skills/sqlmemory-review/references/check-explanations.md](skills/sqlmemory-review/references/check-explanations.md) | Plain-English explanation of all 20 O-checks with DMV examples, fix recipes, and Quick Reference table |
 | [skills/sqldiskio-review/references/check-explanations.md](skills/sqldiskio-review/references/check-explanations.md) | Plain-English explanation of all 15 Z-checks with sys.dm_io_virtual_file_stats examples, fix recipes, and Quick Reference table |
-| [skills/sqlencryption-review/references/check-explanations.md](skills/sqlencryption-review/references/check-explanations.md) | Plain-English explanation of all 56 A-checks with DMV examples, T-SQL fix code, and Quick Reference table covering TDE, Always Encrypted, CLE, backup encryption, transport, certificates, key hierarchy, EKM, and compliance |
-| [skills/sqlencryption-review/references/concepts.md](skills/sqlencryption-review/references/concepts.md) | Background concepts: symmetric vs asymmetric encryption, public/private keys, SQL Server algorithm reference, key hierarchy diagram, TLS version history, encryption type comparison (TDE vs AE vs CLE vs Backup vs TLS), CA trust concepts, FIPS 140-2, PCI-DSS, HIPAA, GDPR requirements |
+| [skills/sqlencryption-review/references/check-explanations.md](skills/sqlencryption-review/references/check-explanations.md) | Plain-English explanation of all 80 A-checks with DMV examples, T-SQL fix code, and Quick Reference table covering TDE, Always Encrypted, CLE, backup encryption, transport, certificates, key hierarchy, EKM, and compliance |
+| [skills/sqlencryption-review/references/concepts.md](skills/sqlencryption-review/references/concepts.md) | Background concepts (17 topics): symmetric vs asymmetric encryption, public/private keys, SQL Server algorithm reference, key hierarchy diagram, TLS version history + cipher suite deep dive + forward secrecy, encryption type comparison, CA trust concepts, FIPS 140-2, PCI-DSS, HIPAA, GDPR, SOX, FedRAMP, ISO 27001, TDE performance, encryption + DR, Always Encrypted performance, SQL Ledger concepts |
+| [skills/sqlencryption-review/references/howto-tde-setup.md](skills/sqlencryption-review/references/howto-tde-setup.md) | Step-by-step TDE deployment guide: cert creation, DEK, enabling encryption, monitoring scan, cert backup, restore procedure |
+| [skills/sqlencryption-review/references/howto-always-encrypted.md](skills/sqlencryption-review/references/howto-always-encrypted.md) | Step-by-step Always Encrypted setup: CMK (AKV/Windows), CEK, column encryption, app changes, enclave config, CLE migration |
+| [skills/sqlencryption-review/references/howto-tls-config.md](skills/sqlencryption-review/references/howto-tls-config.md) | Step-by-step TLS 1.2/1.3 config: certificate request from CA, binding, ForceEncryption, cipher suite ordering, verification |
+| [skills/sqlencryption-review/references/howto-key-rotation.md](skills/sqlencryption-review/references/howto-key-rotation.md) | Step-by-step key rotation: TDE cert, backup cert, SB/AG endpoint certs, CLE symmetric keys, AE CMK/CEK, DMK/SMK regeneration |
+| [skills/sqlencryption-review/references/howto-crypto-shredding.md](skills/sqlencryption-review/references/howto-crypto-shredding.md) | Step-by-step cryptographic erasure for GDPR right-to-erasure via per-customer encryption keys |
+| [skills/sqlencryption-review/references/howto-disaster-recovery.md](skills/sqlencryption-review/references/howto-disaster-recovery.md) | Step-by-step DR for encrypted databases: TDE restore, encrypted backup restore, cross-version, AG failover, CMK migration, SMK regeneration |
+| [skills/sqlencryption-review/references/error-reference.md](skills/sqlencryption-review/references/error-reference.md) | Common encryption errors reference: Msg 33111, 33104, 15581, 33081, 15318, self-signed cert, audit failures, EKM errors, enclave attestation, TLS handshake errors |
 
 ### Root Documentation
 
@@ -108,6 +115,14 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlmemory-review/examples/](skills/sqlmemory-review/examples/) | Memory clerk + PLE + grant queue output: ColumnStore pressure, single-use plan bloat, oversized grant blocking 4 sessions + analysis |
 | [skills/sqldiskio-review/examples/](skills/sqldiskio-review/examples/) | sys.dm_io_virtual_file_stats + auto-growth trace: 47 ms data reads, 31 ms log writes, 3 auto-grow events on same volume + analysis |
 | [skills/sqlencryption-review/examples/](skills/sqlencryption-review/examples/) | Multi-database encryption audit DMV output: TDE off on HRPayroll/ArchiveDB, expired TDE cert, RC4/3DES CLE keys, unencrypted backups, plaintext remote sessions, no SMK/DMK backup, self-signed TLS + analysis |
+
+### Scripts
+
+| File | Purpose |
+|------|---------|
+| [skills/sqlencryption-review/scripts/capture-all-encryption.ps1](skills/sqlencryption-review/scripts/capture-all-encryption.ps1) | PowerShell: captures all encryption DMVs to timestamped output files |
+| [skills/sqlencryption-review/scripts/test-tls.ps1](skills/sqlencryption-review/scripts/test-tls.ps1) | PowerShell: verifies TLS configuration via SChannel registry + connection test |
+| [skills/sqlencryption-review/scripts/README.md](skills/sqlencryption-review/scripts/README.md) | Script usage guide with prerequisites and examples |
 
 ## Installing Skills
 
