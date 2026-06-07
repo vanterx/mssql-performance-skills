@@ -168,14 +168,10 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
   whichever is greater). Enable `Lock Pages in Memory` (LPIM) to prevent paging for 64-bit SQL
   Server service account. Investigate other processes competing for RAM on the host.
 
-### E11 — Buffer Pool Insufficient
-- **Trigger:** Log contains `There is insufficient system memory in resource pool` or
-  `Memory Manager: Memory node available memory is less than threshold`
-- **Severity:** Critical — queries requiring memory grants are being denied; workload will
-  stall on `RESOURCE_SEMAPHORE` waits
-- **Fix:** Run `/sqlwait-review` and check for `RESOURCE_SEMAPHORE` dominance. Increase
-  `max server memory` if physical RAM allows, or reduce `min memory per query` via Resource
-  Governor. Identify large-grant queries with `/sqlplan-review` S2–S4.
+### E11 — Memory Insufficient (Resource Pool or Buffer Pool)
+- **Trigger:** Log contains `There is insufficient memory available in the buffer pool` (error 802, buffer pool full) OR `There is insufficient system memory in resource pool` (error 701, Resource Governor pool exhausted) OR `Memory Manager: Memory node available memory is less than threshold`
+- **Severity:** Critical — queries requiring memory grants are being denied; workload will stall on `RESOURCE_SEMAPHORE` waits
+- **Fix:** Run `/sqlwait-review` and check for `RESOURCE_SEMAPHORE` dominance. Increase `max server memory` if physical RAM allows, or reduce `min memory per query` via Resource Governor. Identify large-grant queries with `/sqlplan-review` S2–S4. Error 802 (buffer pool) and error 701 (resource pool) require different fixes: 802 → increase max server memory or reduce buffer pool competition; 701 → adjust Resource Governor pool memory limits.
 
 ### E12 — Worker Thread Exhaustion
 - **Trigger:** Log contains `There are no more threads available to process new requests` or
@@ -223,9 +219,13 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
 
 ### E16 — Database Corruption Warning
 - **Trigger:** Log contains `checksum mismatch`, `torn page`, `consistency errors detected`,
-  or `DBCC CHECKDB found` with error counts > 0
-- **Severity:** Critical — data corruption has been detected; backup integrity is unknown until
-  verified; the affected database may be inaccessible or returning wrong results
+  `DBCC CHECKDB found` with error counts > 0, `Error: 823` (OS-level I/O failure — Windows API
+  returned an error), `Error: 824` (logical consistency check failure — Windows I/O succeeded but
+  SQL detected corruption on the page), or `Error: 825` (read succeeded after retry — transient
+  storage issue; Warning severity; indicates potential hardware degradation)
+- **Severity:** Critical for Msg 823 and Msg 824 (data corruption confirmed); Warning for Msg 825
+  (read ultimately succeeded but is a precursor to harder failures — investigate storage hardware
+  immediately); Critical if DBCC CHECKDB reports allocation or consistency errors
 - **Fix:** Run `DBCC CHECKDB ([database]) WITH NO_INFOMSGS` immediately to assess scope. Do
   not attempt to repair until a current, verified backup exists. For `REPAIR_ALLOW_DATA_LOSS`,
   treat it as a last resort — restore from backup is always preferable. Investigate E15 (I/O

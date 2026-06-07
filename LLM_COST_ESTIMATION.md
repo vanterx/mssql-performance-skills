@@ -51,6 +51,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlspn-review` | ~7,400 |
 | `sqlmemory-review` | ~5,800 |
 | `sqldiskio-review` | ~4,600 |
+| `sqlencryption-review` | ~30,000 |
 | `mssql-performance-review` | ~7,900 |
 
 ### Your input artifact
@@ -344,6 +345,7 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/sqlplan-batch/SKILL.md` | 11,646 | 3,065 |
 | `skills/sqlmemory-review/SKILL.md` | ~22,000 | ~5,800 |
 | `skills/sqldiskio-review/SKILL.md` | ~17,500 | ~4,600 |
+| `skills/sqlencryption-review/SKILL.md` | ~115,000 | ~30,000 |
 
 `references/check-explanations.md` files are progressive-disclosure reference material — they are **not** loaded into the LLM context automatically. Only `SKILL.md` is loaded by the skill loader. Claude may load `references/check-explanations.md` on demand (e.g., when a user asks "explain check X" or wants deeper fix-option detail).
 
@@ -367,3 +369,5 @@ If a user asks "explain check X" — for example, "explain S21" or "explain N44"
 | `skills/sqlindex-advisor/references/check-explanations.md` | 9,952 | 2,619 | On demand |
 | `skills/sqlplan-batch/references/check-explanations.md` | 10,878 | 2,863 | On demand |
 | `skills/mssql-performance-review/references/check-explanations.md` | 10,481 | 2,758 | On demand |
+| `skills/sqlencryption-review/references/check-explanations.md` | ~95,000 | ~25,000 | On demand |
+| `skills/sqlencryption-review/references/concepts.md` | ~18,000 | ~4,700 | On demand |

@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 557 checks in this library apply to your SQL Server version.
+Which of the 669 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -34,6 +34,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 | `sqlhadr-review` | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ◑ |
 | `sqlclusterlog-review` | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ◑ |
 | `sqlquerystore-review` | ✗ | ✗ | ✗ | ◑ | ◑ | ◑ | ✓ | ✓ | ✓ |
+| `sqlencryption-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ◑ | ◑ |
 | `mssql-performance-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ◑ | ◑ |
 
 **Legend:**
@@ -47,22 +48,23 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqlwait-review` on Azure SQL DB/MI: many wait types differ or are not exposed. Core I/O, lock, and parallelism checks still apply.
 - `sqltrace-review` on Azure: Extended Events are available but some event classes (XE trace capture mechanics) differ from on-premises.
 - `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Azure AD–only auth; K32–K33 are Azure-specific.
+- `sqlencryption-review` on SQL 2008 R2: A9–A16 (AE, SQL 2016+), A22–A25 (backup enc, SQL 2014+), A82 (SSISDB, SQL 2012+), A87/A88 (DDM, SQL 2016+) not applicable. On SQL 2012: A82 applicable, A87/A88 still skipped. On SQL 2016: A9–A16, A87/A88 applicable; A10/A12 (enclave), A63–A67 (AE Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76, A94 (TLS 1.3, Ledger, GDPR append-only, SQL 2022+) skipped. Azure SQL DB/MI: A50, A51, A77–A80, A101, A112 are Azure-specific; A53 (`sys.sensitivity_classifications`) available SQL 2019+/Azure.
 
 ---
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 557 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 669 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **516** | 4 Azure-specific checks (I15, I17, K32, K33) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **492** | −24 SQL 2022-only checks unavailable |
-| SQL Server 2017 | **480** | −12 SQL 2019-only checks unavailable |
-| SQL Server 2016 | **469** | −11 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **444** | −25 more: all Query Store base checks unavailable (QS requires SQL 2016+); minus S10, H25, K36, P16, R25 |
-| SQL Server 2012 | **443** | −1 more: R21 (In-Memory OLTP, SQL 2014+) unavailable |
-| SQL Server 2008 R2 | **384** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
+| SQL Server 2022 | **625** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **595** | −30 SQL 2022-only checks unavailable (includes A59, A73–A76, A94) |
+| SQL Server 2017 | **573** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **560** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **526** | −34 more: all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+) unavailable |
+| SQL Server 2012 | **520** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **460** | −60 more: all 57 Always On AG/WSFC checks unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -86,11 +88,18 @@ These checks require features introduced in SQL Server 2012.
 
 **Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
 
+| A82 | `sqlencryption-review` | SSISDB DMK Password Not Registered | SSISDB catalog (SQL Server Integration Services, SQL 2012+) |
+
 ### SQL Server 2014+
 
 | Check | Skill | Name | Feature |
 |-------|-------|------|---------|
 | R21 | `sqlprocstats-review` | Natively Compiled Proc Regression | In-Memory OLTP / memory-optimized tables (SQL 2014+) |
+| A22 | `sqlencryption-review` | Recent Backups Not Encrypted | `WITH ENCRYPTION` backup option (SQL 2014+) |
+| A23 | `sqlencryption-review` | Backup Encryption Certificate Not Separately Backed Up | Encrypted backup metadata in `msdb.dbo.backupset` (SQL 2014+) |
+| A24 | `sqlencryption-review` | Backup Encryption Using TRIPLE_DES_3KEY or AES_128 | Backup encryption algorithm metadata (SQL 2014+) |
+| A25 | `sqlencryption-review` | Backup Encryption Certificate Expiring Within 90 Days | Encrypted backup cert tracking (SQL 2014+) |
+| A72 | `sqlencryption-review` | Log Backup Encryption Not Enabled | Log backup encryption (`WITH ENCRYPTION` on log backups) — SQL 2014+ |
 
 ### SQL Server 2016+
 
@@ -103,6 +112,15 @@ These checks require features introduced in SQL Server 2012.
 | R25 | `sqlprocstats-review` | QS Plan Instability Correlated to Procstats Variance | Query Store (SQL 2016+) |
 
 **Entire skill at SQL 2016+:** `sqlquerystore-review` (Q1–Q32). Query Store was introduced in SQL 2016. On SQL 2016 only Q1–Q18 and Q23–Q25 are fully active; the remaining checks require SQL 2017–2022 features (see below).
+
+| A9 | `sqlencryption-review` | Deterministic Encryption on Non-Searchable Columns | Always Encrypted (SQL 2016+) |
+| A87 | `sqlencryption-review` | Sensitive Column Masked but Not Encrypted | Dynamic Data Masking (SQL 2016+) |
+| A88 | `sqlencryption-review` | UNMASK Permission Granted to Broad Role | Dynamic Data Masking UNMASK permission (SQL 2016+) |
+| A11 | `sqlencryption-review` | Column Encryption Algorithm is not AEAD_AES_256_CBC_HMAC_SHA_256 | Always Encrypted (SQL 2016+) |
+| A13 | `sqlencryption-review` | Column Master Key Stored in Windows Certificate Store | Always Encrypted CMK (SQL 2016+) |
+| A14 | `sqlencryption-review` | Sensitive-Pattern Column Names Without Always Encrypted | Always Encrypted column check (SQL 2016+) |
+| A15 | `sqlencryption-review` | No CEK Rotation Ever Performed | `sys.column_encryption_key_values` (SQL 2016+) |
+| A16 | `sqlencryption-review` | Column Master Key Overdue for Rotation (> 2 Years) | `sys.column_master_keys` (SQL 2016+) |
 
 ### SQL Server 2017+
 
@@ -128,7 +146,7 @@ These checks require features introduced in SQL Server 2012.
 | S35 | `sqlplan-review` | ADR Long-Transaction Version Store Accumulation | Accelerated Database Recovery (SQL 2019+) |
 | N51 | `sqlplan-review` | Batch Mode on Rowstore | Batch Mode on Rowstore (SQL 2019+, compat level 150) |
 | N69 | `sqlplan-review` | IQP Approximate Count Distinct Active | `APPROX_COUNT_DISTINCT` IQP (SQL 2019+) |
-| V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2019+) |
+| V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2016+; primarily observable in Azure SQL/MI where log rate is tier-enforced) |
 | V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVSVERSIONSTORE_WAIT` / `ADR_CLEANUP_WAIT` (SQL 2019+) |
 | T79 | `tsql-review` | Scalar UDF Inlining Blocked — Blocking Construct | Scalar UDF inlining (SQL 2019+) |
 | T84 | `tsql-review` | APPROX_COUNT_DISTINCT Used for Exact Counting | `APPROX_COUNT_DISTINCT` (SQL 2019+) |
@@ -136,6 +154,15 @@ These checks require features introduced in SQL Server 2012.
 | X25 | `sqltrace-review` | ADR Version Cleaner Long-Duration Events | ADR version cleaner XE events (SQL 2019+) |
 | Q29 | `sqlquerystore-review` | Memory Grant Feedback Instability | Memory Grant Feedback (batch mode SQL 2019+; row mode SQL 2022+) |
 | V44 | `sqlwait-review` | TempDB Metadata Latch Contention — Memory-Optimized Metadata Not Enabled | `ALTER SERVER CONFIGURATION SET MEMORY_OPTIMIZED TEMPDB_METADATA` (SQL 2019+) |
+| A2 | `sqlencryption-review` | TDE Encryption Scan In Progress | Suspendable TDE scan (`ALTER DATABASE … SUSPEND | RESUME DATABASE ENCRYPTION SCAN`) — SQL 2019+; scan itself exists from SQL 2008 but suspension requires SQL 2019+ |
+| A10 | `sqlencryption-review` | Randomized Encryption Without Secure Enclave Where Queries Require It | Always Encrypted with Secure Enclaves (SQL 2019+) |
+| A12 | `sqlencryption-review` | Secure Enclave Not Configured for Range / LIKE Queries | `column encryption enclave type` configuration (SQL 2019+) |
+| A53 | `sqlencryption-review` | Sensitivity-Classified Columns Lacking Encryption | `sys.sensitivity_classifications` (SQL 2019+; also Azure SQL) |
+| A63 | `sqlencryption-review` | Always Encrypted with Secure Enclaves — Attestation URL Misconfigured | Always Encrypted Advanced — attestation configuration (SQL 2019+) |
+| A64 | `sqlencryption-review` | Always Encrypted — Enclave Computation Without Secure Enclave Configuration | Always Encrypted Advanced — enclave computation (SQL 2019+) |
+| A65 | `sqlencryption-review` | Column Encryption Key Encrypted with RSA-OAEP in Azure Key Vault Without Secure Enclave | Always Encrypted Advanced — CEK encryption key (SQL 2019+) |
+| A66 | `sqlencryption-review` | Always Encrypted — Enclave-Enabled Key Rotation Not Performed | Always Encrypted Advanced — enclave key rotation (SQL 2019+) |
+| A67 | `sqlencryption-review` | Always Encrypted — `ALTER DATABASE ENCRYPTION` with Enclave Metadata Missing | Always Encrypted Advanced — enclave metadata (SQL 2019+) |
 
 ### SQL Server 2022+ only
 
@@ -146,6 +173,7 @@ These checks require features introduced in SQL Server 2012.
 | N67 | `sqlplan-review` | Ordered Columnstore Scan — Segment Pruning Confirmed | Ordered columnstore index (SQL 2022+) |
 | N68 | `sqlplan-review` | PSP Variant Cardinality Error | PSP variant plans (compat level 160) |
 | N70 | `sqlplan-review` | DOP Feedback Adjusted Plan | IQP DOP Feedback (compat level 160) |
+| V3 | `sqlwait-review` | Parallelism — CXSYNC_PORT / CXSYNC_CONSUMER sub-triggers | `CXSYNC_PORT` and `CXSYNC_CONSUMER` wait types (SQL 2022+/Azure SQL only; CXPACKET/CXCONSUMER aspects of V3 are universal) |
 | V41 | `sqlwait-review` | PSP Optimization Selector Wait | `QUERY_OPTIMIZER_PSP_WAIT` (SQL 2022+) |
 | V42 | `sqlwait-review` | IQP DOP Feedback Adjustment Wait | `DOP_FEEDBACK_WAIT` (SQL 2022+) |
 | T80 | `tsql-review` | Ledger Table DML Without Version Column Awareness | Ledger tables (SQL 2022+) |
@@ -162,10 +190,16 @@ These checks require features introduced in SQL Server 2012.
 | Q26 | `sqlquerystore-review` | PSP Optimization Active | PSP plan variants in `sys.query_store_plan_feedback` (SQL 2022+) |
 | Q27 | `sqlquerystore-review` | CE Feedback Persistent Model Adjustment | CE Feedback in `sys.query_store_plan_feedback` (compat level 160) |
 | Q28 | `sqlquerystore-review` | DOP Feedback Applied | DOP Feedback in `sys.query_store_plan_feedback` (compat level 160) |
-| Q30 | `sqlquerystore-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2022+) |
+| Q30 | `sqlquerystore-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2025+ on-premises GA; Azure SQL Database GA; SQL 2022 limited preview with TF 12606 only — not production-supported) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock (Ledger aspect) | Ledger tables (SQL 2022+); temporal aspect listed under SQL 2016+ |
 | Q31 | `sqlquerystore-review` | Query Store Hint Ineffective or Stale | `sys.query_store_query_hints` (SQL 2022+) |
 | Q12 | `sqlquerystore-review` | Plan Feedback Active | Automated plan feedback via `plan_feedback` column (SQL 2022+) |
+| A59 | `sqlencryption-review` | TLS 1.3 Not Enforced for Connections | TLS 1.3 support (SQL 2022+) |
+| A73 | `sqlencryption-review` | Ledger Table Without Automated Digest Management | Ledger tables (SQL 2022+) |
+| A74 | `sqlencryption-review` | Ledger Digest Storage Not Configured | Ledger tables (SQL 2022+) |
+| A75 | `sqlencryption-review` | Ledger Database Without Automatic Digest Upload | Ledger tables (SQL 2022+) |
+| A76 | `sqlencryption-review` | Ledger Verification Incomplete or Overdue | Ledger verification (SQL 2022+) |
+| A94 | `sqlencryption-review` | GDPR Art. 17: PII in Append-Only Ledger Without Crypto-Shredding Strategy | `sys.tables.ledger_type = 2` append-only ledger (SQL 2022+) |
 
 ### Windows Server Version-Gated Checks
 
@@ -186,6 +220,10 @@ These checks only fire on Azure SQL Database or Azure SQL Managed Instance. They
 | I17 | `sqlstats-review` | Remote Page Server Reads Dominant | Azure SQL Hyperscale only |
 | K32 | `sqlspn-review` | Entra-Only Auth With Orphaned AD SPN | Azure SQL (Entra ID / EXTERNAL_PROVIDER auth) |
 | K33 | `sqlspn-review` | Azure SQL MI SPN for On-Premises Clients | Azure SQL Managed Instance only |
+| A50 | `sqlencryption-review` | Azure Key Vault BYOK TDE Without Automatic Key Rotation | Azure SQL / SQL on Azure VM with AKV TDE protector |
+| A51 | `sqlencryption-review` | TDE Using Service-Managed Key in Compliance-Sensitive Azure SQL Environment | Azure SQL service-managed TDE (`encryptor_type = SERVICE_MANAGED`) |
+| A101 | `sqlencryption-review` | Azure Key Vault Soft-Delete or Purge Protection Not Enabled | Azure SQL using AKV BYOK TDE or AE CMK |
+| A112 | `sqlencryption-review` | Azure SQL Managed Instance: Managed Identity Missing AKV Permissions for CMK | Azure SQL Managed Instance BYOK TDE only |
 
 ### Arc-Conditional Checks (On-Premises or Cloud with Azure Arc Agent)
 
@@ -217,7 +255,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**384 of 557 checks (68.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**460 of 669 checks (68.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
@@ -241,12 +279,12 @@ These checks analyze behaviors present since SQL Server 2008 R2:
 
 | "I'm on SQL…" | Run these skills without restrictions | Skip or expect partial results |
 |---|---|---|
-| **2022** | All 16 skills | 5 Azure-specific checks silently skip on-premises |
-| **2019** | All 16 skills | 24 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback) skip |
-| **2017** | All 16 skills | Above + 12 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata) skip |
-| **2016** | All 16 skills | Above + 11 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
+| **2022** | All 16 skills | 10 Azure-specific checks silently skip on-premises |
+| **2019** | All 16 skills | 29 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback, TLS 1.3) skip |
+| **2017** | All 16 skills | Above + 22 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata, Always Encrypted Advanced) skip |
+| **2016** | All 16 skills | Above + 13 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
 | **2014** | 15 skills (no `sqlquerystore-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
-| **2012** | 15 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available) |
+| **2012** | 15 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available); A22–A25, A72 (Backup Encryption, SQL 2014+) unavailable |
 | **2008 R2** | 13 skills (no `sqlhadr-review`, `sqlclusterlog-review`, `sqlquerystore-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23) |
 | **Azure SQL DB** | `tsql-review`, `sqlstats-review`, `sqlplan-review`, `sqlindex-advisor`, `sqldeadlock-review`, `sqlplan-batch`, `sqlplan-compare`, `sqlquerystore-review`, `sqlprocstats-review`, `sqltrace-review`, `sqlwait-review` | `sqlhadr-review`, `sqlclusterlog-review` not applicable; `sqlspn-review` partial (K1–K31 not relevant for Entra-only auth) |
 | **Azure SQL MI** | All 16 skills | `sqlhadr-review`/`sqlclusterlog-review` partial (MI uses managed HA, not all WSFC constructs apply) |

@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides eighteen slash-command skills — seventeen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, and file-level I/O latency analysis. No application code — content is Markdown only.
+Provides nineteen slash-command skills — eighteen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, and full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance). No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -36,6 +36,7 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | [skills/sqlspn-review/SKILL.md](skills/sqlspn-review/SKILL.md) | SPN and Kerberos delegation analysis: `sqlspn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 | [skills/sqlmemory-review/SKILL.md](skills/sqlmemory-review/SKILL.md) | Memory pressure analysis: `sqlmemory-review`. 20 checks (O1–O20) — PLE, plan cache bloat, memory grants, memory clerks, ColumnStore/XTP footprint, OS pressure, LPIM, Max Server Memory |
 | [skills/sqldiskio-review/SKILL.md](skills/sqldiskio-review/SKILL.md) | File-level I/O latency and auto-growth analysis: `sqldiskio-review`. 15 checks (Z1–Z15) — data/log latency, hot files, stall ratio, storage placement, auto-growth events and sizing |
+| [skills/sqlencryption-review/SKILL.md](skills/sqlencryption-review/SKILL.md) | Full SQL Server encryption infrastructure analysis: `sqlencryption-review`. 112 checks (A1–A112) — TDE, Always Encrypted, CLE symmetric keys, backup encryption, transport/TLS, certificate lifecycle, asymmetric/symmetric key management, DMK/SMK key hierarchy (including sp_control_dbmasterkey_password and SSISDB), EKM/AKV, TLS/network hardening, Always Encrypted advanced (enclave attestation, driver compatibility), operational key lifecycle, SQL Server 2022 Ledger, Azure-specific encryption, dynamic data masking patterns, compliance explicit checks (PCI-DSS v4, HIPAA, GDPR, FedRAMP, CMMC, NY-DFS), operational validation (job step passwords, plan cache exposure, AKV soft-delete), advanced cryptographic patterns (ENCRYPTBYPASSPHRASE, HASHBYTES, Service Broker certs, NTLM) |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -59,15 +60,27 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | [skills/sqlspn-review/references/check-explanations.md](skills/sqlspn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
 | [skills/sqlmemory-review/references/check-explanations.md](skills/sqlmemory-review/references/check-explanations.md) | Plain-English explanation of all 20 O-checks with DMV examples, fix recipes, and Quick Reference table |
 | [skills/sqldiskio-review/references/check-explanations.md](skills/sqldiskio-review/references/check-explanations.md) | Plain-English explanation of all 15 Z-checks with sys.dm_io_virtual_file_stats examples, fix recipes, and Quick Reference table |
+| [skills/sqlencryption-review/references/check-explanations.md](skills/sqlencryption-review/references/check-explanations.md) | Plain-English explanation of all 112 A-checks with DMV examples, T-SQL fix code, and Quick Reference table covering all 20 categories |
+| [skills/sqlencryption-review/references/concepts.md](skills/sqlencryption-review/references/concepts.md) | Background concepts (19 topics): symmetric vs asymmetric encryption, public/private keys, SQL Server algorithm reference, key hierarchy, TLS deep dive, FIPS 140-2, PCI-DSS, HIPAA, GDPR, SOX, FedRAMP, ISO 27001, TDE performance, DR with encryption, AE performance, SQL Ledger, DMK password auto-open (sp_control_dbmasterkey_password), passphrase-based encryption (PBKDF1 vs PBKDF2), DDM vs encryption |
+| [skills/sqlencryption-review/references/howto-tde-setup.md](skills/sqlencryption-review/references/howto-tde-setup.md) | Step-by-step TDE deployment guide: cert creation, DEK, enabling encryption, monitoring scan, cert backup, restore procedure |
+| [skills/sqlencryption-review/references/howto-always-encrypted.md](skills/sqlencryption-review/references/howto-always-encrypted.md) | Step-by-step Always Encrypted setup: CMK (AKV/Windows), CEK, column encryption, app changes, enclave config, CLE migration |
+| [skills/sqlencryption-review/references/howto-tls-config.md](skills/sqlencryption-review/references/howto-tls-config.md) | Step-by-step TLS 1.2/1.3 config: certificate request from CA, binding, ForceEncryption, cipher suite ordering, verification |
+| [skills/sqlencryption-review/references/howto-key-rotation.md](skills/sqlencryption-review/references/howto-key-rotation.md) | Step-by-step key rotation: TDE cert, backup cert, SB/AG endpoint certs, CLE symmetric keys, AE CMK/CEK, DMK/SMK regeneration |
+| [skills/sqlencryption-review/references/howto-crypto-shredding.md](skills/sqlencryption-review/references/howto-crypto-shredding.md) | Step-by-step cryptographic erasure for GDPR right-to-erasure via per-customer encryption keys |
+| [skills/sqlencryption-review/references/howto-disaster-recovery.md](skills/sqlencryption-review/references/howto-disaster-recovery.md) | Step-by-step DR for encrypted databases: TDE restore, encrypted backup restore, cross-version, AG failover, CMK migration, SMK regeneration |
+| [skills/sqlencryption-review/references/howto-dmk-password-management.md](skills/sqlencryption-review/references/howto-dmk-password-management.md) | Step-by-step sp_control_dbmasterkey_password guide: SSISDB setup, cross-server restore, AG replica registration, SMK restore invalidation, sys.master_key_passwords internals |
+| [skills/sqlencryption-review/references/howto-dynamic-data-masking.md](skills/sqlencryption-review/references/howto-dynamic-data-masking.md) | DDM decision guide: masking vs encryption, UNMASK permission management, DDM interaction with AE/CLE, DDM + RLS patterns |
+| [skills/sqlencryption-review/references/howto-agent-jobs.md](skills/sqlencryption-review/references/howto-agent-jobs.md) | Secure SQL Agent job patterns: certificate-based key opens, proxy credentials, TRY/CATCH cleanup, alerts for encryption errors, job step audit queries |
+| [skills/sqlencryption-review/references/error-reference.md](skills/sqlencryption-review/references/error-reference.md) | Common encryption errors reference: Msg 33111, 33104, 15581, 33081, 15318, self-signed cert, audit failures, EKM errors, enclave attestation, TLS handshake errors |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 18 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 557-check ID reference |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 19 skills |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 613-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 557 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 669 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
 | [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 18 SKILL.md files are discovered by the plugin system |
@@ -104,6 +117,15 @@ Provides eighteen slash-command skills — seventeen specialised review skills p
 | [skills/sqlspn-review/examples/](skills/sqlspn-review/examples/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
 | [skills/sqlmemory-review/examples/](skills/sqlmemory-review/examples/) | Memory clerk + PLE + grant queue output: ColumnStore pressure, single-use plan bloat, oversized grant blocking 4 sessions + analysis |
 | [skills/sqldiskio-review/examples/](skills/sqldiskio-review/examples/) | sys.dm_io_virtual_file_stats + auto-growth trace: 47 ms data reads, 31 ms log writes, 3 auto-grow events on same volume + analysis |
+| [skills/sqlencryption-review/examples/](skills/sqlencryption-review/examples/) | Multi-database encryption audit DMV output: TDE off on HRPayroll/ArchiveDB, expired TDE cert, RC4/3DES CLE keys, unencrypted backups, plaintext remote sessions, no SMK/DMK backup, self-signed TLS + analysis |
+
+### Scripts
+
+| File | Purpose |
+|------|---------|
+| [skills/sqlencryption-review/scripts/capture-all-encryption.ps1](skills/sqlencryption-review/scripts/capture-all-encryption.ps1) | PowerShell: captures all encryption DMVs to timestamped output files |
+| [skills/sqlencryption-review/scripts/test-tls.ps1](skills/sqlencryption-review/scripts/test-tls.ps1) | PowerShell: verifies TLS configuration via SChannel registry + connection test |
+| [skills/sqlencryption-review/scripts/README.md](skills/sqlencryption-review/scripts/README.md) | Script usage guide with prerequisites and examples |
 
 ## Installing Skills
 
@@ -121,7 +143,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Option 3: Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 18 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 19 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -194,12 +216,16 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `K` | `sqlspn-review` |
 | `O` | `sqlmemory-review` |
 | `Z` | `sqldiskio-review` |
+| `A` | `sqlencryption-review` |
 | (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
 New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.
 
 ### references/check-explanations.md is not loaded at runtime by default
 Only `SKILL.md` is loaded automatically by the Claude Code skill loader. The `references/check-explanations.md` file is human reference and on-demand context — Claude may load it when a user asks "explain check X" or for deeper fix-option detail. Do not put trigger conditions or thresholds there that Claude needs to act on without prompting.
+
+### Microsoft Learn validation (mandatory)
+All new and modified skills, checks, scripts, and reference content must be validated against current Microsoft Learn documentation before being considered complete. Use the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`) to verify every DMV column name, T-SQL syntax, PowerShell cmdlet, configuration setting, and version compatibility claim. If documentation cannot be found, mark the content as "Unverified" rather than assuming correctness. Full policy: [`.claude/docs/ms-learn-validation.md`](.claude/docs/ms-learn-validation.md)
 
 ### Updating check counts — all 6 touch points
 When adding or removing a check from any skill, update all of:
@@ -219,6 +245,7 @@ Then run `bash scripts/verify-docs.sh` to confirm Check 1 passes.
 | Topic | File |
 |-------|------|
 | Architectural patterns, conventions, design decisions | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) |
+| Microsoft Learn MCP validation policy (mandatory) | [.claude/docs/ms-learn-validation.md](.claude/docs/ms-learn-validation.md) |
 | Scenario-based skill selection, symptom routing | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) |
 | Token costs and cost control strategies | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) |
 | SQL Server version compatibility matrix | [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) |

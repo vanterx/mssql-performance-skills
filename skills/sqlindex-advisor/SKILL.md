@@ -37,7 +37,7 @@ SELECT
     migs.user_scans,
     migs.avg_total_user_cost,
     migs.avg_user_impact,
-    ROUND(migs.user_seeks * migs.avg_total_user_cost * (migs.avg_user_impact / 100.0), 2) AS weighted_impact,
+    ROUND(migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans), 2) AS weighted_impact,
     mid.statement            AS table_name,
     mid.equality_columns,
     mid.inequality_columns,
@@ -346,7 +346,7 @@ Per suggestion, extract: `Impact`, `Database/Schema/Table`, EQUALITY columns, IN
 
 ## Source C: DMV-Based Suggestions
 
-When `sys.dm_db_missing_index_group_stats` output is pasted, treat each row as a candidate. The `weighted_impact` column (`user_seeks × avg_total_user_cost × avg_user_impact / 100`) is a much better ranking signal than the static optimizer Impact because it accounts for how frequently the query actually runs.
+When `sys.dm_db_missing_index_group_stats` output is pasted, treat each row as a candidate. The `weighted_impact` column (`avg_total_user_cost × avg_user_impact × (user_seeks + user_scans)`) is a much better ranking signal than the static optimizer Impact because it accounts for how frequently the query actually runs (both seeks and scans).
 
 Extract per row: `table_name`, `equality_columns`, `inequality_columns`, `included_columns`, `weighted_impact`.
 
@@ -468,7 +468,7 @@ ON [dbo].[...] ([...])
 INCLUDE ([...])
 WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
       -- SQL 2017+ on large tables: add RESUMABLE = ON, MAX_DURATION = 120 MINUTES
-      -- Remove ONLINE = ON for Standard edition pre-2016 or tables with LOB columns
+      -- Remove ONLINE = ON for Standard edition through SQL 2017 (SQL 2019+ Standard supports online rebuild) or tables with LOB columns
      );
 
 -- Validate before promoting to production:
@@ -506,7 +506,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
 - Operator-derived recommendations (Source A) are inferences — they are not guaranteed improvements. Always validate with `/sqlplan-review` findings before deploying.
 - The optimizer's Impact score reflects a single query's estimated benefit. A derived recommendation from a Nested Loops with 50,000 executions may be more valuable than an optimizer suggestion with Impact 90 from a query that runs once a day. DMV `weighted_impact` data is the most reliable ranking signal when available.
 - Always test in non-production first. New indexes can shift plan shapes for other queries on the same table.
-- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition pre-2016 or tables with LOB columns (xml, varchar(max), etc.). SQL Server 2017+ supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` for large tables, which allows pausing and resuming a long index build.
+- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition through SQL Server 2017 (online index rebuild requires Enterprise edition on SQL 2016 and SQL 2017; Standard edition gains online rebuild support from SQL Server 2019 onward) or tables with LOB columns (xml, varchar(max), etc.). SQL Server 2017+ Enterprise supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` for large tables, which allows pausing and resuming a long index build.
 - `DROP_EXISTING = ON` is appropriate when extending an existing index (D1 Key Lookup pattern). Always verify the current index name against `sys.indexes` before using it.
 
 ---

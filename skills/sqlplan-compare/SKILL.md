@@ -278,7 +278,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 ## Companion Skills
 
-- **sqlplan-review** — Run the full 99-check analysis on each plan individually before comparing. Findings from sqlplan-review provide context for why the regression occurred.
+- **sqlplan-review** — Run the full 108-check analysis on each plan individually before comparing. Findings from sqlplan-review provide context for why the regression occurred.
 - **sqlindex-advisor** — If the regression introduced a new Key Lookup or expensive scan, use this skill to generate the covering index that would resolve it.
 - **sqltrace-review** — If a workload trace showed the query regressing in production, cross-reference trace duration variance (X14) with the plan diff.
 - **tsql-review** — If the regression was triggered by a schema or code change, review the T-SQL source for the anti-pattern that caused the plan change.

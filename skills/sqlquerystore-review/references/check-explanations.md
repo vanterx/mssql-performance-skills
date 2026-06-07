@@ -684,17 +684,21 @@ Query Store tracks three execution types:
 
 **Example (problem + fix):**
 ```
--- actual_state_desc = READ_ONLY, readonly_reason = 524288 (MAX_STORAGE_SIZE_HIT)
+-- actual_state_desc = READ_ONLY, readonly_reason = 65536 (MAX_STORAGE_SIZE_MB limit hit)
 -- Query Store hit the size cap and stopped collecting 3 days ago
 -- All queries since then have no Query Store data
 ```
 **Fix options:**
-1. If READ_ONLY due to size cap: increase `MAX_STORAGE_SIZE_MB`, then re-enable: `ALTER DATABASE CURRENT SET QUERY_STORE = ON`
-2. If READ_ONLY for other reasons: check `readonly_reason` column:
-   - 524288 = size cap hit (increase max size)
-   - 1 = database is read-only
-   - 2 = single user mode
-   - 8 = database in emergency mode
+1. If READ_ONLY due to size cap (`readonly_reason = 65536`): increase `MAX_STORAGE_SIZE_MB`, then re-enable: `ALTER DATABASE CURRENT SET QUERY_STORE = ON`
+2. If READ_ONLY for other reasons: check `readonly_reason` column (bitmask — multiple reasons can combine):
+   - `1` = database is in read-only mode
+   - `2` = database is in single-user mode
+   - `4` = database is in emergency mode
+   - `8` = database is a readable secondary replica (AG or geo-replication)
+   - `65536` = Query Store reached the `max_storage_size_mb` limit (most common operational cause)
+   - `131072` = number of statements in Query Store hit an internal memory limit
+   - `262144` = in-memory items waiting to be flushed reached an internal limit
+   - `524288` = the database itself reached its disk size limit (not the QS max_storage_size — fix the database file growth, not the QS settings)
 3. If capture_mode = NONE: `ALTER DATABASE CURRENT SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO)`
 4. If OFF entirely: `ALTER DATABASE CURRENT SET QUERY_STORE = ON`
 5. Important: fixing READ_ONLY restores capture immediately — no data is lost, it just wasn't being collected during the READ_ONLY period

@@ -27,8 +27,8 @@ A `.sqlplan` XML contains one or more `<StmtSimple>` elements (a single query, o
 
 **For each `<StmtSimple>` in the XML:**
 1. Record the `StatementId` and a short excerpt from `StatementText` for the overview table label (use the full `StatementText` for all checks — never truncate during analysis)
-2. Run all 33 statement-level checks (S1–S33) against this statement's attributes
-3. Walk every `<RelOp>` node in this statement's plan tree recursively, applying all 66 node-level checks (N1–N66)
+2. Run all 36 statement-level checks (S1–S36) against this statement's attributes
+3. Walk every `<RelOp>` node in this statement's plan tree recursively, applying all 72 node-level checks (N1–N72)
 4. Label every finding with the statement source
 
 **Single-statement plans** (one `<StmtSimple>`): the `StatementId` prefix may be omitted for brevity.
@@ -83,7 +83,7 @@ Report every triggered finding — do not stop at the first match per statement.
 
 ---
 
-## Statement-Level Checks (S1–S33)
+## Statement-Level Checks (S1–S36)
 
 Run these once per `<StmtSimple>` element before inspecting individual operators.
 ### S1 — Serial Plan
@@ -189,7 +189,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Info
 - **Fix:** SQL Server is using interleaved execution to feed actual row counts from multi-statement TVFs back into optimization. This is beneficial. Verify it has not been suppressed via `OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))`, which would revert to the static 1-row estimate.
 ### S26 — Batch Mode Adaptive Join Active
-- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2019+
+- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2017+ (compat level 140+)
 - **Severity:** Info
 - **Fix:** SQL Server is deferring the join strategy (Hash vs Nested Loops) to runtime. This is generally good. Flag only if the `AdaptiveThresholdRows` does not match actual row distribution, indicating the threshold was calibrated on a non-representative execution.
 ### S27 — Excessive Missing Index Suggestions
@@ -472,7 +472,7 @@ Apply these to every operator node in the plan tree.
 ### N57 — STRING_SPLIT at Scale
 - **Trigger:** `physicalOp` = "Table-valued function" AND the operator name or object reference contains "STRING_SPLIT" AND `actualRows` > 10,000
 - **Severity:** Warning
-- **Fix:** STRING_SPLIT has no statistics — the optimizer always estimates 50 output rows regardless of the input string. At scale, this causes join strategy errors and memory undersizing. For large volumes, pre-split strings in the application layer or load them into a staging table. On SQL 2022+, pass `ENABLE_ORDINAL` as the third argument if the ordinal position is needed; without it the ordinal column is not available.
+- **Fix:** STRING_SPLIT has no statistics — the optimizer always estimates 50 output rows regardless of the input string. At scale, this causes join strategy errors and memory undersizing. For large volumes, pre-split strings in the application layer or load them into a staging table. On SQL 2022+, pass `1` as the third argument (`enable_ordinal`) to expose the `ordinal` output column if positional ordering is needed: `STRING_SPLIT(col, ',', 1)`; without it the ordinal column is not returned.
 ### N58 — Columnstore Plan with Mixed Batch/Row Mode Operators
 - **Trigger:** The plan contains operators with `executionMode = Batch` AND other operators with `executionMode = Row` when a columnstore index is present as a data source
 - **Severity:** Warning
@@ -759,8 +759,8 @@ Load `references/check-explanations.md` when:
 
 The file is 3,500+ lines. Navigate with its Contents table at the top:
 - **Before You Start** — key concepts (execution plans, statistics, memory grants)
-- **Statement-Level Checks (S1–S33)** — XML attribute examples per check
-- **Node-Level Checks (N1–N66)** — ranked fix options per check
+- **Statement-Level Checks (S1–S36)** — XML attribute examples per check
+- **Node-Level Checks (N1–N72)** — ranked fix options per check
 - **Quick Reference Tables** — severity/trigger summary for all 108 checks
 
 Load `references/output-format.md` when producing the Prioritized Fix Sequence,

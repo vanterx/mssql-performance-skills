@@ -26,6 +26,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlspn-review`](#sqlspn-review) | `/sqlspn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 40 checks (K1–K40): SPN presence, service account binding, AG listener, permissions, delegation, Azure AD hybrid, gMSA rollover, FCI/DAG, FAST armoring, CNAME alias |
 | [`sqlmemory-review`](#sqlmemory-review) | `/sqlmemory-review` | `sys.dm_os_memory_clerks`, `sys.dm_exec_query_memory_grants`, PLE counter, `sys.dm_os_sys_memory` output | Memory pressure analysis — 20 checks (O1–O20): PLE, plan cache bloat, memory grants queue, oversized grants, ColumnStore/XTP footprint, OS pressure notifications, LPIM, Max Server Memory |
 | [`sqldiskio-review`](#sqldiskio-review) | `/sqldiskio-review` | `sys.dm_io_virtual_file_stats` snapshot pair, `sys.master_files`, default trace auto-growth events | File-level I/O analysis — 15 checks (Z1–Z15): data/log latency, hot file, stall ratio, storage placement, TempDB co-location, auto-growth sizing and timing, I/O trend worsening |
+| [`sqlencryption-review`](#sqlencryption-review) | `/sqlencryption-review`, `/tde-review`, `/encryption-review`, `/tls-review`, `/ledger-review`, `/ssisdb-review`, `/data-masking-review` | `sys.databases`, `sys.dm_database_encryption_keys`, `sys.certificates`, `sys.symmetric_keys`, `sys.master_key_passwords`, `sys.masked_columns`, `msdb.dbo.backupset`, `sys.dm_exec_connections`, and related DMV output | Full encryption posture analysis — 112 checks (A1–A112) across 20 categories: TDE, Always Encrypted, CLE, backup encryption, transport/TLS, certificate lifecycle, key management, DMK/SMK hierarchy (including sp_control_dbmasterkey_password/SSISDB), EKM/AKV, compliance, TLS hardening, AE enclave/driver, key lifecycle, Ledger, Azure, DDM patterns, compliance explicit (PCI-DSS v4/HIPAA/GDPR/FedRAMP), operational validation (job step passwords/plan cache/AKV soft-delete), advanced crypto (PBKDF1/HASHBYTES/NTLM/SB certs) |
 
 ---
 
@@ -620,6 +621,28 @@ You have Query Store disabled or don't want to capture a trace. You have `sys.dm
 3. Run the procedure with `SET STATISTICS IO, TIME ON` → **`/sqlstats-review`** — identify which statement is the bottleneck.
 4. Capture the plan for that statement → **`/sqlplan-review`** → **`/sqlindex-advisor`**.
 
+### "I need to audit encryption compliance — TDE, certificates, Always Encrypted, backup encryption, transport"
+
+You have a compliance review (PCI-DSS, HIPAA, GDPR, internal audit) or you suspect weak encryption configuration.
+
+1. **`/sqlencryption-review`** — collect output from the 7–17 recommended DMV queries in the skill prompt and paste. The skill runs 80 checks across all encryption layers: TDE coverage (A1–A8), Always Encrypted gaps (A9–A16), CLE key algorithm strength (A17–A21), backup encryption (A22–A25), transport/TLS (A26–A30), certificate lifecycle (A31–A38), asymmetric/symmetric key management (A39–A43), key hierarchy (A44–A48), EKM/AKV (A49–A52), compliance and coverage (A53–A56), TLS/network hardening (A57–A62), AE advanced/enclave (A63–A67), operational key lifecycle (A68–A72), SQL Ledger (A73–A76), Azure encryption (A77–A80). It outputs a coverage summary, ranked findings table, root-cause analysis, and compliance gap report against PCI-DSS v4/HIPAA/GDPR.
+2. If the analysis reveals expired certificates or missing DMK/SMK backups, treat these as **Critical** — lost keys = permanently unrestorable encrypted databases.
+3. Run **`/sqlerrorlog-review`** in parallel — certificate load failures, TLS startup errors, and self-signed cert notices appear in ERRORLOG (E-checks).
+4. Run **`/sqlhadr-review`** if AG endpoint certificates are flagged — A33 (near-expiry) maps directly to H-checks for replica state; a cert rotation must be coordinated across all replicas.
+5. Run **`/tsql-review`** on procedures that open symmetric keys (OPEN SYMMETRIC KEY) — T14/T15 catch hardcoded key passwords; A18 flags unclosed key scope.
+
+**Minimum viable DMV collection (15 minutes):**
+```sql
+-- Paste each result block into /sqlencryption-review
+SELECT database_id, name, is_encrypted FROM sys.databases;
+SELECT database_id, DB_NAME(database_id), encryption_state_desc, key_algorithm, encryptor_thumbprint FROM sys.dm_database_encryption_keys;
+USE master; SELECT name, pvt_key_encryption_type_desc, expiry_date, issuer_name, subject FROM sys.certificates;
+SELECT name, algorithm_desc, key_length, create_date, modify_date FROM sys.symmetric_keys WHERE name NOT LIKE '##%';
+SELECT database_name, backup_start_date, type, key_algorithm, encryptor_thumbprint FROM msdb.dbo.backupset WHERE backup_start_date > DATEADD(DAY,-30,GETDATE());
+SELECT session_id, client_net_address, encrypt_option, auth_scheme FROM sys.dm_exec_connections;
+SELECT name, is_master_key_encrypted_by_server FROM sys.databases WHERE database_id > 4;
+```
+
 ---
 
 ## Skill Scope Comparison
@@ -893,8 +916,9 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `K1–K40` | `sqlspn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
 | `O1–O20` | `sqlmemory-review` | Memory pressure: PLE, NUMA imbalance, buffer pool concentration, stolen memory, single-use plan bloat, compile rate, large plans, lock clerk, grant queue depth, grant timeout, oversized grants, Resource Governor, BPE, ColumnStore clerk, XTP clerk, OS pressure notifications, LPIM, Max Server Memory | 20 |
 | `Z1–Z15` | `sqldiskio-review` | File I/O: data read latency, data write latency, log write latency, hot file, stall ratio, data+log co-location, TempDB co-location, TempDB log latency, file count imbalance, system drive placement, auto-growth events, data growth increment, log growth increment, peak-hour growth, I/O trend worsening | 15 |
+| `A1–A112` | `sqlencryption-review` | Encryption posture: TDE, AE, CLE, backup encryption, transport TLS, certs, key management, DMK/SMK hierarchy (sp_control_dbmasterkey_password, SSISDB, AG replicas, cross-server restore), EKM/AKV, compliance, TLS hardening, AE enclave/driver, key lifecycle, Ledger, Azure, DDM (masking vs encryption, UNMASK), compliance explicit (PCI-DSS v4 PAN, HIPAA PHI audit, GDPR Art.17 ledger, FIPS mode, FedRAMP/CMMC), operational validation (job step passwords, plan cache exposure, AKV soft-delete/purge, DR restore test), advanced crypto (PBKDF1, HASHBYTES, NTLM auth, SB cross-DB cert, ENCRYPTBYCERT expiry, Azure MI AKV perms) | 112 |
 
-**Total: 557 checks across all skills.**
+**Total: 669 checks across all skills.**
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: mssql-performance-review
-description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
+description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch, sqlmemory-review, sqldiskio-review, sqlencryption-review), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats, memory clerks, file I/O stats, encryption audit) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
 triggers:
   - /mssql-performance-review
   - /mssql-perf-review
@@ -12,7 +12,7 @@ triggers:
 
 ## Purpose
 
-A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 15 specialised review skills, then synthesises their findings into one consolidated report.
+A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 18 specialised review skills, then synthesises their findings into one consolidated report.
 
 The orchestrator is **strictly offline**: it reads files the user provides, generates capture-script bundles when artifacts are missing, and emits analysis reports. It never opens a connection to a SQL Server. All execution against the database is the user's action.
 
@@ -67,6 +67,9 @@ Content-based, not extension-reliant:
 | `RES_EVENT`, `00000a1c` GUID prefixes, `Cluster.Resource` lines | sqlclusterlog-review |
 | `spid` prefixes with `Logon`, `Server`, `Backup` markers | sqlerrorlog-review |
 | `MSSQLSvc/`, `setspn` output, `Existing SPN found for` | sqlspn-review |
+| `memory_node_id`, `pages_kb`, `type` from `sys.dm_os_memory_clerks`; `page_life_expectancy`; `sys.dm_os_sys_info` output | sqlmemory-review |
+| `io_stall_read_ms`, `num_of_reads`, `size_on_disk_bytes` from `sys.dm_io_virtual_file_stats`; auto-growth events | sqldiskio-review |
+| `sys.dm_database_encryption_keys`, `sys.certificates`, `sys.symmetric_keys`, TLS cipher output; explicit encryption audit request | sqlencryption-review |
 | Ambiguous `.txt` | Inspect first 100 lines, pick the highest-priority match; ask the user if still ambiguous |
 
 ## Hypothesis Generation
@@ -123,7 +126,7 @@ Default model assignments (the common case):
 - Classification, hypothesis generation, cost summary, follow-up Q&A: **Haiku 4.5**
 - Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlindex-advisor, sqldeadlock-review, sqlclusterlog-review)
 - Synthesis, conflict detection, deep-dive analysis: **Sonnet 4.6**
-- Adversarial root-cause pass: **Opus 4.7** (cannot be downgraded even on `--model-tier economy` — quality-critical)
+- Adversarial root-cause pass: **Opus 4.5** (claude-opus-4-5; cannot be downgraded even on `--model-tier economy` — quality-critical)
 
 Report the per-phase cost breakdown in the Summary block:
 
@@ -476,3 +479,6 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlclusterlog-review` — WSFC cluster log. Routed alongside sqlhadr-review and sqlerrorlog-review for failover analysis.
 - `/sqlerrorlog-review` — SQL Server ERRORLOG. Routed for outage timelines, login bursts, memory pressure, I/O warnings.
 - `/sqlspn-review` — SPN and Kerberos delegation. Routed when Kerberos / login failure signals are present.
+- `/sqlmemory-review` — Server memory pressure analysis (PLE, memory clerks, memory grants). Routed when `sys.dm_os_memory_clerks`, `sys.dm_os_sys_info`, or memory grant queue output is present.
+- `/sqldiskio-review` — File-level I/O latency and auto-growth analysis. Routed when `sys.dm_io_virtual_file_stats` or auto-growth trace output is present.
+- `/sqlencryption-review` — Full SQL Server encryption posture analysis (TDE, Always Encrypted, CLE, TLS, key hierarchy). Routed when encryption DMV output, certificate data, or an explicit encryption audit request is present.

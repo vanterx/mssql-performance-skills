@@ -25,7 +25,8 @@
       "Bash(npm ci)",
       "Bash(npm run *)",
       "Bash(npx wrangler*)",
-      "Bash(npx ecc-agentshield*)"
+      "Bash(npx ecc-agentshield*)",
+      "mcp__claude_ai_Microsoft_Learn__microsoft_docs_search"
     ],
     "deny": [
       "Bash(git push --force*)",
@@ -36,6 +37,9 @@
       "Bash(rm -rf *)",
       "Bash(sudo *)",
       "Bash(chmod 777 *)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\tsx11\\.claude"
     ]
   },
   "hooks": {

@@ -25,7 +25,7 @@ If the user provides a file path, read the file and analyze its content. If the 
 
 ## How to Run
 
-Walk T1–T50 in category order. Report every triggered finding — do not stop at the first match. For checks where the SQL construct is absent, note them as passing in the Passed Checks section. For checks where schema or parameter type information is unknown, state your assumption explicitly rather than skipping the check.
+Walk T1–T85 in category order. Report every triggered finding — do not stop at the first match. For checks where the SQL construct is absent, note them as passing in the Passed Checks section. For checks where schema or parameter type information is unknown, state your assumption explicitly rather than skipping the check.
 
 ---
 
@@ -77,7 +77,7 @@ Run these checks for patterns that prevent index usage, expand data volumes unne
 ### T8 — Scalar UDF in SELECT or WHERE
 - **Trigger:** A call to a user-defined scalar function (not a system function) in the `SELECT` list, `WHERE` clause, `JOIN ON`, or `ORDER BY`. Identifiable by a `schema.FunctionName()` or `dbo.fn_*()` pattern.
 - **Severity:** Warning
-- **Fix:** Scalar UDFs execute once per row and prevent parallelism in SQL Server 2016 and earlier. In SQL Server 2019+, Scalar UDF Inlining may handle simple functions automatically. For complex UDFs: rewrite as an inline table-valued function (iTVF) and use `CROSS APPLY`, or embed the logic directly in the query. Check SQL Server version before recommending inlining as a fix.
+- **Fix:** Scalar UDFs execute once per row and prevent parallelism in SQL Server 2017 and earlier. In SQL Server 2019+, Scalar UDF Inlining may handle simple functions automatically (compat level 150+). For complex UDFs or older versions: rewrite as an inline table-valued function (iTVF) and use `CROSS APPLY`, or embed the logic directly in the query. Check SQL Server version before recommending inlining as a fix.
 ### T9 — Correlated Subquery in SELECT List
 - **Trigger:** A `SELECT` clause that contains a subquery referencing a column from the outer query: `SELECT col1, (SELECT TOP 1 x FROM T2 WHERE T2.id = outer.id) AS x`
 - **Severity:** Warning
@@ -159,7 +159,7 @@ Checks for logic errors that produce wrong results or unreliable behavior, often
 ### T27 — SET ROWCOUNT Usage
 - **Trigger:** `SET ROWCOUNT n` statement
 - **Severity:** Warning
-- **Fix:** `SET ROWCOUNT` is deprecated in all versions of SQL Server. For `SELECT`, use `TOP (@n)`. For `UPDATE` / `DELETE`, use `TOP (@n)` directly in the DML statement: `DELETE TOP (1000) FROM ...`. `SET ROWCOUNT 0` to disable is also unnecessary when using TOP.
+- **Fix:** `SET ROWCOUNT` is deprecated for use with `INSERT`, `UPDATE`, and `DELETE` statements. For `SELECT`, use `TOP (@n)`. For `UPDATE` / `DELETE`, use `TOP (@n)` directly in the DML statement: `DELETE TOP (1000) FROM ...`. `SET ROWCOUNT 0` to disable is also unnecessary when using TOP.
 ### T28 — Missing OPTION (RECOMPILE) on High-Variance Dynamic Filter Query
 - **Trigger:** A stored procedure or parameterized query that builds different effective predicates per call (e.g., optional filters using `@param IS NULL OR col = @param` patterns, or wide OR chains of nullable parameters)
 - **Severity:** Info
@@ -219,7 +219,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 ### T39 — Deprecated Outer Join Syntax
 - **Trigger:** `*=` or `=*` join operators in a `WHERE` clause (old Sybase-style outer join syntax)
 - **Severity:** Critical
-- **Fix:** This syntax was removed in SQL Server 2008 R2 and is invalid at compatibility level 90 (SQL Server 2005) and above. Rewrite using ANSI `LEFT JOIN` or `RIGHT JOIN` syntax. Example: `WHERE a.id *= b.id` → `FROM a LEFT JOIN b ON a.id = b.id`.
+- **Fix:** This syntax was removed in SQL Server 2012 (11.x) and is invalid at compatibility level 90 (SQL Server 2005) and above. Rewrite using ANSI `LEFT JOIN` or `RIGHT JOIN` syntax. Example: `WHERE a.id *= b.id` → `FROM a LEFT JOIN b ON a.id = b.id`.
 ### T40 — Non-ANSI GROUP BY Behavior
 - **Trigger:** A `SELECT` statement with a `GROUP BY` clause where columns in the SELECT list are neither in the GROUP BY nor wrapped in an aggregate function, and the query is running at a compatibility level that permits this (SQL Server 2000 compatibility / `GROUP BY ALL`)
 - **Severity:** Warning
@@ -227,7 +227,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 ### T41 — RAISERROR Instead of THROW
 - **Trigger:** `RAISERROR` statement
 - **Severity:** Info
-- **Fix:** `RAISERROR` is not deprecated but `THROW` (SQL Server 2012+) is the modern replacement. `THROW` re-raises the original error number and severity, works more intuitively with `BEGIN CATCH`, and does not require format string syntax. Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new code. In CATCH blocks, use bare `THROW;` to re-raise the caught error with its original metadata.
+- **Fix:** `RAISERROR` is not deprecated but `THROW` (SQL Server 2012+) is the modern replacement. Two distinct forms: (1) Bare `THROW;` inside a CATCH block re-raises the caught exception with its original error number and severity — use this to propagate errors up the call stack. (2) `THROW error_number, message, state` raises a new exception; the severity is always 16 (the caller cannot change it). Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new application errors; in CATCH blocks, use bare `THROW;` instead of `RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState)`.
 ### T42 — GETDATE() Where SYSDATETIME() Preferred
 - **Trigger:** `GETDATE()` function call in a context where higher precision or UTC time is appropriate
 - **Severity:** Info

@@ -57,7 +57,7 @@ SELECT
     drs.log_send_rate,
     drs.redo_queue_size,
     drs.redo_rate,
-    drs.secondary_lag_seconds,
+    drs.secondary_lag_seconds,          /* SQL Server 2016+ only; NULL on 2014 and earlier */
     drs.estimated_data_loss_seconds,
     drs.estimated_recovery_time_seconds
 FROM sys.availability_groups ag
@@ -188,7 +188,7 @@ These checks quantify the risk of data loss and the time to recover if the prima
   to reduce recovery time. Check secondary disk I/O — redo is sequential log apply and is
   bounded by disk write throughput. Evaluate whether this RTO is acceptable for the SLA.
 ### H9 — Secondary Lag
-- **Trigger:** `secondary_lag_seconds` exceeds the lag threshold (see Thresholds Reference)
+- **Trigger:** `secondary_lag_seconds` exceeds the lag threshold (see Thresholds Reference). **Version note:** `secondary_lag_seconds` was added in SQL Server 2016; this column does not exist in SQL Server 2014 and earlier — skip H9 if the instance is pre-2016
 - **Severity:** Critical if >60 sec; Warning if >10 sec
 - **Fix:** The secondary is behind the primary. For async replicas, check `log_send_rate`
   (H13) — if zero, log is not being sent. For sync replicas, lag indicates the primary is
@@ -327,7 +327,7 @@ These checks surface AG topology gaps that may not cause immediate problems but 
 - **Fix:** Investigate why the contained system database is not synchronized: `SELECT * FROM sys.dm_hadr_database_replica_states WHERE database_id = DB_ID('master')`. Resolve blocking transactions and confirm redo queue size. Review `sys.availability_groups` for `contained_system_databases` column to confirm the configuration is intentional.
 
 ### H24 — Cloud Witness Inaccessible
-- **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != QUORUM_IN_PROGRESS_NORMAL` — Windows Server 2016+ (Cloud Witness requires WS2016 or later)
+- **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != 'NORMAL_QUORUM'` — Windows Server 2016+ (Cloud Witness requires WS2016 or later); valid `quorum_state_desc` values are `UNKNOWN_QUORUM_STATE`, `NORMAL_QUORUM`, `FORCED_QUORUM`
 - **Severity:** Critical — The Cloud Witness quorum resource is unreachable; the cluster is operating without a functioning quorum witness and is at risk of split-brain or total quorum loss
 - **Fix:** Verify connectivity to the Azure Blob Storage endpoint used as the Cloud Witness: `Test-NetConnection -ComputerName <storageaccount>.blob.core.windows.net -Port 443`. Check the Storage Account access key has not been rotated. Validate the Failover Cluster Manager shows the Cloud Witness online. If the witness is permanently unavailable, switch to a File Share Witness or another Cloud Witness account.
 

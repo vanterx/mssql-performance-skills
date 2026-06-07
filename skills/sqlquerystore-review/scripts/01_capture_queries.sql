@@ -59,8 +59,8 @@ SELECT TOP (@top_n)
     is_forced_plan                 = MAX(CASE WHEN p.is_forced_plan = 1 THEN 1 ELSE 0 END),
     force_failure_count            = MAX(p.force_failure_count),
     last_force_failure_reason_desc = MAX(p.last_force_failure_reason_desc),
-    aborted_count                  = SUM(CASE WHEN rs.execution_type = 1 THEN rs.count_executions ELSE 0 END),
-    exception_count                = SUM(CASE WHEN rs.execution_type = 2 THEN rs.count_executions ELSE 0 END),
+    aborted_count                  = SUM(CASE WHEN rs.execution_type = 3 THEN rs.count_executions ELSE 0 END),
+    exception_count                = SUM(CASE WHEN rs.execution_type = 4 THEN rs.count_executions ELSE 0 END),
     avg_tempdb_mb                  = TRY_CAST(
                                          SUM(rs.avg_tempdb_space_used)
                                          / NULLIF(SUM(rs.count_executions), 0) * 8.0 / 1024.0
@@ -74,7 +74,7 @@ JOIN sys.query_store_runtime_stats AS rs
   ON p.plan_id          = rs.plan_id
 WHERE rs.last_execution_time >= @start_date
   AND rs.last_execution_time <  @end_date
-  AND rs.execution_type IN (0, 1, 2)   /* 0=regular, 1=aborted, 2=exception */
+  AND rs.execution_type IN (0, 3, 4)   /* 0=regular, 3=aborted (client-initiated), 4=exception */
 GROUP BY qt.query_sql_text, q.query_id, q.query_hash, q.object_id
 HAVING SUM(rs.count_executions) > 0
 ORDER BY SUM(rs.avg_cpu_time * rs.count_executions) DESC;

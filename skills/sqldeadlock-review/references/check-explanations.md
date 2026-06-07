@@ -60,9 +60,10 @@ In SSMS, go to **Activity Monitor → Processes**, right-click a deadlock entry,
 ### Option 3 — Trace Flags (legacy)
 
 ```sql
-DBCC TRACEON(1222, -1)  -- verbose deadlock info to SQL error log
-DBCC TRACEON(1205, -1)  -- less verbose, just the basics
+DBCC TRACEON(1222, -1)  -- verbose XML-like deadlock info to SQL error log
+DBCC TRACEON(1204, -1)  -- less verbose, node-focused deadlock info to SQL error log
 ```
+Note: `1205` is the error number returned to the client when a deadlock occurs — it is NOT a trace flag. The correct less-verbose trace flag is `1204`.
 
 Output goes to the SQL Server error log. Use `xp_readerrorlog` or view in SSMS under Management → SQL Server Logs.
 
