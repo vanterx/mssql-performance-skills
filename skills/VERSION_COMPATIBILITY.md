@@ -146,7 +146,7 @@ These checks require features introduced in SQL Server 2012.
 | S35 | `sqlplan-review` | ADR Long-Transaction Version Store Accumulation | Accelerated Database Recovery (SQL 2019+) |
 | N51 | `sqlplan-review` | Batch Mode on Rowstore | Batch Mode on Rowstore (SQL 2019+, compat level 150) |
 | N69 | `sqlplan-review` | IQP Approximate Count Distinct Active | `APPROX_COUNT_DISTINCT` IQP (SQL 2019+) |
-| V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2019+) |
+| V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2016+; primarily observable in Azure SQL/MI where log rate is tier-enforced) |
 | V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVSVERSIONSTORE_WAIT` / `ADR_CLEANUP_WAIT` (SQL 2019+) |
 | T79 | `tsql-review` | Scalar UDF Inlining Blocked — Blocking Construct | Scalar UDF inlining (SQL 2019+) |
 | T84 | `tsql-review` | APPROX_COUNT_DISTINCT Used for Exact Counting | `APPROX_COUNT_DISTINCT` (SQL 2019+) |
@@ -173,6 +173,7 @@ These checks require features introduced in SQL Server 2012.
 | N67 | `sqlplan-review` | Ordered Columnstore Scan — Segment Pruning Confirmed | Ordered columnstore index (SQL 2022+) |
 | N68 | `sqlplan-review` | PSP Variant Cardinality Error | PSP variant plans (compat level 160) |
 | N70 | `sqlplan-review` | DOP Feedback Adjusted Plan | IQP DOP Feedback (compat level 160) |
+| V3 | `sqlwait-review` | Parallelism — CXSYNC_PORT / CXSYNC_CONSUMER sub-triggers | `CXSYNC_PORT` and `CXSYNC_CONSUMER` wait types (SQL 2022+/Azure SQL only; CXPACKET/CXCONSUMER aspects of V3 are universal) |
 | V41 | `sqlwait-review` | PSP Optimization Selector Wait | `QUERY_OPTIMIZER_PSP_WAIT` (SQL 2022+) |
 | V42 | `sqlwait-review` | IQP DOP Feedback Adjustment Wait | `DOP_FEEDBACK_WAIT` (SQL 2022+) |
 | T80 | `tsql-review` | Ledger Table DML Without Version Column Awareness | Ledger tables (SQL 2022+) |
@@ -189,7 +190,7 @@ These checks require features introduced in SQL Server 2012.
 | Q26 | `sqlquerystore-review` | PSP Optimization Active | PSP plan variants in `sys.query_store_plan_feedback` (SQL 2022+) |
 | Q27 | `sqlquerystore-review` | CE Feedback Persistent Model Adjustment | CE Feedback in `sys.query_store_plan_feedback` (compat level 160) |
 | Q28 | `sqlquerystore-review` | DOP Feedback Applied | DOP Feedback in `sys.query_store_plan_feedback` (compat level 160) |
-| Q30 | `sqlquerystore-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2022+) |
+| Q30 | `sqlquerystore-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2025+ on-premises GA; Azure SQL Database GA; SQL 2022 limited preview with TF 12606 only — not production-supported) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock (Ledger aspect) | Ledger tables (SQL 2022+); temporal aspect listed under SQL 2016+ |
 | Q31 | `sqlquerystore-review` | Query Store Hint Ineffective or Stale | `sys.query_store_query_hints` (SQL 2022+) |
 | Q12 | `sqlquerystore-review` | Plan Feedback Active | Automated plan feedback via `plan_feedback` column (SQL 2022+) |
