@@ -224,6 +224,9 @@ New skills must choose an unused single uppercase letter, or document why they a
 ### references/check-explanations.md is not loaded at runtime by default
 Only `SKILL.md` is loaded automatically by the Claude Code skill loader. The `references/check-explanations.md` file is human reference and on-demand context — Claude may load it when a user asks "explain check X" or for deeper fix-option detail. Do not put trigger conditions or thresholds there that Claude needs to act on without prompting.
 
+### Microsoft Learn validation (mandatory)
+All new and modified skills, checks, scripts, and reference content must be validated against current Microsoft Learn documentation before being considered complete. Use the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`) to verify every DMV column name, T-SQL syntax, PowerShell cmdlet, configuration setting, and version compatibility claim. If documentation cannot be found, mark the content as "Unverified" rather than assuming correctness. Full policy: [`.claude/docs/ms-learn-validation.md`](.claude/docs/ms-learn-validation.md)
+
 ### Updating check counts — all 6 touch points
 When adding or removing a check from any skill, update all of:
 1. Skill frontmatter `description` field (count in the one-liner)
@@ -242,6 +245,7 @@ Then run `bash scripts/verify-docs.sh` to confirm Check 1 passes.
 | Topic | File |
 |-------|------|
 | Architectural patterns, conventions, design decisions | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) |
+| Microsoft Learn MCP validation policy (mandatory) | [.claude/docs/ms-learn-validation.md](.claude/docs/ms-learn-validation.md) |
 | Scenario-based skill selection, symptom routing | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) |
 | Token costs and cost control strategies | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) |
 | SQL Server version compatibility matrix | [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) |
