@@ -189,7 +189,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Info
 - **Fix:** SQL Server is using interleaved execution to feed actual row counts from multi-statement TVFs back into optimization. This is beneficial. Verify it has not been suppressed via `OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))`, which would revert to the static 1-row estimate.
 ### S26 — Batch Mode Adaptive Join Active
-- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2019+
+- **Trigger:** Any operator has `IsAdaptive = 1` AND `executionMode = Batch` — SQL 2017+ (compat level 140+)
 - **Severity:** Info
 - **Fix:** SQL Server is deferring the join strategy (Hash vs Nested Loops) to runtime. This is generally good. Flag only if the `AdaptiveThresholdRows` does not match actual row distribution, indicating the threshold was calibrated on a non-representative execution.
 ### S27 — Excessive Missing Index Suggestions

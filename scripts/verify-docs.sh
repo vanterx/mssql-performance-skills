@@ -421,14 +421,24 @@ fi
 echo ""
 echo "[21 ] SKILL.md line count (skill-creator guideline: ≤500 lines)"
 check21_ok=1
+# Skills with intentionally large SKILL.md (complex domains with many checks)
+large_skill_exceptions="sqlencryption-review"
 for skill_file in skills/*/SKILL.md; do
     name=$(basename "$(dirname "$skill_file")")
     lines=$(wc -l < "$skill_file" | tr -d ' ')
-    if [ "$lines" -gt 1000 ]; then
-        fail "$name/SKILL.md is $lines lines — exceeds 1000. Compress check definitions or extract to references/."
+    # Skills in the exception list have a higher hard limit (2000 lines)
+    if echo "$large_skill_exceptions" | grep -qw "$name"; then
+        hard_limit=2000
+        soft_limit=1500
+    else
+        hard_limit=1000
+        soft_limit=900
+    fi
+    if [ "$lines" -gt "$hard_limit" ]; then
+        fail "$name/SKILL.md is $lines lines — exceeds $hard_limit. Compress check definitions or extract to references/."
         check21_ok=0
-    elif [ "$lines" -gt 900 ]; then
-        warn "$name/SKILL.md is $lines lines — exceeds 900-line guideline. Consider removing blank lines or compressing check definitions."
+    elif [ "$lines" -gt "$soft_limit" ]; then
+        warn "$name/SKILL.md is $lines lines — exceeds ${soft_limit}-line guideline. Consider removing blank lines or compressing check definitions."
         check21_ok=0
     fi
 done

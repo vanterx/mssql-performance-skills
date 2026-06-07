@@ -306,14 +306,14 @@ Evaluate Query Store configuration health.
 - **Fix:** Check `feedback_data` for new vs old DOP. Validate in `sys.query_store_runtime_stats` that elapsed_time improved after adjustment. If DOP reduction caused regressions (especially for time-critical reports), disable: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(USE HINT(''DISABLE_DOP_FEEDBACK''))'`.
 
 ### Q29 — Memory Grant Feedback Instability
-- **Trigger:** `sys.query_store_plan_feedback` contains rows with `feedback_type = 'MemoryGrant'` AND the same `plan_id` has ≥ 3 feedback rows with different grant values — SQL 2019+ (batch mode), SQL 2022+ (row mode)
+- **Trigger:** `sys.query_store_plan_feedback` contains rows with `feedback_type = 'MemoryGrant'` AND the same `plan_id` has ≥ 3 feedback rows with different grant values — SQL 2022+ (requires `sys.query_store_plan_feedback` for DMV-based detection; the underlying MGF behavior exists from SQL 2017+ batch mode and SQL 2019+ row mode, but the feedback persistence DMV is SQL 2022+)
 - **Severity:** Warning — Memory Grant Feedback is oscillating; the query's data distribution is too variable for the feedback mechanism to converge on a stable grant, which can cause alternating spill / over-grant behavior
 - **Fix:** Use a Query Store hint to pin a specific grant percent: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(MIN_GRANT_PERCENT=<n>)'`. Alternatively, disable feedback for this query: `OPTION(USE HINT(''DISABLE_BATCH_MODE_ADAPTIVE_JOINS'', ''DISABLE_INTERLEAVED_EXECUTION_TVF''))`. Investigate whether the data distribution variation is expected or signals a statistics maintenance gap.
 
 ### Q30 — Query Store Replica Coverage Gap
-- **Trigger:** Query Store is enabled AND the AG has readable secondaries, but `sys.query_store_replicas` returns no rows or fewer replicas than exist in the AG — SQL 2022+ only; skip if `sys.query_store_replicas` view is absent
+- **Trigger:** Query Store is enabled AND the AG has readable secondaries, but `sys.query_store_replicas` returns no rows or fewer replicas than exist in the AG — **SQL Server 2025+ on-premises or Azure SQL Database only**; skip entirely on SQL Server 2022 and earlier on-premises (`sys.query_store_replicas` does not exist in SQL 2022 RTM; SQL 2022 has a limited preview via trace flag 12606 that is not production-supported)
 - **Severity:** Info — Query Store replica coverage is not capturing secondary replica workloads; read-heavy secondary workloads will not appear in the Query Store unless each replica's data is separately collected
-- **Fix:** Enable Query Store for read-only replicas: `ALTER DATABASE [db] SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO, READ_WRITE_DATABASES_ONLY = OFF)`. On SQL 2022+, verify the `query_store_capture_policy` allows read-only replica capture. Review `sys.query_store_replicas` after enabling.
+- **Fix:** **SQL Server 2025+ / Azure SQL Database (GA):** Enable Query Store for read-only replicas: `ALTER DATABASE [db] SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO, READ_WRITE_DATABASES_ONLY = OFF)`. Verify `sys.query_store_replicas` shows the expected replicas after enabling. **SQL Server 2022 on-premises:** Do not enable in production — this feature requires trace flag 12606 and is limited preview only. Monitor Microsoft release notes for GA status.
 
 ### Q31 — Query Store Hint Ineffective or Stale
 - **Trigger:** `sys.query_store_query_hints` contains rows where `is_disabled = 1` OR `nthint_failed_last_invocation = 1`; OR hint `query_id` not found in `sys.query_store_query` (orphaned after query eviction) — SQL 2022+ only; skip if `sys.query_store_query_hints` is absent or returns no rows
@@ -323,7 +323,7 @@ Evaluate Query Store configuration health.
 ### Q32 — Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled
 - **Trigger:** `sys.dm_db_tuning_recommendations` has rows with `type = 'FORCE_LAST_GOOD_PLAN'` in `state = 'Verifying'` or `state = 'Active'` AND `sys.database_automatic_tuning_options` shows `FORCE_LAST_GOOD_PLAN` is `OFF` or `INHERIT_OFF` — SQL 2017+ only; skip if `dm_db_tuning_recommendations` is absent or empty
 - **Severity:** Info — SQL Server has identified plan regression candidates eligible for auto-correction but automatic tuning is not enabled; regressions will persist until manually corrected
-- **Fix:** Enable auto-plan correction: `ALTER DATABASE [db] SET AUTOMATIC_TUNING (FORCE_LAST_GOOD_PLAN = ON)`. Requires Query Store in `READ_WRITE` mode (check Q11). Complements IQP feedback (Q26–Q30); the two mechanisms work independently. Avoid enabling alongside active Query Store Hints (Q31) targeting the same query IDs.
+- **Fix:** Enable auto-plan correction: `ALTER DATABASE [db] SET AUTOMATIC_TUNING (FORCE_LAST_GOOD_PLAN = ON)`. Requires Query Store in `READ_WRITE` mode (check Q24). Complements IQP feedback (Q26–Q30); the two mechanisms work independently. Avoid enabling alongside active Query Store Hints (Q31) targeting the same query IDs.
 
 ---
 

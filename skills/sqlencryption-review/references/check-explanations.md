@@ -1,6 +1,6 @@
 # sqlencryption-review — Check Explanations
 
-Plain-English explanation of all 80 A-checks. Load this file when a user asks "explain check A-N", "why does A-N fire?", "how do I fix A-N?", or needs deeper context beyond the three-part summary in SKILL.md.
+Plain-English explanation of all 112 A-checks. Load this file when a user asks "explain check A-N", "why does A-N fire?", "how do I fix A-N?", or needs deeper context beyond the three-part summary in SKILL.md.
 
 For foundational encryption concepts (symmetric/asymmetric, TLS versions, key hierarchy, PCI-DSS/HIPAA/GDPR), read `concepts.md`.
 For step-by-step operational guides (TDE setup, TLS config, key rotation, crypto-shredding, disaster recovery), read the appropriate `howto-*.md` file in this directory.
@@ -20,6 +20,16 @@ For step-by-step operational guides (TDE setup, TLS config, key rotation, crypto
 - [Key Hierarchy DMK and SMK — A44–A48](#key-hierarchy-dmk-and-smk--a44a48)
 - [EKM and Azure Key Vault — A49–A52](#ekm-and-azure-key-vault--a49a52)
 - [Compliance and Coverage — A53–A56](#compliance-and-coverage--a53a56)
+- [TLS and Network Hardening — A57–A62](#tls-and-network-hardening--a57a62)
+- [Always Encrypted Advanced — A63–A67](#always-encrypted-advanced--a63a67)
+- [Operational Key Lifecycle — A68–A72](#operational-key-lifecycle--a68a72)
+- [SQL Server Ledger — A73–A76](#sql-server-ledger--a73a76)
+- [Azure-Specific Encryption — A77–A80](#azure-specific-encryption--a77a80)
+- [DMK Password Auto-Open — A81–A86](#dmk-password-auto-open--a81a86)
+- [Dynamic Data Masking and Permission Patterns — A87–A91](#dynamic-data-masking-and-permission-patterns--a87a91)
+- [Compliance Explicit Checks — A92–A98](#compliance-explicit-checks--a92a98)
+- [Operational Validation — A99–A104](#operational-validation--a99a104)
+- [Advanced Cryptographic Patterns — A105–A112](#advanced-cryptographic-patterns--a105a112)
 
 ---
 
@@ -107,6 +117,38 @@ For step-by-step operational guides (TDE setup, TLS config, key rotation, crypto
 | A78 | Azure | Double encryption not enabled | Info |
 | A79 | Azure | Enclave attestation shared across tenants | Warning |
 | A80 | Azure | Audit logs not encrypted at rest | Info |
+| A81 | DMK Password | Non-SMK DMK without registered password | Warning |
+| A82 | DMK Password | SSISDB DMK not registered | Critical |
+| A83 | DMK Password | SMK restored from foreign instance: registrations invalidated | Warning |
+| A84 | DMK Password | Non-SMK DMK with no auto-open path | Warning |
+| A85 | DMK Password | Restored DB non-SMK DMK not re-registered | Warning |
+| A86 | DMK Password | AG secondary non-SMK DMK not registered | Warning |
+| A87 | DDM/Permissions | Sensitive column masked but not encrypted | Warning |
+| A88 | DDM/Permissions | UNMASK granted to broad role | Warning |
+| A89 | DDM/Permissions | CONTROL on certificate to non-sysadmin | Warning |
+| A90 | DDM/Permissions | RLS predicate on Always Encrypted column | Warning |
+| A91 | DDM/Permissions | CLE column without masked fallback | Info |
+| A92 | Compliance+ | PCI-DSS v4: PAN without column-level encryption | Critical |
+| A93 | Compliance+ | PCI-DSS v4: no annual key rotation evidence | Warning |
+| A94 | Compliance+ | GDPR Art. 17: PII in append-only ledger | Warning |
+| A95 | Compliance+ | FIPS: Windows FIPS mode not enabled | Warning |
+| A96 | Compliance+ | FIPS: software-only EKM provider | Warning |
+| A97 | Compliance+ | No key custodian or management policy | Info |
+| A98 | Compliance+ | HIPAA: PHI columns without encryption and audit | Warning |
+| A99 | Ops Validation | SQL Agent job step with hardcoded key password | Critical |
+| A100 | Ops Validation | Plan cache contains key password | Critical |
+| A101 | Ops Validation | AKV soft-delete or purge protection disabled | Critical |
+| A102 | Ops Validation | No annual backup restore test | Warning |
+| A103 | Ops Validation | sys.credentials not rotated in 1+ year | Info |
+| A104 | Ops Validation | AG listener TLS SAN mismatch | Warning |
+| A105 | Crypto Patterns | TLS cipher suites: ECDHE not prioritised | Info |
+| A106 | Crypto Patterns | Remote connections using NTLM | Info |
+| A107 | Crypto Patterns | Service Broker remote cert not imported | Warning |
+| A108 | Crypto Patterns | ENCRYPTBYPASSPHRASE with weak passphrase | Warning |
+| A109 | Crypto Patterns | HASHBYTES with deprecated algorithm | Warning |
+| A110 | Crypto Patterns | Database Mail SMTP without modern auth | Info |
+| A111 | Crypto Patterns | ENCRYPTBYCERT without cert expiry monitoring | Warning |
+| A112 | Crypto Patterns | Azure SQL MI managed identity missing AKV perms | Critical |
 
 ---
 
@@ -2038,3 +2080,880 @@ Azure Portal → Storage Account (audit destination) → Encryption → check if
 3. Verify: `az storage account show --name <account> --query encryption`
 
 **Related checks:** A56 (audit configuration), A78 (double encryption)
+
+---
+
+## DMK Password Auto-Open — A81–A86
+
+### A81 — Database has non-SMK DMK without registered password
+
+**What it means**
+A database has a Database Master Key whose `is_master_key_encrypted_by_server = 0` — meaning the DMK is not automatically decryptable by the Service Master Key at startup. SQL Server can auto-open such a DMK if the password is registered via `sp_control_dbmasterkey_password`, which stores the password as a credential in `master.sys.credentials` (encrypted by the SMK) and records a `(credential_id, family_guid)` row in `master.sys.master_key_passwords`. Without this registration, every restart leaves encrypted objects in that database inaccessible.
+
+**How to spot it**
+```sql
+SELECT d.name, drs.family_guid, d.is_master_key_encrypted_by_server,
+       mkp.credential_id
+FROM sys.databases d
+JOIN sys.database_recovery_status drs ON drs.database_id = d.database_id
+LEFT JOIN master.sys.master_key_passwords mkp
+       ON mkp.family_guid = drs.family_guid
+WHERE d.database_id > 4
+  AND d.is_master_key_encrypted_by_server = 0;
+-- Any row with NULL credential_id is unregistered
+```
+
+**Fix options**
+1. Register the password: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[dmk_password]', @action = N'add'`
+2. Add SMK protection (preferred if no isolation requirement): `USE [db]; ALTER MASTER KEY ADD ENCRYPTION BY SERVICE MASTER KEY`
+3. Create a SQL Agent startup job: `USE [db]; OPEN MASTER KEY DECRYPTION BY PASSWORD = N'[password]'` (last resort — password in job step)
+
+**Related checks:** A44 (DMK backup), A45 (SMK protection), A82 (SSISDB), A84 (no auto-open path)
+
+---
+
+### A82 — SSISDB DMK password not registered
+
+**What it means**
+SSISDB (the SQL Server Integration Services catalog database) deliberately creates its DMK without SMK protection. This is by design — the SSIS catalog uses the DMK to encrypt package parameters, environment variables, and sensitive values. When the catalog is created via `SSISDB.catalog.create_catalog`, the user supplies a password that becomes the sole DMK protector. Unless this password is registered via `sp_control_dbmasterkey_password`, SSIS catalog operations fail after every SQL Server restart with error 15581.
+
+**How to spot it**
+```sql
+-- Check if SSISDB needs registration
+-- family_guid is in sys.database_recovery_status, not sys.databases
+SELECT d.name, drs.family_guid, d.is_master_key_encrypted_by_server,
+       CASE WHEN mkp.credential_id IS NULL THEN 'NOT REGISTERED — will fail on restart'
+            ELSE 'Registered — OK' END AS status
+FROM sys.databases d
+JOIN sys.database_recovery_status drs ON drs.database_id = d.database_id
+LEFT JOIN master.sys.master_key_passwords mkp ON mkp.family_guid = drs.family_guid
+WHERE d.name = 'SSISDB';
+
+-- The family_guid is in sys.database_recovery_status (not sys.databases):
+SELECT database_id, family_guid FROM sys.database_recovery_status WHERE database_id = DB_ID('SSISDB');
+```
+
+**Example symptom**
+After SQL Server restart: SSIS package execution fails with `The Data Protection API (DPAPI) master key encryption for the SSISDB is not available. Error details: "Please create a master key in the database or open the master key in the session before performing this operation."` or Msg 15581.
+
+**Fix options**
+1. Register the catalog creation password: `EXEC sp_control_dbmasterkey_password @db_name = N'SSISDB', @password = N'[catalog_password]', @action = N'add'` (run in master database context)
+2. Verify: `SELECT * FROM master.sys.master_key_passwords` — should show a row for SSISDB's family_guid
+3. If the catalog creation password is lost: the SSISDB catalog must be dropped (`SSISDB.catalog.drop_catalog`) and recreated — all packages will be lost unless backed up
+
+**Related checks:** A81 (non-SMK DMK), A83 (SMK restore invalidation), A84 (no auto-open path), A85 (restore), A86 (AG replicas)
+
+---
+
+### A83 — SMK restored from foreign instance: registered passwords invalidated
+
+**What it means**
+`master.sys.master_key_passwords` stores passwords as SQL Server credentials (`sys.credentials`), which are themselves encrypted by the Service Master Key (SMK). When you restore an SMK backup from a DIFFERENT server instance (`RESTORE SERVICE MASTER KEY FROM FILE`), the current instance's SMK is replaced with the foreign one. All previously registered credentials were encrypted with the OLD instance's SMK — the new (foreign) SMK cannot decrypt them. DMK auto-open via `sys.master_key_passwords` silently fails until passwords are re-registered. Note: `ALTER SERVICE MASTER KEY REGENERATE` on the SAME instance re-encrypts all credentials automatically and does NOT invalidate registrations.
+
+**How to spot it**
+```sql
+-- Check ERRORLOG for SMK restore events
+EXEC xp_readerrorlog 0, 1, N'RESTORE SERVICE MASTER KEY';
+
+-- If evidence of foreign SMK restore, check registered entries
+SELECT mkp.family_guid, c.name AS credential_name, c.modify_date
+FROM master.sys.master_key_passwords mkp
+JOIN master.sys.credentials c ON mkp.credential_id = c.credential_id;
+-- If c.modify_date is older than the SMK restore date, entries may be stale
+```
+
+**Fix options**
+1. After any `RESTORE SERVICE MASTER KEY FROM FILE`: for each database in `sys.master_key_passwords`, re-register: `EXEC sp_control_dbmasterkey_password @action = 'drop'` then `@action = 'add'`
+2. Maintain a vault-stored inventory: which databases have registered passwords and what the current passwords are
+3. Create a post-SMK-restore SQL Agent job that re-registers all known databases
+
+**Related checks:** A47 (SMK backup), A81 (non-SMK DMK), A82 (SSISDB), A85 (cross-server restore)
+
+---
+
+### A84 — Non-SMK DMK with no auto-open path configured
+
+**What it means**
+A database has `is_master_key_encrypted_by_server = 0` (no SMK protection), no password registered in `sys.master_key_passwords`, and no SQL Agent startup job that manually opens the key. This means every SQL Server restart leaves the DMK unopenable until a DBA manually runs `OPEN MASTER KEY DECRYPTION BY PASSWORD`. Any automated jobs, services, or application connections that hit encrypted objects before the DBA intervenes will fail.
+
+**How to spot it**
+```sql
+-- Find databases with non-SMK DMK and no registered password
+-- family_guid is in sys.database_recovery_status, not sys.databases
+SELECT d.name, drs.family_guid
+FROM sys.databases d
+JOIN sys.database_recovery_status drs ON drs.database_id = d.database_id
+WHERE d.database_id > 4
+  AND d.is_master_key_encrypted_by_server = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM master.sys.master_key_passwords mkp
+    WHERE mkp.family_guid = drs.family_guid
+  );
+
+-- Also check SQL Agent jobs for OPEN MASTER KEY
+SELECT j.name, s.command FROM msdb.dbo.sysjobs j
+JOIN msdb.dbo.sysjobsteps s ON j.job_id = s.job_id
+WHERE s.command LIKE '%OPEN MASTER KEY%';
+```
+
+**Fix options**
+1. Preferred: `USE [db]; ALTER MASTER KEY ADD ENCRYPTION BY SERVICE MASTER KEY` — enables automatic decryption; verify with `SELECT is_master_key_encrypted_by_server FROM sys.databases WHERE name = '[db]'`
+2. Alternative: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[password]', @action = N'add'`
+3. Last resort: SQL Agent startup job with `OPEN MASTER KEY` — stores password in job step (see A99)
+
+**Related checks:** A45 (SMK protection), A46 (password-only), A81 (registration), A82 (SSISDB), A99 (job step password)
+
+---
+
+### A85 — Restored database with non-SMK DMK not re-registered on target
+
+**What it means**
+`sys.master_key_passwords` is instance-local (stored in `master` database). When you restore a database with a password-protected DMK to a new SQL Server instance, the `family_guid` is preserved from the source (it's stable across restore/attach), but the target instance has no corresponding entry in its `sys.master_key_passwords`. The database DMK will not auto-open on the target until the password is re-registered.
+
+**How to spot it**
+```sql
+-- Databases restored from another server with unregistered password-only DMK
+-- family_guid is in sys.database_recovery_status, not sys.databases
+SELECT r.destination_database_name, d.is_master_key_encrypted_by_server, drs.family_guid
+FROM msdb.dbo.restorehistory r
+JOIN sys.databases d ON d.name = r.destination_database_name
+JOIN sys.database_recovery_status drs ON drs.database_id = d.database_id
+WHERE d.database_id > 4
+  AND d.is_master_key_encrypted_by_server = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM master.sys.master_key_passwords mkp
+    WHERE mkp.family_guid = drs.family_guid
+  )
+ORDER BY r.restore_date DESC;
+```
+
+**Fix options**
+1. Register on target: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[original_dmk_password]', @action = N'add'`
+2. Add to restore runbook: after restoring any database with `is_master_key_encrypted_by_server = 0`, always check and register the password
+3. If the original password is unknown: the DMK can be opened by restoring from a DMK backup: `RESTORE MASTER KEY FROM FILE = '...' DECRYPTION BY PASSWORD = '...' ENCRYPTION BY PASSWORD = '...'`
+
+**Related checks:** A44 (DMK backup), A81 (registration), A83 (SMK restore), A85/A86 (AG)
+
+---
+
+### A86 — AG secondary with non-SMK DMK not registered on secondary replicas
+
+**What it means**
+When a database with a password-protected DMK is part of an Availability Group, each replica needs the DMK password registered in its own `sys.master_key_passwords`. AG seeding (automatic or manual) copies the database data but does NOT copy `master.sys.master_key_passwords` entries from the primary. On failover, the new primary inherits the database but not the auto-open path — SSIS, encrypted objects, and cert-protected keys all fail until the DBA registers the password on the new primary.
+
+**How to spot it**
+```sql
+-- On each AG secondary, check for missing registrations
+-- family_guid is in sys.database_recovery_status, not sys.databases
+SELECT d.name, d.is_master_key_encrypted_by_server, drs.family_guid
+FROM sys.databases d
+JOIN sys.database_recovery_status drs ON drs.database_id = d.database_id
+JOIN sys.dm_hadr_database_replica_states rs ON rs.database_id = d.database_id
+WHERE d.database_id > 4
+  AND d.is_master_key_encrypted_by_server = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM master.sys.master_key_passwords mkp
+    WHERE mkp.family_guid = drs.family_guid
+  );
+```
+
+**Fix options**
+1. Run on every replica: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[dmk_password]', @action = N'add'`
+2. Add to AG deployment checklist: after adding a database to an AG, verify all replicas have DMK passwords registered
+3. Add to failover runbook: after failover, verify new primary has all registrations intact; re-register any that are missing
+
+**Related checks:** A81 (non-SMK DMK), A82 (SSISDB), A83 (SMK restore), A85 (restore), A33 (AG cert)
+
+---
+
+## Dynamic Data Masking and Permission Patterns — A87–A91
+
+### A87 — Sensitive column masked but not encrypted
+
+**What it means**
+Dynamic Data Masking (DDM) presents masked values to unprivileged users at the query result layer. It is NOT encryption — it does not protect data at rest, does not protect against privileged SQL users (sysadmin, UNMASK grantees), does not prevent inference attacks (queries like `WHERE column BETWEEN x AND y` return accurate row counts without revealing values), and does not satisfy most compliance requirements for encryption at rest.
+
+**How to spot it**
+```sql
+SELECT t.name AS table_name, c.name AS column_name,
+       c.masking_function, c.column_encryption_key_id
+FROM sys.masked_columns c
+JOIN sys.tables t ON c.object_id = t.object_id
+WHERE c.name LIKE '%ssn%' OR c.name LIKE '%card%' OR c.name LIKE '%password%'
+   OR c.name LIKE '%salary%' OR c.name LIKE '%dob%' OR c.name LIKE '%diagnosis%'
+   AND c.column_encryption_key_id IS NULL;
+```
+
+**Fix options**
+1. Apply Always Encrypted for columns requiring true confidentiality (sysadmin cannot read plaintext)
+2. Apply CLE for simpler server-side encryption (sysadmin can read; good for legacy apps)
+3. Retain DDM as a complementary display layer alongside encryption; DDM + AE together means application users see masked values AND sysadmins see encrypted ciphertext (neither sees plaintext without the column master key)
+4. See `howto-dynamic-data-masking.md` for the full decision tree
+
+**Related checks:** A14 (sensitive columns without AE), A53 (sensitivity classification), A88 (UNMASK permission), A91 (CLE cipher text)
+
+---
+
+### A88 — UNMASK permission granted to a broad role
+
+**What it means**
+The `UNMASK` permission bypasses Dynamic Data Masking for a database principal — they see unmasked (real) values. Granting it to a role means every current and future member of that role receives unrestricted access to all masked columns. This effectively renders DDM useless as a control for anyone in that role.
+
+**How to spot it**
+```sql
+SELECT dp.name AS grantee, dp.type_desc,
+       (SELECT COUNT(*) FROM sys.database_role_members rm
+        WHERE rm.role_principal_id = dp.principal_id) AS member_count
+FROM sys.database_permissions p
+JOIN sys.database_principals dp ON p.grantee_principal_id = dp.principal_id
+WHERE p.permission_name = 'UNMASK'
+  AND dp.type IN ('R', 'G', 'E');  -- role, group, external group
+```
+
+**Fix options**
+1. `REVOKE UNMASK FROM [role_name]`
+2. Grant UNMASK only to named individuals: `GRANT UNMASK TO [user_name]`
+3. Audit who has UNMASK: `SELECT * FROM sys.database_permissions WHERE permission_name = 'UNMASK'`
+4. Schedule regular UNMASK permission reviews via SQL Agent
+
+**Related checks:** A87 (masking vs encryption), A89 (certificate CONTROL), A40 (key CONTROL)
+
+---
+
+### A89 — CONTROL permission on certificate granted to non-sysadmin
+
+**What it means**
+CONTROL on a database certificate grants all permissions: USE (for encryption/decryption), ALTER, DROP, TAKE OWNERSHIP. For certificates protecting TDE, Service Broker routes, backup encryption, or code-signing patterns, an over-privileged non-admin user could drop the certificate (destroying encrypted data recovery paths), alter it, or use it for unauthorized signing. This extends A40 which covers symmetric/asymmetric keys — certificates are a separate permission class.
+
+**How to spot it**
+```sql
+SELECT dp.name AS grantee, c.name AS certificate_name
+FROM sys.database_permissions p
+JOIN sys.certificates c ON p.major_id = c.certificate_id
+JOIN sys.database_principals dp ON p.grantee_principal_id = dp.principal_id
+WHERE p.class_desc = 'CERTIFICATE_OBJECT'
+  AND p.permission_name = 'CONTROL'
+  AND dp.name NOT IN ('dbo', 'db_owner');
+```
+
+**Fix options**
+1. `REVOKE CONTROL ON CERTIFICATE::[cert] FROM [principal]`
+2. Grant purpose-specific permissions: `REFERENCES` for AE CMK, `EXECUTE` for signing procedures
+3. For TDE/backup certs: no permission grant needed — sysadmin role provides implicit access; remove all explicit grants
+
+**Related checks:** A40 (key CONTROL), A34 (cert-based login), A37 (cert backup)
+
+---
+
+### A90 — Row-Level Security predicate referencing an Always Encrypted column
+
+**What it means**
+Always Encrypted encrypts column values client-side before they reach SQL Server. The server-side SQL engine never sees plaintext — it receives encrypted byte strings. Row-Level Security filter predicates are evaluated server-side, so any predicate comparing an AE column to a plaintext literal always produces a mismatch. The result: filter predicates return zero rows (if a blocking predicate) or allow all rows through (if a permissive SELECT filter compares ciphertext to literal). Neither is correct.
+
+**How to spot it**
+```sql
+SELECT sp.name AS policy_name, sp.type_desc,
+       o.name AS table_name, c.name AS column_name,
+       c.encryption_type_desc
+FROM sys.security_policies sp
+JOIN sys.security_predicates pred ON sp.object_id = pred.object_id
+JOIN sys.columns c ON pred.target_column_id = c.column_id
+    AND pred.target_object_id = c.object_id
+JOIN sys.tables o ON c.object_id = o.object_id
+WHERE c.column_encryption_key_id IS NOT NULL;
+```
+
+**Fix options**
+1. Move row-filtering logic to the application layer (WHERE clause in application queries using AE-aware driver)
+2. Use deterministic AE encryption for the filter column — still encrypted but equality-comparable by an AE-enabled driver
+3. Remove the RLS policy on AE columns; document the known limitation
+
+**Related checks:** A9 (deterministic vs randomized AE), A10 (AE + enclave), A87 (DDM limitations)
+
+---
+
+### A91 — CLE-encrypted column without masked fallback
+
+**What it means**
+When a column is encrypted with CLE (via `ENCRYPTBYKEY`), reporting users who do not have the symmetric key open receive raw `varbinary` cipher text in their query results. This cipher text: (1) confirms to the user that the column is encrypted, (2) reveals data-length patterns (longer cipher text = longer plaintext), (3) may cause application errors if the application expects a specific data type. Adding a DDM mask returns a neutral value instead of cipher text.
+
+**How to spot it**
+```sql
+SELECT t.name AS table_name, c.name AS column_name
+FROM sys.tables t
+JOIN sys.columns c ON t.object_id = c.object_id
+WHERE c.system_type_id = 165  -- varbinary (CLE result type)
+  AND NOT EXISTS (
+    SELECT 1 FROM sys.masked_columns mc
+    WHERE mc.object_id = c.object_id AND mc.column_id = c.column_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM sys.database_permissions dp
+    WHERE dp.major_id = t.object_id
+      AND dp.permission_name = 'SELECT'
+      AND dp.grantee_principal_id <> 1  -- exclude dbo
+  );
+```
+
+**Fix options**
+1. Add a default DDM mask: `ALTER TABLE [dbo].[t] ALTER COLUMN [col] ADD MASKED WITH (FUNCTION = 'default()')`
+2. Grant UNMASK only to users who also have the symmetric key available
+3. Ensure CLE-encrypted varbinary columns are typed consistently (not returned as nvarchar to application)
+
+**Related checks:** A17 (CLE algorithms), A18 (open key scope), A87 (masking), A88 (UNMASK)
+
+---
+
+## Compliance Explicit Checks — A92–A98
+
+### A92 — PCI-DSS v4: PAN stored without column-level encryption
+
+**What it means**
+PCI-DSS v4.0 Requirement 3.5.1 requires that the Primary Account Number (PAN) be rendered unreadable anywhere it is stored. TDE encrypts the database files but does NOT prevent a SQL user with SELECT permission from reading the plaintext PAN. Column-level encryption (Always Encrypted) encrypts the data before it reaches the server — even a sysadmin sees only ciphertext, satisfying the "unreadable" requirement for SQL-level access.
+
+**How to spot it**
+```sql
+SELECT DB_NAME() AS db_name, SCHEMA_NAME(t.schema_id) AS schema_name,
+       t.name AS table_name, c.name AS column_name
+FROM sys.columns c
+JOIN sys.tables t ON c.object_id = t.object_id
+WHERE (c.name LIKE '%card_number%' OR c.name LIKE '%pan%'
+    OR c.name LIKE '%primary_account%' OR c.name LIKE '%credit_card%')
+  AND c.column_encryption_key_id IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM sys.sql_modules m WHERE m.definition LIKE '%ENCRYPTBYKEY%'
+      AND m.definition LIKE '%' + t.name + '%'
+  );
+```
+
+**Fix options**
+1. Apply Always Encrypted with deterministic encryption (allows equality-based lookups): use SSMS Encrypt Columns wizard or `Set-SqlColumnEncryption` PowerShell
+2. Truncate PANs where full value is not needed (store first 6 + last 4 only)
+3. Replace with tokenisation (store a token, keep PAN in a separate token vault)
+4. Document chosen approach in PCI-DSS evidence: attestation letters and QSA will require proof
+
+**Related checks:** A1 (TDE), A9/A14 (AE column gaps), A53–A54 (sensitivity), A93 (key rotation)
+
+---
+
+### A93 — PCI-DSS v4: No evidence of annual key rotation
+
+**What it means**
+PCI-DSS v4.0 Requirement 3.7.3 mandates that cryptographic keys used to protect cardholder data are changed "at least once a year." Keys protecting PAN columns (CLE symmetric keys) or backup encryption certificates for PCI-scope databases must have evidence of rotation. The `modify_date = create_date` pattern in `sys.symmetric_keys` means the key was created and never subsequently altered — a strong indicator it was never rotated.
+
+**How to spot it**
+```sql
+SELECT name, create_date, modify_date, algorithm_desc,
+       DATEDIFF(DAY, create_date, GETDATE()) AS age_days
+FROM sys.symmetric_keys
+WHERE name NOT LIKE '##%'
+  AND modify_date = create_date
+  AND create_date < DATEADD(YEAR, -1, GETDATE());
+```
+
+**Fix options**
+1. Create a replacement key, re-encrypt data, drop old key (see `howto-key-rotation.md`)
+2. Adopt a naming convention that includes year: `CLE_PAN_Key_2026` — makes rotation history visible
+3. Schedule annual rotation in SQL Agent; document in PCI key management policy
+4. For backup certs: `CREATE CERTIFICATE [NewBackupCert2026] ...`; update backup scripts; retain old cert for restoring older backups
+
+**Related checks:** A20 (CLE rotation), A41 (key rotation 2yr), A92 (PCI PAN), A4 (TDE cert expiry)
+
+---
+
+### A94 — GDPR Art. 17: PII in append-only ledger without crypto-shredding strategy
+
+**What it means**
+Append-only ledger tables (`ledger_type = 2`) are cryptographically immutable — rows can never be deleted, updated, or truncated; the hash chain would be broken. GDPR Article 17 grants data subjects the right to erasure ("right to be forgotten"). For PII in append-only ledger tables, the only technically sound erasure method is crypto-shredding: encrypting data with a per-subject key, then deleting that key. Without a per-subject key architecture, erasure is impossible.
+
+**How to spot it**
+```sql
+-- SQL 2022+: find append-only ledger tables with PII-like columns
+SELECT t.name AS table_name, c.name AS column_name
+FROM sys.tables t
+JOIN sys.columns c ON t.object_id = c.object_id
+WHERE t.ledger_type = 2  -- append-only
+  AND (c.name LIKE '%ssn%' OR c.name LIKE '%email%' OR c.name LIKE '%name%'
+    OR c.name LIKE '%address%' OR c.name LIKE '%phone%' OR c.name LIKE '%dob%')
+  AND NOT EXISTS (
+    SELECT 1 FROM sys.columns ck WHERE ck.object_id = t.object_id
+      AND (ck.name LIKE '%key_id%' OR ck.name LIKE '%subject_id%')
+  );
+```
+
+**Fix options**
+1. Switch to updatable ledger table: `CREATE TABLE ... WITH (LEDGER = ON)` (default is updatable); supports DELETE with history audit, compatible with GDPR erasure
+2. Implement per-subject CLE keys: one symmetric key per data subject; delete the key when erasure is requested; see `howto-crypto-shredding.md`
+3. Store only pseudonymous identifiers (hashed subject IDs) in append-only ledger; keep identifying PII in a separate updatable ledger table
+4. Document the GDPR tension in the data privacy impact assessment (DPIA)
+
+**Related checks:** A73 (ledger enablement), A76 (ledger verification), A53 (sensitivity)
+
+---
+
+### A95 — FIPS: Windows FIPS mode not enabled for regulated workloads
+
+**What it means**
+FedRAMP HIGH, CMMC Level 3, DoD IL4+, and several other US government frameworks require that all cryptographic operations use FIPS 140-2 validated modules. SQL Server inherits the OS FIPS setting — when Windows FIPS mode is enabled, SQL Server rejects non-FIPS algorithms (RC4, MD5, SHA-1, DES, 3DES for new operations). The ERRORLOG contains "FIPS compliance mode is enabled" when active.
+
+**How to spot it**
+```sql
+-- Check ERRORLOG for FIPS mode status (most recent startup)
+EXEC xp_readerrorlog 0, 1, N'FIPS';
+-- Should return "FIPS compliance mode is enabled" if active
+-- Absence = FIPS mode not enabled
+```
+
+**Fix options**
+1. Enable via Group Policy: Computer Configuration → Windows Settings → Security Settings → Local Policies → Security Options → "System cryptography: Use FIPS compliant algorithms for encryption, hashing, and signing" = Enabled
+2. Restart SQL Server; verify ERRORLOG shows "FIPS compliance mode is enabled"
+3. Test all applications: some older ODBC/JDBC drivers and .NET Framework apps fail in FIPS mode (requires FIPS-compliant crypto providers in the application stack)
+4. Remediate A55 (non-FIPS algorithms) before enabling FIPS mode
+
+**Related checks:** A55 (non-FIPS algorithms), A96 (software EKM), A17 (CLE algorithms)
+
+---
+
+### A96 — FIPS environment using software-only EKM provider
+
+**What it means**
+FIPS 140-2 Level 2 requires that cryptographic modules provide physical tamper evidence and resistance. Software-only EKM providers (DLLs without HSM hardware backing) meet at most Level 1 (algorithmic correctness only). For FedRAMP HIGH, CMMC, and NSS use cases, key material must reside in a FIPS 140-2 Level 2+ validated hardware security module.
+
+**How to spot it**
+```sql
+-- Identify EKM providers and assess if they are HSM-backed
+SELECT provider_id, name, dll_path, is_enabled, provider_version
+FROM sys.cryptographic_providers;
+-- Manually cross-reference DLL name/path against NIST CMVP list:
+-- https://csrc.nist.gov/projects/cryptographic-module-validation-program
+```
+
+**Fix options**
+1. Replace with a validated HSM provider: nCipher nShield, Thales Luna/SafeNet, Entrust nShield, IBM 4769 CCID, AWS CloudHSM, Azure Dedicated HSM
+2. Verify HSM FIPS 140-2 Level 2 certificate at csrc.nist.gov/projects/cryptographic-module-validation-program
+3. Follow HSM vendor migration guide to move existing keys to HSM; update EKM provider DLL
+4. For Azure: use Azure Dedicated HSM (HSM validated to FIPS 140-2 Level 3) instead of shared Azure Key Vault (Level 1)
+
+**Related checks:** A49 (EKM provider health), A52 (EKM version), A95 (FIPS mode)
+
+---
+
+### A97 — No documented key custodian or key management policy
+
+**What it means**
+PCI-DSS v4.0 Requirement 3.7.6 requires that manual cleartext cryptographic keys use split-knowledge and dual-control procedures (two custodians each knowing half the key). NY DFS 23 NYCRR 500 §500.15 requires documented cryptographic controls. CMMC SC.3.191 requires a key management procedure. The absence of SQL Agent jobs named for key maintenance, an active SQL Server Audit, or any data classification suggests the organisation lacks documented cryptographic governance.
+
+**How to spot it**
+```sql
+-- Check for key-related SQL Agent jobs
+SELECT name FROM msdb.dbo.sysjobs
+WHERE name LIKE '%key%' OR name LIKE '%cert%' OR name LIKE '%dmk%' OR name LIKE '%smk%';
+
+-- Check for active SQL Server Audit
+SELECT name, status_desc FROM sys.server_audits WHERE status_desc = 'STARTED';
+```
+
+**Fix options**
+1. Create and document a key inventory: list all keys, certs, responsible custodians, rotation schedule
+2. Create SQL Agent jobs with naming convention: `DBA - Annual TDE Cert Rotation`, `DBA - Annual SMK Backup Verification`
+3. Configure SQL Server Audit for key access events (A56 fix)
+4. For PCI: document split-knowledge procedure for manual key ceremonies; maintain key custodian acknowledgement records
+
+**Related checks:** A56 (SQL Audit), A44/A47 (DMK/SMK backup), A93 (PCI rotation), A70 (key archival)
+
+---
+
+### A98 — HIPAA: PHI columns without encryption and no SELECT audit trail
+
+**What it means**
+HIPAA 45 CFR §164.312(a)(2)(iv) addresses encryption of ePHI as an addressable safeguard (must implement unless documented otherwise with an equivalent alternative). §164.312(b) requires audit controls to record and examine activity on systems containing ePHI. Unencrypted PHI columns without any SELECT audit fail both safeguards simultaneously — there is neither technical protection nor visibility into who accessed the data.
+
+**How to spot it**
+```sql
+-- PHI-pattern columns without AE
+SELECT SCHEMA_NAME(t.schema_id) AS schema_name, t.name AS table_name, c.name AS column_name
+FROM sys.columns c JOIN sys.tables t ON c.object_id = t.object_id
+WHERE (c.name LIKE '%ssn%' OR c.name LIKE '%diagnosis%' OR c.name LIKE '%medical_record%'
+    OR c.name LIKE '%prescription%' OR c.name LIKE '%dob%' OR c.name LIKE '%patient%')
+  AND c.column_encryption_key_id IS NULL;
+
+-- Check audit specifications for PHI table coverage
+SELECT a.name AS audit, das.name AS spec, dap.action_id, dap.object_name
+FROM sys.server_audits a
+JOIN sys.database_audit_specifications das ON a.audit_guid = das.audit_guid
+JOIN sys.database_audit_specification_details dap ON das.database_specification_id = dap.database_specification_id
+WHERE dap.action_id IN ('SL', 'UP', 'IN', 'DL');  -- SELECT, UPDATE, INSERT, DELETE
+```
+
+**Fix options**
+1. Apply Always Encrypted to PHI columns (see `howto-always-encrypted.md`)
+2. Create database audit specification: `ADD (SELECT ON OBJECT::[schema].[table] BY PUBLIC)` scoped to PHI tables
+3. Ensure audit log retention ≥ 6 years (HIPAA §164.316(b)(2))
+4. Document the decision in a HIPAA risk analysis; if PHI is not encrypted, document the equivalent alternative measure
+
+**Related checks:** A14 (sensitive columns), A53–A54 (sensitivity classification), A56 (audit config), A92 (PCI PAN)
+
+---
+
+## Operational Validation — A99–A104
+
+### A99 — SQL Agent job step with hardcoded OPEN SYMMETRIC KEY password
+
+**What it means**
+SQL Agent job steps store their T-SQL command text in `msdb.dbo.sysjobsteps.command`. This column is readable by any sysadmin via SSMS or T-SQL. Passwords embedded in `OPEN SYMMETRIC KEY [key] DECRYPTION BY PASSWORD = 'secret'` are stored in near-plaintext in MSDB, visible in SSMS Job Step UI, logged in SQL Server error log on step failure, and exposed to any monitoring tool, APM agent, or 3rd-party DBA tool with sysadmin access. It is equivalent to hardcoding a password in source code checked into a public repository.
+
+**How to spot it**
+```sql
+SELECT j.name AS job_name, s.step_name, s.command
+FROM msdb.dbo.sysjobs j
+JOIN msdb.dbo.sysjobsteps s ON j.job_id = s.job_id
+WHERE s.command LIKE '%OPEN SYMMETRIC KEY%DECRYPTION BY PASSWORD%';
+```
+
+**Fix options**
+1. Replace with certificate-based protection: `OPEN SYMMETRIC KEY [key] DECRYPTION BY CERTIFICATE [cert]` — the cert's private key is protected by the DMK which auto-opens via SMK; no password in job code
+2. If the symmetric key must stay password-protected, store the OPEN call in a signed stored procedure that the job calls via proxy; the procedure's source is still visible but the indirection reduces casual exposure
+3. See `howto-agent-jobs.md` for secure SQL Agent job patterns
+
+**Related checks:** A19 (password-protected keys), A100 (plan cache), A18 (open key scope), A84 (DMK auto-open)
+
+---
+
+### A100 — Plan cache contains OPEN SYMMETRIC KEY with visible password
+
+**What it means**
+SQL Server's plan cache stores the full text of recently executed SQL statements in `sys.dm_exec_sql_text`. Any user with `VIEW SERVER STATE` permission (granted to operator roles, monitoring tools, APM agents, 3rd-party DBA tools) can read the full query text including embedded passwords. Unlike `sp_control_dbmasterkey_password` (which deliberately does not appear in traces), ad-hoc T-SQL with hardcoded passwords appears verbatim in the plan cache.
+
+**How to spot it**
+```sql
+SELECT qs.execution_count, SUBSTRING(qt.text, 1, 500) AS query_excerpt
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
+WHERE qt.text LIKE '%OPEN SYMMETRIC KEY%DECRYPTION BY PASSWORD%'
+   OR qt.text LIKE '%ENCRYPTBYPASSPHRASE%'
+   OR qt.text LIKE '%OPEN MASTER KEY DECRYPTION BY PASSWORD%';
+```
+
+**Fix options**
+1. Immediate: `DBCC FREEPROCCACHE` to evict exposed plans from cache
+2. Permanent: migrate to certificate-based key protection (A99 fix); passwords disappear from T-SQL source
+3. Audit VIEW SERVER STATE grants: `SELECT * FROM sys.server_permissions WHERE permission_name = 'VIEW SERVER STATE'`
+
+**Related checks:** A99 (job step password), A19 (password-protected keys), A108 (ENCRYPTBYPASSPHRASE)
+
+---
+
+### A101 — AKV soft-delete or purge protection not enabled
+
+**What it means**
+Azure Key Vault's soft-delete and purge protection settings prevent permanent key deletion. Without soft-delete, a deleted key is immediately and permanently gone. Without purge protection, even a soft-deleted key can be purged (permanently deleted) before the retention period expires. If the TDE protector key or AE CMK is deleted — accidentally, by a malicious insider, or by a compromised service principal — all databases using that key become permanently and irrecoverably inaccessible within minutes.
+
+**How to spot it**
+```bash
+# Azure CLI check
+az keyvault show --name [vault-name] --query "properties.{softDelete:enableSoftDelete, purgeProtection:enablePurgeProtection}"
+# Expected: { "softDelete": true, "purgeProtection": true }
+```
+
+**Fix options**
+1. `az keyvault update --name [vault] --enable-soft-delete true --enable-purge-protection true`
+2. Set minimum retention: `az keyvault update --retention-days 90` (90 days minimum for compliance)
+3. Enable Azure Policy: "Azure Key Vault should have soft delete enabled" and "Azure Key Vault should have purge protection enabled" at subscription scope
+4. Verify via Azure Portal: Key Vault → Properties → Soft-delete and Purge protection
+
+**Related checks:** A50 (BYOK rotation), A79 (attestation), A101 pair with A51
+
+---
+
+### A102 — No annual encrypted backup restore test on record
+
+**What it means**
+An encrypted backup is only as good as the ability to restore it. Certificate rotation, SMK regeneration, infrastructure migration, or key vault access policy changes can silently break the restore chain. The organisation may not discover this until a disaster recovery event — at which point the encrypted backup is a collection of permanently inaccessible files. Annual restore tests to an isolated environment provide continuous confidence in the recovery chain.
+
+**How to spot it**
+```sql
+-- Most recent restore for databases with encrypted backups
+SELECT bs.database_name, MAX(rh.restore_date) AS last_restore,
+       DATEDIFF(DAY, MAX(rh.restore_date), GETDATE()) AS days_since_restore
+FROM msdb.dbo.backupset bs
+JOIN msdb.dbo.restorehistory rh ON rh.backup_set_id = bs.backup_set_id
+WHERE bs.key_algorithm IS NOT NULL  -- encrypted backups only
+GROUP BY bs.database_name
+HAVING MAX(rh.restore_date) < DATEADD(YEAR, -1, GETDATE())
+    OR MAX(rh.restore_date) IS NULL;
+```
+
+**Fix options**
+1. Schedule annual `RESTORE DATABASE [db] WITH RECOVERY` to an isolated test server
+2. Restore the certificate first: `RESTORE MASTER KEY FROM FILE = '...'` or `CREATE CERTIFICATE [cert] FROM FILE = '...' WITH PRIVATE KEY (FILE = '...', DECRYPTION BY PASSWORD = '...')`
+3. Document the test result, certificate thumbprint used, and test environment in the DR runbook
+4. For SSISDB: test restoring the SSISDB catalog and registering the DMK password on the test instance
+
+**Related checks:** A3 (TDE cert backup), A23 (backup cert backup), A85 (cross-server restore), A44 (DMK backup)
+
+---
+
+### A103 — sys.credentials age exceeds 1 year without rotation
+
+**What it means**
+`sys.credentials` stores secrets for EKM providers, proxy accounts, and Database Mail. These are encrypted by the SMK. Long-lived secrets increase the exposure window — a stolen credential (from a memory dump, SMK compromise, or disgruntled employee who memorised it) remains valid until rotated. Unlike key material that has cryptographic age indicators, credential rotation is purely an administrative discipline.
+
+**How to spot it**
+```sql
+SELECT name, credential_identity, create_date, modify_date,
+       DATEDIFF(DAY, modify_date, GETDATE()) AS days_since_rotation
+FROM sys.credentials
+WHERE modify_date < DATEADD(YEAR, -1, GETDATE())
+  AND credential_identity NOT LIKE '%DOMAIN\%'  -- exclude Windows accounts
+  AND credential_identity NOT LIKE '%@%';  -- exclude Azure AD / email-style accounts
+```
+
+**Fix options**
+1. Rotate EKM provider credentials: `ALTER CREDENTIAL [name] WITH IDENTITY = N'[identity]', SECRET = N'new_secret'`
+2. Rotate proxy account credentials: update in MSDB, coordinate with target service
+3. For Database Mail SMTP: update password in SSMS → Management → Database Mail → Configure → Account properties
+4. Document rotation schedule in the key management policy
+
+**Related checks:** A103 pair with A110 (Database Mail), A49/A52 (EKM provider), A47 (SMK backup)
+
+---
+
+### A104 — AG listener TLS certificate does not include listener DNS name in SAN
+
+**What it means**
+Availability Group listeners have their own DNS name (e.g., `aglistener.domain.com`) separate from the underlying SQL Server instance names. When clients connect via the listener, TLS certificate validation checks whether the listener DNS name matches the certificate CN or a Subject Alternative Name (SAN) entry. If the certificate only has the instance hostname, clients connecting to the listener receive a certificate name mismatch error or bypass validation by setting `TrustServerCertificate=True`.
+
+**How to spot it**
+```sql
+-- Check AG listeners and their DNS names
+SELECT a.name AS ag_name, l.dns_name, l.port, c.subject
+FROM sys.availability_groups a
+JOIN sys.availability_group_listeners l ON a.group_id = l.group_id
+LEFT JOIN sys.certificates c ON c.pvt_key_encryption_type_desc != 'NO_PRIVATE_KEY'
+    AND c.subject LIKE '%' + SUBSTRING(l.dns_name, 1, CHARINDEX('.', l.dns_name)-1) + '%';
+-- If the JOIN returns NULL, the listener name may not be in any cert SAN
+```
+
+**Fix options**
+1. Include all AG listener DNS names in the TLS certificate SAN when requesting from CA
+2. If the current cert is missing the listener SAN: renew the cert with the listener name added; rebind in SQL Server Configuration Manager; restart
+3. Test: `openssl s_client -connect aglistener.domain.com:1433 -starttls mssql 2>&1 | grep -E "subject|SAN|verify"`
+4. Alternative: configure a dedicated listener certificate in SQL Server Configuration Manager (separate from the instance cert)
+
+**Related checks:** A28 (self-signed cert), A30 (cert expiry), A33 (AG endpoint cert), A26 (ForceEncryption)
+
+---
+
+## Advanced Cryptographic Patterns — A105–A112
+
+### A105 — TLS cipher suite ordering: ECDHE not prioritised
+
+**What it means**
+TLS cipher suite negotiation uses the CLIENT's preference order by default. If ECDHE (Elliptic Curve Diffie-Hellman Ephemeral) suites are not at the top of the server's list, negotiation may fall back to RSA key exchange, which lacks Perfect Forward Secrecy (PFS). With PFS, a compromised server private key cannot decrypt previously captured TLS sessions. Without it, a retroactive breach of the server's private key exposes all past session content.
+
+**How to spot it**
+```powershell
+# Check cipher suite order via registry (PowerShell)
+$path = 'HKLM:\SOFTWARE\Policies\Microsoft\Cryptography\Configuration\SSL\00010002'
+(Get-ItemProperty -Path $path -Name Functions -ErrorAction SilentlyContinue).Functions -split ','
+# ECDHE suites should appear before RSA suites
+```
+
+**Fix options**
+1. Use IIS Crypto (free tool from Nartac Software) to reorder: enable ECDHE suites first, disable RC4/DES/NULL
+2. Via Group Policy: Computer Configuration → Administrative Templates → Network → SSL Configuration Settings → SSL Cipher Suite Order
+3. Recommended order (top-to-bottom): `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`, `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`, then RSA suites for compatibility
+4. Restart SQL Server after registry changes; verify with Qualys SSL Labs or nmap `--script ssl-enum-ciphers`
+
+**Related checks:** A57 (legacy TLS), A58 (weak ciphers), A26 (ForceEncryption)
+
+---
+
+### A106 — Remote connections authenticating via NTLM
+
+**What it means**
+NTLM (NT LAN Manager) authentication is vulnerable to relay attacks: a man-in-the-middle captures the NTLM challenge/response and relays it to authenticate against another server (NTLM relay attack). NTLM also does not provide mutual authentication — the client cannot cryptographically verify the server's identity. Kerberos with FAST armoring provides mutual authentication and is resistant to relay. NTLM on encrypted TLS is lower risk but still a weaker authentication layer.
+
+**How to spot it**
+```sql
+SELECT client_net_address, auth_scheme, encrypt_option, COUNT(*) AS connections
+FROM sys.dm_exec_connections
+WHERE auth_scheme = 'NTLM'
+  AND client_net_address NOT IN ('<local machine>', '127.0.0.1', '::1')
+GROUP BY client_net_address, auth_scheme, encrypt_option;
+```
+
+**Fix options**
+1. Register SPNs to enable Kerberos: `setspn -S MSSQLSvc/hostname.domain.com:1433 DOMAIN\sqlserviceaccount`
+2. See `/sqlspn-review` for comprehensive SPN audit (K-checks)
+3. Enable Extended Protection for Authentication in SQL Server Configuration Manager
+4. Verify Kerberos is negotiated: `SELECT auth_scheme FROM sys.dm_exec_connections WHERE session_id = @@SPID` should return 'KERBEROS'
+
+**Related checks:** A61 (Kerberos armoring), A26/A27 (TLS enforcement)
+
+---
+
+### A107 — Service Broker remote endpoint certificate not imported into target database
+
+**What it means**
+Service Broker uses certificates to authenticate inter-instance communication. The initiating service sends messages signed with its private key; the target verifies the signature using the sender's public certificate, which must be imported into the target database (as a certificate without a private key). Without this import, the target cannot verify the sender's identity and rejects all messages with authentication errors.
+
+**How to spot it**
+```sql
+-- Find Service Broker endpoints using certificate auth
+SELECT e.name, e.type_desc, e.connection_auth_desc, c.name AS cert_name,
+       c.thumbprint, c.subject
+FROM sys.endpoints e
+JOIN sys.certificates c ON e.certificate_id = c.certificate_id
+WHERE e.type_desc = 'SERVICE_BROKER'
+  AND e.connection_auth_desc LIKE '%CERTIFICATE%';
+
+-- Check if cert public key is imported in target databases
+-- (Run this query in each target database that receives messages)
+SELECT name, pvt_key_encryption_type_desc, subject
+FROM sys.certificates
+WHERE pvt_key_encryption_type_desc = 'NO_PRIVATE_KEY';
+-- Public-key-only certs (imported from sender) should appear here
+```
+
+**Fix options**
+1. Export sender cert (public key only): `BACKUP CERTIFICATE [sb_cert] TO FILE = 'C:\temp\sb_cert.cer'` (omit WITH PRIVATE KEY)
+2. Copy to target server; import: `CREATE CERTIFICATE [sender_cert] AUTHORIZATION [broker_user] FROM FILE = 'C:\temp\sb_cert.cer'`
+3. Create a remote service binding: `CREATE REMOTE SERVICE BINDING [binding] TO SERVICE 'TargetServiceName' WITH USER = [broker_user], ANONYMOUS = OFF`
+4. Test by sending a test message and checking `sys.transmission_queue` for errors
+
+**Related checks:** A32 (SB cert rotation), A35 (SHA1 cert), A37 (cert backup), A36 (self-signed)
+
+---
+
+### A108 — ENCRYPTBYPASSPHRASE with weak or visible passphrase
+
+**What it means**
+`ENCRYPTBYPASSPHRASE` uses PBKDF1 — Password-Based Key Derivation Function 1 — to derive an encryption key from the passphrase. PBKDF1 uses only 1 iteration of SHA-1 (no bcrypt-style cost factor), making it GPU-acceleratable for brute-force. A passphrase of 12 characters can be cracked in minutes with modern hardware. The passphrase also appears verbatim in T-SQL source code, plan cache, and SQL Agent job step history.
+
+**How to spot it**
+```sql
+-- Find modules using ENCRYPTBYPASSPHRASE
+SELECT OBJECT_NAME(object_id) AS module_name, definition
+FROM sys.sql_modules
+WHERE definition LIKE '%ENCRYPTBYPASSPHRASE%';
+-- Review: is the passphrase parameterised or hardcoded?
+-- Short literals (< 16 chars) or dictionary words are high risk
+```
+
+**Fix options**
+1. Migrate to AES_256 symmetric key: `CREATE SYMMETRIC KEY [DataKey] WITH ALGORITHM = AES_256, ENCRYPTION BY CERTIFICATE [cert]`; use `ENCRYPTBYKEY(KEY_GUID('DataKey'), plaintext)` instead
+2. If `ENCRYPTBYPASSPHRASE` must be retained: use a 32+ char random passphrase stored in a secrets vault, never in T-SQL source; pass as a parameter from the application, not hardcoded
+3. Re-encrypt all existing ENCRYPTBYPASSPHRASE data with the new symmetric key before removing the old function
+4. Load `howto-agent-jobs.md` for patterns to avoid passphrase exposure
+
+**Related checks:** A19 (password-only keys), A99/A100 (plan cache exposure), A17 (deprecated CLE algorithms)
+
+---
+
+### A109 — HASHBYTES using deprecated algorithm in security-sensitive context
+
+**What it means**
+`HASHBYTES` can use MD2, MD4, MD5, SHA (SHA-1), SHA1, SHA2_256, or SHA2_512. MD2/MD4/MD5 are cryptographically broken — collision attacks are practical (Flame malware used MD5 collisions to forge certificates in 2012). SHA-1 is deprecated by NIST with a 2030 sunset and is already excluded from TLS. Using these for password hashing, HMAC construction, data fingerprinting, or digital signatures provides no meaningful security guarantee.
+
+**How to spot it**
+```sql
+SELECT OBJECT_NAME(object_id) AS module_name,
+       SUBSTRING(definition, CHARINDEX('HASHBYTES', definition), 30) AS excerpt
+FROM sys.sql_modules
+WHERE definition LIKE '%HASHBYTES(''MD2''%'
+   OR definition LIKE '%HASHBYTES(''MD4''%'
+   OR definition LIKE '%HASHBYTES(''MD5''%'
+   OR definition LIKE '%HASHBYTES(''SHA''%'  -- SHA-1 shorthand
+   OR definition LIKE '%HASHBYTES(''SHA1''%';
+```
+
+**Fix options**
+1. Replace with: `HASHBYTES('SHA2_256', @input)` or `HASHBYTES('SHA2_512', @input)`
+2. For password storage: do NOT use any HASHBYTES — use application-layer bcrypt/Argon2; SQL Server has no built-in slow password-hashing function; HASHBYTES is intentionally fast (bad for passwords)
+3. For data integrity/fingerprinting: `SHA2_256` is appropriate for SQL Server use cases
+4. Update all stored hashes: existing MD5/SHA1 hashes must be recomputed with the new algorithm (requires re-processing the original data)
+
+**Related checks:** A35 (cert SHA1 signature), A55 (FIPS algorithm audit), A108 (PBKDF1 weakness)
+
+---
+
+### A110 — Database Mail SMTP without modern authentication
+
+**What it means**
+Database Mail uses SMTP to send email notifications. If configured with username/password authentication (not Windows authentication), the SMTP credentials are stored in `msdb.dbo.sysmail_account`, encrypted only by the instance SMK — visible to any sysadmin via `SELECT` on MSDB. Without TLS (`enable_ssl = 0`), SMTP credentials are also transmitted in cleartext over the network during authentication.
+
+**How to spot it**
+```sql
+SELECT a.name AS account_name, a.email_address, s.servername,
+       s.port, s.enable_ssl, s.use_default_credentials,
+       CASE WHEN s.credential_id IS NOT NULL THEN 'Password-based auth'
+            ELSE 'No auth' END AS auth_type
+FROM msdb.dbo.sysmail_account a
+JOIN msdb.dbo.sysmail_server s ON a.account_id = s.account_id
+WHERE s.enable_ssl = 0 OR s.use_default_credentials = 0;
+```
+
+**Fix options**
+1. Enable TLS: `EXEC msdb.dbo.sysmail_update_account_sp @account_name = 'DBMail', @enable_ssl = 1`
+2. Use Windows Authentication for SMTP relay (`use_default_credentials = 1`): avoids stored passwords entirely
+3. SQL Server 2022 CU14+: configure OAuth2/modern auth app token via Azure AD for Office 365 SMTP
+4. If SMTP credentials cannot be avoided: ensure `enable_ssl = 1` and rotate the password regularly (A103)
+
+**Related checks:** A103 (credential rotation), A47 (SMK backup), A19 (password-only protection pattern)
+
+---
+
+### A111 — ENCRYPTBYCERT or DECRYPTBYCERT without cert expiry monitoring
+
+**What it means**
+Unlike TLS certificates, SQL Server does NOT enforce certificate expiry for `ENCRYPTBYCERT` and `DECRYPTBYCERT` operations. An expired certificate works fine for CLE encryption/decryption. The risk is silent security degradation: operators assume TLS certificate monitoring covers all certificates, but CLE certificates are separate objects with separate expiry dates that may not be monitored. An expired CLE certificate is a sign that key rotation procedures are not followed.
+
+**How to spot it**
+```sql
+-- Find CLE usage modules and their referenced certificates
+SELECT OBJECT_NAME(m.object_id) AS module_name,
+       c.name AS cert_name, c.expiry_date,
+       DATEDIFF(DAY, GETDATE(), c.expiry_date) AS days_to_expiry
+FROM sys.sql_modules m
+JOIN sys.certificates c ON m.definition LIKE '%ENCRYPTBYCERT(CERT_ID(''' + c.name + ''')%'
+   OR m.definition LIKE '%DECRYPTBYCERT(CERT_ID(''' + c.name + ''')%'
+WHERE c.expiry_date < DATEADD(DAY, 90, GETDATE());
+```
+
+**Fix options**
+1. Add CLE cert monitoring to SQL Agent maintenance job: `SELECT name, expiry_date FROM sys.certificates WHERE expiry_date < DATEADD(DAY, 90, GETDATE()) AND name NOT LIKE '##%'`
+2. Configure SQL Agent alerts via Database Mail when certs approach expiry
+3. Rotate CLE certificates before expiry (see `howto-key-rotation.md`)
+4. Separate TLS cert monitoring from CLE cert monitoring — they are different object types with different management cycles
+
+**Related checks:** A4 (TDE cert expiry), A30 (TLS cert expiry), A33 (AG cert expiry), A35 (SHA1 cert)
+
+---
+
+### A112 — Azure SQL Managed Instance: managed identity missing AKV permissions for CMK
+
+**What it means**
+Azure SQL Managed Instance can use BYOK TDE — the TDE protector is an asymmetric key in Azure Key Vault, and the managed instance's managed identity (system-assigned or user-assigned) must have `wrapKey`, `unwrapKey`, and `get` permissions on the key. If these permissions are absent or expired (e.g., after rotating the managed identity or modifying AKV access policies), the TDE protector becomes inaccessible — databases fail to start, and geo-replication failover groups cannot activate.
+
+**How to spot it**
+```sql
+-- On the Managed Instance: check ERRORLOG for TDE protector access errors
+EXEC xp_readerrorlog 0, 1, N'TDE Protector';
+EXEC xp_readerrorlog 0, 1, N'33111';  -- "Cannot find server certificate with thumbprint"
+-- Azure Portal: Managed Instance → Transparent Data Encryption → shows "Key not accessible" status
+```
+
+```bash
+# Azure CLI: verify managed identity AKV access
+az keyvault show-permissions --name [vault-name] --query "properties.accessPolicies"
+# Look for the MI object-id with wrapKey, unwrapKey, get permissions
+```
+
+**Fix options**
+1. Key Vault access policy model: `az keyvault set-policy --name [vault] --object-id [mi-object-id] --key-permissions wrapKey unwrapKey get list`
+2. Azure RBAC model: `az role assignment create --assignee [mi-object-id] --role "Key Vault Crypto Service Encryption User" --scope /subscriptions/[sub]/resourceGroups/[rg]/providers/Microsoft.KeyVault/vaults/[vault]`
+3. After granting: verify TDE status returns to "Enabled" in Azure Portal
+4. Include in MI deployment checklist: verify managed identity permissions after any AKV access policy rotation or MI re-provisioning
+
+**Related checks:** A50 (BYOK rotation), A77 (key vault region), A101 (AKV soft-delete), A49 (EKM provider)

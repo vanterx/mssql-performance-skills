@@ -1117,7 +1117,7 @@ SELECT CustomerId, COUNT(*) AS OrderCount FROM dbo.Orders GROUP BY CustomerId;
 ### T27 — SET ROWCOUNT Usage
 
 **What it means**
-`SET ROWCOUNT n` limits the number of rows processed by subsequent DML statements. It is deprecated in SQL Server 2005 and above.
+`SET ROWCOUNT n` limits the number of rows processed by subsequent DML statements. Its use with `DELETE`, `INSERT`, and `UPDATE` statements is deprecated — a future SQL Server release may change this behavior for those statements. Use `TOP` instead. Note: `SET ROWCOUNT` is not deprecated for `SELECT` statements, though `TOP` is still preferred for clarity.
 
 **How to spot it**
 ```sql
@@ -1479,7 +1479,7 @@ EXEC dbo.GetOrderStatus @id;
 ### T39 — Deprecated Outer Join Syntax
 
 **What it means**
-The `*=` and `=*` operators are the old Sybase-style outer join syntax. They were removed from SQL Server at compatibility level 90 (SQL Server 2005) and are invalid in all modern databases.
+The `*=` and `=*` operators are the old Sybase-style outer join syntax. They were deprecated at compatibility level 90 (SQL Server 2005) and **removed entirely in SQL Server 2012 (11.x)**. This syntax fails to parse on any SQL Server 2012 or later instance regardless of compatibility level.
 
 **How to spot it**
 ```sql

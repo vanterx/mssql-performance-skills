@@ -51,7 +51,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlspn-review` | ~7,400 |
 | `sqlmemory-review` | ~5,800 |
 | `sqldiskio-review` | ~4,600 |
-| `sqlencryption-review` | ~22,000 |
+| `sqlencryption-review` | ~30,000 |
 | `mssql-performance-review` | ~7,900 |
 
 ### Your input artifact
@@ -345,7 +345,7 @@ These files are loaded by the skill loader and contribute to every call's input 
 | `skills/sqlplan-batch/SKILL.md` | 11,646 | 3,065 |
 | `skills/sqlmemory-review/SKILL.md` | ~22,000 | ~5,800 |
 | `skills/sqldiskio-review/SKILL.md` | ~17,500 | ~4,600 |
-| `skills/sqlencryption-review/SKILL.md` | ~84,000 | ~22,000 |
+| `skills/sqlencryption-review/SKILL.md` | ~115,000 | ~30,000 |
 
 `references/check-explanations.md` files are progressive-disclosure reference material — they are **not** loaded into the LLM context automatically. Only `SKILL.md` is loaded by the skill loader. Claude may load `references/check-explanations.md` on demand (e.g., when a user asks "explain check X" or wants deeper fix-option detail).
 

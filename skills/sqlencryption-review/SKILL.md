@@ -1,6 +1,6 @@
 ---
 name: sqlencryption-review
-description: Analyze SQL Server encryption posture across all layers — TDE, Always Encrypted, cell-level encryption, backup encryption, transport/TLS, certificate lifecycle, asymmetric and symmetric key management, DMK/SMK key hierarchy, EKM/AKV integration, sensitivity-classification gaps, TLS and network hardening, Always Encrypted advanced (secure enclave attestation, driver compatibility), operational key lifecycle, SQL Server 2022 Ledger, Azure-specific encryption, and PCI-DSS/HIPAA/GDPR/SOX/ISO 27001 compliance. Applies 80 checks (A1–A80) across 15 categories. Use this skill when reviewing database security posture, preparing for a compliance audit, investigating a key exposure, or whenever output from sys.dm_database_encryption_keys, sys.certificates, sys.symmetric_keys, msdb.dbo.backupset, sys.dm_exec_connections, sys.ledger_*, or sys.sensitivity_classifications is pasted. Trigger for questions about TDE setup, Always Encrypted configuration, backup encryption, TLS enforcement, certificate rotation, key rotation, SQL Ledger verification, or crypto-shredding for GDPR.
+description: Analyze SQL Server encryption posture across all layers — TDE, Always Encrypted, cell-level encryption, backup encryption, transport/TLS, certificate lifecycle, asymmetric and symmetric key management, DMK/SMK key hierarchy including sp_control_dbmasterkey_password and SSISDB, EKM/AKV, sensitivity-classification gaps, TLS hardening, AE enclave/driver, operational key lifecycle, SQL Ledger, Azure encryption, dynamic data masking patterns, and PCI-DSS/HIPAA/GDPR/FedRAMP/CMMC/NY-DFS compliance. Applies 112 checks (A1–A112) across 20 categories. Use this skill when reviewing database security posture, preparing for a compliance audit, investigating a key exposure, troubleshooting SSISDB or DMK auto-open failures, or whenever output from sys.dm_database_encryption_keys, sys.certificates, sys.symmetric_keys, sys.master_key_passwords, msdb.dbo.backupset, sys.dm_exec_connections, sys.ledger_*, sys.masked_columns, or sys.sensitivity_classifications is pasted. Trigger for questions about TDE setup, Always Encrypted configuration, backup encryption, TLS enforcement, certificate rotation, key rotation, sp_control_dbmasterkey_password, SSISDB encryption, SQL Ledger, dynamic data masking, HASHBYTES algorithm selection, or crypto-shredding for GDPR.
 triggers:
   - /sqlencryption-review
   - /encryption-review
@@ -9,13 +9,15 @@ triggers:
   - /backup-encryption-review
   - /tls-review
   - /ledger-review
+  - /ssisdb-review
+  - /data-masking-review
 ---
 
 # SQL Server Encryption Review Skill
 
 ## Purpose
 
-Audit the complete encryption posture of a SQL Server instance or database. Applies 80 checks (A1–A80) across 15 categories:
+Audit the complete encryption posture of a SQL Server instance or database. Applies 112 checks (A1–A112) across 20 categories:
 
 - **A1–A8** — Transparent Data Encryption (TDE): scan state, algorithm strength, certificate lifecycle, cross-database cert sharing risks
 - **A9–A16** — Always Encrypted: encryption type selection, CEK algorithm, secure enclave availability, CMK store quality, sensitive-column coverage, key rotation
@@ -32,6 +34,11 @@ Audit the complete encryption posture of a SQL Server instance or database. Appl
 - **A68–A72** — Operational Key Lifecycle: DMK/SMK password strength, certificate auto-enrollment, key archival/escrow procedures, TDE scan I/O baselining, log backup encryption
 - **A73–A76** — SQL Server Ledger (SQL 2022+): database ledger enablement, digest storage configuration, hash algorithm strength, ledger verification scheduling
 - **A77–A80** — Azure-Specific Encryption: TDE protector region placement, double encryption (infrastructure + TDE), enclave attestation provider isolation, audit log encryption at rest
+- **A81–A86** — DMK Password Auto-Open: sp_control_dbmasterkey_password coverage, SSISDB DMK registration, SMK restore invalidation, non-SMK DMK auto-open paths, cross-server restore, AG secondaries
+- **A87–A91** — Dynamic Data Masking and Permission Patterns: masking vs. encryption, UNMASK scope, certificate CONTROL permission, RLS on AE columns, CLE cipher text leakage
+- **A92–A98** — Compliance Explicit Checks: PCI-DSS v4 PAN column encryption, annual key rotation evidence, GDPR Art. 17 ledger conflict, FIPS mode enforcement, HSM provider for FIPS, key custodian documentation, HIPAA PHI audit trail
+- **A99–A104** — Operational Validation: SQL Agent job step passwords, plan cache password exposure, AKV soft-delete/purge protection, annual backup restore test, credential rotation, AG listener TLS
+- **A105–A112** — Advanced Cryptographic Patterns: cipher suite ordering, NTLM on remote connections, Service Broker cross-DB cert, ENCRYPTBYPASSPHRASE weakness, HASHBYTES deprecated algorithms, Database Mail SMTP credentials, CLE cert expiry monitoring, Azure MI managed identity AKV permissions
 
 For background on encryption concepts, algorithm comparisons, TLS versions, the SQL Server key hierarchy, and PCI-DSS / HIPAA / GDPR requirements, read `references/concepts.md`.
 
@@ -252,8 +259,8 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** In master DB, create a certificate and Database Encryption Key, then `ALTER DATABASE [db] SET ENCRYPTION ON`. Note: tempdb will encrypt automatically.
 
 ### A2 — TDE encryption scan in progress
-- **Trigger:** `sys.dm_database_encryption_keys` WHERE `encryption_state IN (2, 4)` AND `percent_complete < 100`
-- **Severity:** Info — the scan (encryption_state 2 = encrypting, 4 = decrypting) consumes additional I/O and CPU proportional to database size; on SQL 2019+ the scan can be suspended
+- **Trigger:** `sys.dm_database_encryption_keys` WHERE `encryption_state IN (2, 4, 5)` AND `percent_complete < 100`
+- **Severity:** Info — the scan consumes additional I/O and CPU proportional to database size; on SQL 2019+ the scan can be suspended. State values: `2` = encrypting, `4` = key change in progress (certificate or asymmetric key being changed), `5` = decrypting
 - **Fix:** Monitor `percent_complete`; avoid heavy index rebuild or backup jobs during scan; on SQL 2019+, use `ALTER DATABASE [db] SET ENCRYPTION SUSPEND | RESUME` if I/O pressure is high
 
 ### A3 — TDE certificate not backed up
@@ -649,10 +656,10 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Severity:** Info — a TDE encryption scan reads every page of every data file and writes it back encrypted; on large databases (hundreds of GB to TB), this can cause days of elevated I/O; without a pre-scan baseline, it is impossible to quantify the impact or distinguish scan overhead from normal workload I/O
 - **Fix:** Before enabling TDE, capture baseline I/O metrics: `SELECT * FROM sys.dm_io_virtual_file_stats(DB_ID('SalesDB'), NULL)`; start PerfMon with Physical Disk and SQL Server Buffer Manager counters; enable TDE during a maintenance window; monitor `percent_complete` in `sys.dm_database_encryption_keys`; on SQL 2019+, use `ALTER DATABASE [db] SET ENCRYPTION SUSPEND` during peak hours
 
-### A72 — Database in full recovery model without log backup encryption
-- **Trigger:** `sys.databases` WHERE `recovery_model = 1` (FULL recovery) AND log backups are taken (verified via `msdb.dbo.backupset` WHERE `type = 'L'`) AND `key_algorithm IS NULL` for those log backups AND TDE is enabled on the database
-- **Severity:** Info — TDE encrypts the transaction log on disk, but log backup files (`.trn`) are written without encryption unless backup encryption is explicitly configured; an unencrypted transaction log backup contains all transactions that occurred during the backup interval, including DML operations on sensitive tables — anyone with access to the `.trn` file can restore and read the data
-- **Fix:** Add `WITH ENCRYPTION (ALGORITHM = AES_256, SERVER CERTIFICATE = [backup_cert])` to all `BACKUP LOG` statements; update maintenance plan scripts; verify with `SELECT key_algorithm FROM msdb.dbo.backupset WHERE type = 'L' AND backup_start_date > DATEADD(DAY, -7, GETDATE())`
+### A72 — TDE-protected database log backups lack secondary backup-level encryption
+- **Trigger:** TDE is enabled on the database (`sys.dm_database_encryption_keys` shows `encryption_state = 3`) AND log backups exist (`msdb.dbo.backupset` WHERE `type = 'L'`) AND `key_algorithm IS NULL` for those log backups (no `WITH ENCRYPTION` was specified)
+- **Severity:** Info — When TDE is enabled, all backup files (`.bak` and `.trn`) already contain TDE-encrypted pages and **require the TDE certificate to restore** — they are NOT readable without it. However, adding explicit backup encryption (`WITH ENCRYPTION`) provides a separate defense-in-depth layer: the backup file is additionally protected by a distinct backup certificate, so that even possession of the TDE certificate alone does not grant access to the backup file. This is relevant when backup files are stored in locations with different access controls than the SQL Server instance.
+- **Fix:** If defense-in-depth backup protection is required by your security policy: add `WITH ENCRYPTION (ALGORITHM = AES_256, SERVER CERTIFICATE = [backup_cert])` to all `BACKUP LOG` statements and ensure the backup certificate is backed up separately. Verify with: `SELECT key_algorithm FROM msdb.dbo.backupset WHERE type = 'L' AND backup_start_date > DATEADD(DAY, -7, GETDATE())`. Note: this is a hardening recommendation — TDE backups are already protected and cannot be restored without the TDE certificate.
 
 ---
 
@@ -666,7 +673,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 ### A74 — Ledger database digest not configured for automatic storage
 - **Trigger:** `sys.databases` WHERE `is_ledger_on = 1` AND no Azure Storage account, Azure Confidential Ledger, or file share is configured for automatic digest upload — the digest is only generated locally (no external verification possible)
 - **Severity:** Warning — database digests are the cryptographic proof that data has not been tampered with; storing them only on the same server defeats the purpose — a compromised sysadmin can delete or modify the digest history; external digest storage provides tamper-evident verification that auditors can use independently
-- **Fix:** Configure automatic digest storage: `EXEC sp_generate_database_ledger_digest` to an Azure Storage account (`@digest_storage_endpoint = 'https://<account>.blob.core.windows.net/<container>'`) or an Azure Confidential Ledger ACL instance; configure a SQL Agent job to run `sp_generate_database_ledger_digest` on a schedule (e.g., daily); test verification: `EXEC sp_verify_database_ledger FROM 'https://account.blob.core.windows.net/container/digest.json'`
+- **Fix:** Configure automatic digest storage: `EXEC sp_generate_database_ledger_digest @digest_storage_endpoint = 'https://<account>.blob.core.windows.net/<container>'` to an Azure Storage account or an Azure Confidential Ledger instance; configure a SQL Agent job to run `sp_generate_database_ledger_digest` on a schedule (e.g., daily); test verification using `EXEC sys.sp_verify_database_ledger_from_digest_storage` after enabling `ALLOW_SNAPSHOT_ISOLATION` on the database
 
 ### A75 — Ledger table hash algorithm not SHA-256
 - **Trigger:** Ledger database exists AND the ledger hash algorithm is not SHA-256 (check via `sys.database_ledger_configurations` or the `CREATE DATABASE ... LEDGER = ON` documentation confirming the default) — only SHA-256 is available in SQL Server 2022, so this check serves as a future-proofing and documentation check
@@ -674,9 +681,9 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** Verify the ledger hash algorithm: `SELECT hash_algorithm_desc FROM sys.database_ledger_configurations WHERE database_id = DB_ID()`; SHA-256 is the only supported algorithm in SQL Server 2022 — accept this for now; document the hash algorithm used for audit evidence; plan migration to SHA-384 when available for 10+ year retention workloads
 
 ### A76 — Ledger verification not scheduled on a recurring basis
-- **Trigger:** Ledger database exists AND no SQL Agent job or Azure Automation runbook is configured to run `sp_verify_database_ledger` on a recurring schedule (at least monthly)
+- **Trigger:** Ledger database exists AND no SQL Agent job or Azure Automation runbook is configured to run `sp_verify_database_ledger` or `sp_verify_database_ledger_from_digest_storage` on a recurring schedule (at least monthly) — SQL 2022+ only
 - **Severity:** Warning — ledger verification is the only way to detect tampering; if verification is never run, tampered data may go undetected for months or years, by which time the evidence trail may be cold; the ledger's security model depends on regular verification by an external party (auditor, compliance team)
-- **Fix:** Create a SQL Agent job: `EXEC sp_verify_database_ledger FROM '<digest_storage_endpoint/digest_file>'` and schedule it weekly or monthly; configure SQL Agent alerts on verification failure (use SQL Agent operators for email notification); document the verification schedule in the audit runbook; periodically have an external auditor run verification independently
+- **Fix:** Prerequisite: `ALTER DATABASE [db] SET ALLOW_SNAPSHOT_ISOLATION ON` (required before running either verification procedure). For **automatic digest storage** (Azure Blob / ACL configured): `EXEC sys.sp_verify_database_ledger_from_digest_storage @locations = (SELECT * FROM sys.database_ledger_digest_locations FOR JSON AUTO, INCLUDE_NULL_VALUES)`. For **manual digest storage** (JSON digest passed directly): `EXEC sys.sp_verify_database_ledger @digests = N'[{"database_name":"db",...}]'`. Schedule weekly or monthly via SQL Agent; configure alerts on verification failure; document the verification schedule in the audit runbook.
 
 ---
 
@@ -701,6 +708,188 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Trigger:** SQL Server Audit is configured on Azure SQL Database (`sys.server_audits` or `sys.database_audit_specifications` exist) AND the audit log destination is Azure Blob Storage AND the storage account does not have Storage Service Encryption (SSE) enabled OR uses a storage account without customer-managed keys for compliance workloads
 - **Severity:** Info — audit logs contain sensitive operational data including query text, parameter values, and user identities; unencrypted audit logs expose this data to anyone with access to the storage account; PCI-DSS Requirement 10 requires protection of audit trail data from unauthorized modification
 - **Fix:** Enable Azure Storage Service Encryption on the audit log storage account (enabled by default for new accounts — verify it is on); for PCI/HIPAA workloads, configure customer-managed keys for the storage account: `az storage account update --name <account> --encryption-key-source Microsoft.KeyVault --encryption-key-vault <vault_uri> --encryption-key-name <key_name>`; verify with `az storage account show --name <account> --query encryption`
+
+---
+
+## DMK Password Auto-Open — A81–A86
+
+The `sp_control_dbmasterkey_password` mechanism stores a database DMK password as a credential in `master.sys.credentials` (encrypted by the SMK), linked to the database's stable `family_guid` in `master.sys.master_key_passwords`. SQL Server uses it to auto-open password-only DMKs at startup or restore time. This applies to any database whose DMK is not encrypted by the SMK — including SSISDB by design, cross-server restores, deliberate isolation architectures, and AG secondaries.
+
+### A81 — Database has non-SMK DMK without registered password in sys.master_key_passwords
+- **Trigger:** User database (`database_id > 4`) has `is_master_key_encrypted_by_server = 0` AND no matching entry in `master.sys.master_key_passwords` for that database
+- **Severity:** Warning — SQL Server cannot auto-open the DMK after restart or failover; any DECRYPTBYKEY, OPEN SYMMETRIC KEY, or cert-protected object access fails with "Please create a master key in the database or open the master key in the session before performing this operation"
+- **Fix:** Register the password: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[dmk_password]', @action = N'add'`; or add SMK protection: `USE [db]; ALTER MASTER KEY ADD ENCRYPTION BY SERVICE MASTER KEY`
+
+### A82 — SSISDB DMK password not registered with sp_control_dbmasterkey_password
+- **Trigger:** Database named `SSISDB` exists AND `is_master_key_encrypted_by_server = 0` AND no entry for SSISDB in `master.sys.master_key_passwords`
+- **Severity:** Critical — SSISDB deliberately creates its DMK without SMK protection (security isolation by design); SSIS catalog operations (package execution, environment variable decryption, sensitive parameter access) all fail with error 15581 after every SQL Server restart until the password is registered — SQL 2012+
+- **Fix:** `EXEC sp_control_dbmasterkey_password @db_name = N'SSISDB', @password = N'[catalog_creation_password]', @action = N'add'`; the password is the one supplied during `SSISDB.catalog.create_catalog`; if lost, the SSISDB catalog must be dropped and recreated
+
+### A83 — Service Master Key restored from foreign instance: registered DMK passwords invalidated
+- **Trigger:** Evidence of `RESTORE SERVICE MASTER KEY FROM FILE` in recent ERRORLOG or SQL Agent job history AND entries exist in `master.sys.master_key_passwords` — credentials were encrypted with the source instance's SMK and cannot be decrypted by the restored (foreign) SMK
+- **Severity:** Warning — only cross-instance SMK restore invalidates registered passwords; `ALTER SERVICE MASTER KEY REGENERATE` on the same instance re-encrypts credentials automatically and does NOT invalidate registrations
+- **Fix:** After restoring a foreign SMK backup: for each database in `sys.master_key_passwords`, run `@action = 'drop'` then immediately `@action = 'add'` with the current DMK password; maintain a vault-stored inventory of which databases have registered passwords
+
+### A84 — Non-SMK DMK database has no auto-open path configured
+- **Trigger:** User database with `is_master_key_encrypted_by_server = 0` AND no entry in `master.sys.master_key_passwords` AND no SQL Agent startup job containing `OPEN MASTER KEY DECRYPTION BY PASSWORD` for that database
+- **Severity:** Warning — three auto-open paths exist: (1) SMK protection, (2) password registered via `sp_control_dbmasterkey_password`, (3) startup SQL Agent job; having none means every restart leaves encrypted objects inaccessible until a DBA manually intervenes
+- **Fix:** Choose one path: `ALTER MASTER KEY ADD ENCRYPTION BY SERVICE MASTER KEY` (simplest), or `sp_control_dbmasterkey_password @action = 'add'`, or create a SQL Agent startup job executing `OPEN MASTER KEY DECRYPTION BY PASSWORD = N'...'`
+
+### A85 — Restored or attached database with non-SMK DMK: password not re-registered on target
+- **Trigger:** Database has `is_master_key_encrypted_by_server = 0` AND MSDB restore history (`msdb.dbo.restorehistory`) shows it was restored from backup AND no `sys.master_key_passwords` entry for this database exists on the current instance
+- **Severity:** Warning — `sys.master_key_passwords` is instance-local; restoring a database to a new SQL Server does not carry DMK password registration; the `family_guid` is preserved from the source but the target instance has no corresponding entry
+- **Fix:** On the target instance: `EXEC sp_control_dbmasterkey_password @db_name = N'[db]', @password = N'[dmk_password]', @action = N'add'`; add this step to all database restore runbooks; verify: `SELECT * FROM master.sys.master_key_passwords`
+
+### A86 — AG secondary with non-SMK DMK: password not registered on secondary replicas
+- **Trigger:** Availability Group exists AND a member database has `is_master_key_encrypted_by_server = 0` AND the password is absent from `master.sys.master_key_passwords` on one or more secondary replicas
+- **Severity:** Warning — on AG failover, the new primary inherits the database but not the `sys.master_key_passwords` entry from the former primary; the DMK auto-open path breaks on the new primary until a DBA re-registers; AG seeding does NOT carry over password registrations
+- **Fix:** Run `EXEC sp_control_dbmasterkey_password @action = 'add'` on every AG replica (primary and all secondaries); include in AG deployment checklist and failover runbook
+
+---
+
+## Dynamic Data Masking and Permission Patterns — A87–A91
+
+### A87 — Sensitive column masked but not encrypted
+- **Trigger:** `sys.masked_columns` WHERE column name matches sensitive patterns (`ssn`, `card`, `password`, `salary`, `dob`, `tax_id`, `passport`, `diagnosis`, `account_number`) AND `column_encryption_key_id IS NULL` AND not referenced by `ENCRYPTBYKEY` in any module — SQL 2016+
+- **Severity:** Warning — Dynamic Data Masking is an access-control presentation layer, not encryption; any user with `UNMASK` permission, sysadmin role, `SELECT INTO` a temp table, or who exploits inference attacks receives unmasked data; DDM does not protect at-rest data against privileged access or storage-level exposure
+- **Fix:** Apply Always Encrypted (client-side) or CLE for columns requiring genuine data confidentiality; retain DDM as a secondary display filter for application users; load `references/howto-dynamic-data-masking.md` for the decision tree
+
+### A88 — UNMASK permission granted to a broad role
+- **Trigger:** `sys.database_permissions` WHERE `permission_name = 'UNMASK'` AND `grantee_principal_id` maps to a role with more than 1 member, or is granted to PUBLIC — SQL 2016+
+- **Severity:** Warning — UNMASK on a role grants all current and future role members unrestricted read access to every masked column in the database; DDM becomes ineffective as a control
+- **Fix:** `REVOKE UNMASK FROM [role]`; grant `UNMASK` only to specific named principals who genuinely need it; use `SELECT * FROM sys.database_permissions WHERE permission_name = 'UNMASK'` to audit
+
+### A89 — CONTROL permission on certificate granted to non-sysadmin
+- **Trigger:** `sys.database_permissions` WHERE `class_desc = 'CERTIFICATE_OBJECT'` AND `permission_name = 'CONTROL'` AND `grantee_principal_id` is not a sysadmin-mapped database user
+- **Severity:** Warning — CONTROL on a certificate allows DROP, ALTER, and use for encryption/decryption/signing without restriction; over-privileged access on TDE, Service Broker, or backup certs creates a privilege escalation path (extends A40 which covers keys only)
+- **Fix:** Replace CONTROL with purpose-specific grants: `REFERENCES` for AE CMK metadata, `EXECUTE` for signing procedures; sysadmins have implicit access; run `REVOKE CONTROL ON CERTIFICATE::[cert] FROM [principal]`
+
+### A90 — Row-Level Security predicate referencing an Always Encrypted column
+- **Trigger:** `sys.security_policies` exist AND the predicate function definition references a table column with `column_encryption_key_id IS NOT NULL`
+- **Severity:** Warning — AE columns are encrypted before reaching the server-side SQL engine; RLS filter predicates receive encrypted byte strings, not plaintext; the predicate either always fails (zero rows) or always passes (all rows), depending on the comparison operator — it never filters correctly
+- **Fix:** Move row-filtering logic to the application layer for AE-protected columns; use deterministic AE with application-side WHERE clauses; document this limitation for compliance reviewers
+
+### A91 — CLE-encrypted column without masked fallback exposes cipher text to reporting users
+- **Trigger:** Table has columns encrypted with `ENCRYPTBYKEY` (CLE) AND the same columns have no `sys.masked_columns` entry AND the table has `SELECT` permission granted to a non-sysadmin role
+- **Severity:** Info — reporting users who lack the open symmetric key receive raw `varbinary` cipher text, confirming the column is encrypted and potentially leaking data-length patterns
+- **Fix:** Add a default DDM mask: `ALTER TABLE [dbo].[t] ALTER COLUMN [col] ADD MASKED WITH (FUNCTION = 'default()')`; grant `UNMASK` only to principals who also have the open key; cipher text is returned only when BOTH UNMASK and the key are available
+
+---
+
+## Compliance Explicit Checks — A92–A98
+
+### A92 — PCI-DSS v4: PAN stored without column-level encryption
+- **Trigger:** Columns matching `card_number`, `pan`, `primary_account`, `credit_card`, `debit_card`, `cardholder_number` exist AND `column_encryption_key_id IS NULL` AND no `ENCRYPTBYKEY` module reference — even if TDE is enabled on the database
+- **Severity:** Critical — PCI-DSS v4.0 Requirement 3.5.1 requires PAN to be rendered unreadable at rest; TDE does not satisfy this because any SQL user with SELECT permission reads the plaintext PAN; TDE protects only against physical media theft
+- **Fix:** Apply Always Encrypted with deterministic encryption (enabling indexed lookups) to all PAN columns; truncate or tokenise where the full PAN is not needed; document the chosen approach in PCI-DSS evidence
+
+### A93 — PCI-DSS v4: no evidence of annual key rotation for cardholder data keys
+- **Trigger:** `sys.symmetric_keys` or `sys.certificates` used by CLE or backup encryption on PCI-scope databases WHERE `modify_date = create_date` AND age > 365 days
+- **Severity:** Warning — PCI-DSS v4.0 Requirement 3.7.3 requires cryptographic key changes "at least annually" or on suspected compromise
+- **Fix:** Create an annual rotation schedule in SQL Agent; use year-suffixed key naming (`CLE_PAN_2026`); document rotation history in the PCI key management policy
+
+### A94 — GDPR Art. 17: PII in append-only ledger table without crypto-shredding strategy
+- **Trigger:** `sys.tables` with `ledger_type = 2` (append-only) AND columns matching PII patterns exist AND no per-subject encryption key column is present — SQL 2022+
+- **Severity:** Warning — append-only ledger tables are cryptographically immutable; GDPR Article 17 right-to-erasure cannot be honoured without a crypto-shredding strategy (per-subject encryption key deleted on erasure request)
+- **Fix:** Use updatable ledger tables for PII (support DELETE with history audit); OR implement per-subject CLE keys and document the shredding procedure in `howto-crypto-shredding.md`; OR store only pseudonymous identifiers in append-only ledger
+
+### A95 — FIPS: Windows FIPS mode not enabled on SQL Server host for regulated workloads
+- **Trigger:** SQL Server ERRORLOG does not contain "FIPS compliance mode is enabled" at the most recent startup, AND the deployment is tagged or named as FedRAMP HIGH / CMMC / DoD IL4+
+- **Severity:** Warning — FedRAMP HIGH, CMMC Level 3, and DoD IL4+ require FIPS 140-2 validated cryptographic modules; Windows FIPS mode is the enforcement mechanism for SQL Server; without it, non-FIPS operations may succeed silently
+- **Fix:** Group Policy → Computer Configuration → Windows Settings → Security Settings → Local Policies → Security Options → "System cryptography: Use FIPS compliant algorithms" = Enabled; restart SQL Server; test all applications (some older ODBC/JDBC drivers fail in FIPS mode)
+
+### A96 — FIPS environment using software-only EKM provider (no HSM backing)
+- **Trigger:** `sys.cryptographic_providers` shows an EKM provider AND the DLL name or path does not match known FIPS 140-2 Level 2+ validated HSM vendors (nCipher, Thales Luna/SafeNet, Entrust, IBM 4769, AWS CloudHSM, Azure Dedicated HSM)
+- **Severity:** Warning — software EKM providers do not provide the physical tamper resistance required for FIPS 140-2 Level 2; key material can be extracted via memory dumps or disk forensics
+- **Fix:** Replace with a NIST CMVP-validated HSM provider; verify the certification number at csrc.nist.gov/projects/cryptographic-module-validation-program
+
+### A97 — No documented key custodian or key management policy
+- **Trigger:** No SQL Agent job with key/cert/dmk/smk naming pattern; no `sys.server_audits` active; no `sys.sensitivity_classifications`; no `DATABASE_OBJECT_ACCESS_GROUP` audit specification for encryption objects
+- **Severity:** Info — PCI-DSS v4.0 Requirement 3.7.6 requires split-knowledge and dual-control for manual key operations; NY DFS 23 NYCRR 500 §500.15 and CMMC SC.3.191 require documented cryptographic controls
+- **Fix:** Create a key inventory document; schedule SQL Agent maintenance jobs with named owners; configure SQL Server Audit for key access events (A56 fix); document custodians in job descriptions
+
+### A98 — HIPAA: PHI columns without column-level encryption and no SELECT audit trail
+- **Trigger:** Columns matching PHI patterns (`ssn`, `diagnosis`, `medical_record`, `mrn`, `prescription`, `dob`, `patient_id`, `condition`, `treatment`) exist AND `column_encryption_key_id IS NULL` AND no SQL Audit action group targets SELECT on the table
+- **Severity:** Warning — HIPAA 45 CFR §164.312 requires both encryption safeguards (§164.312(a)(2)(iv)) and audit controls (§164.312(b)); unencrypted PHI columns without audit fail both safeguards simultaneously
+- **Fix:** Apply Always Encrypted to PHI columns; add SQL Server Audit: `ADD (SELECT ON OBJECT::[schema].[table] BY [role])`; retain audit logs for minimum 6 years per HIPAA §164.316(b)(2)
+
+---
+
+## Operational Validation — A99–A104
+
+### A99 — SQL Agent job step containing hardcoded OPEN SYMMETRIC KEY password
+- **Trigger:** `msdb.dbo.sysjobsteps` WHERE `command` LIKE `'%OPEN SYMMETRIC KEY%DECRYPTION BY PASSWORD%'`
+- **Severity:** Critical — passwords in SQL Agent job step T-SQL are stored in MSDB in near-plaintext, appear verbatim in SSMS, are logged on step failure, and are visible to all principals with sysadmin or SQLAgentOperatorRole; the key material is fully exposed to anyone with SSMS or MSDB access
+- **Fix:** Replace password-based key protection with certificate-based: `OPEN SYMMETRIC KEY [key] DECRYPTION BY CERTIFICATE [cert]`; the cert's private key is protected by the DMK which auto-opens via SMK — no password required in job code
+
+### A100 — Plan cache contains OPEN SYMMETRIC KEY with visible password
+- **Trigger:** `sys.dm_exec_sql_text` cross-applied via `sys.dm_exec_query_stats` WHERE query text LIKE `'%OPEN SYMMETRIC KEY%DECRYPTION BY PASSWORD%'`
+- **Severity:** Critical — plan cache entries are visible to all principals with VIEW SERVER STATE (operators, APM agents, monitoring tools, 3rd-party DBA tools); passwords appear in full text; parameters to sp_control_dbmasterkey_password are protected from traces, but ad-hoc T-SQL is not
+- **Fix:** Migrate to certificate-based key protection (A99 fix); run `DBCC FREEPROCCACHE` to evict the exposed plan immediately; audit who holds VIEW SERVER STATE
+
+### A101 — Azure Key Vault soft-delete disabled or purge protection not enforced
+- **Trigger:** Azure SQL using AKV BYOK TDE or AE CMK AND the vault has `enableSoftDelete = false` OR `enablePurgeProtection = false`
+- **Severity:** Critical — without purge protection an AKV key can be permanently deleted within minutes; TDE-protected databases become permanently inaccessible; this misconfiguration is common in dev vaults promoted to production
+- **Fix:** `az keyvault update --name [vault] --enable-soft-delete true --enable-purge-protection true`; set minimum retention ≥ 90 days; enforce via Azure Policy at subscription level
+
+### A102 — No annual encrypted backup restore test on record
+- **Trigger:** Most recent RESTORE in `msdb.dbo.restorehistory` for databases with encrypted backups is older than 365 days OR no restore history exists
+- **Severity:** Warning — certificate rotation, SMK changes, or infrastructure migration may silently break encrypted restore; the first evidence of a broken restore chain should not be an actual disaster
+- **Fix:** Schedule annual restore test to an isolated test environment; restore the certificate first; verify `RESTORE DATABASE [db] WITH RECOVERY`; document the test result and certificate thumbprint in the DR runbook
+
+### A103 — sys.credentials age exceeds 1 year without rotation evidence
+- **Trigger:** `sys.credentials` WHERE `modify_date < DATEADD(YEAR, -1, GETDATE())` AND `credential_identity` is not a Windows or AAD account (i.e., key-string or secret-based EKM/proxy credential)
+- **Severity:** Info — credentials for EKM providers and proxy accounts are encrypted by the SMK; long-lived secrets increase exposure window
+- **Fix:** Rotate via `ALTER CREDENTIAL [name] WITH IDENTITY = N'[id]', SECRET = N'new_secret'`; coordinate with the HSM/AKV/proxy vendor; update any dependent applications
+
+### A104 — AG listener TLS certificate does not include listener DNS name in SAN
+- **Trigger:** Availability Group exists AND the AG listener DNS name is not present in the Subject Alternative Name of the TLS certificate bound to SQL Server (listener name differs from the instance hostname in the certificate CN or SAN)
+- **Severity:** Warning — clients connecting via the AG listener FQDN may receive a certificate name mismatch error or fall back to self-signed cert validation if the listener name is not in the SAN
+- **Fix:** Include AG listener DNS names in the TLS certificate SAN when requesting from CA; rebind the updated cert in SQL Server Configuration Manager; test: `openssl s_client -connect aglistener:1433 -starttls mssql`
+
+---
+
+## Advanced Cryptographic Patterns — A105–A112
+
+### A105 — TLS cipher suite ordering: ECDHE not prioritised over RSA key exchange
+- **Trigger:** Windows registry `HKLM\SOFTWARE\Policies\Microsoft\Cryptography\Configuration\SSL\00010002\Functions` shows RSA key-exchange suites appearing before ECDHE suites, or ECDHE suites absent
+- **Severity:** Info — ECDHE provides Perfect Forward Secrecy (PFS): a compromised server private key cannot decrypt past sessions; RSA key exchange does not; GCM is also preferable to CBC (authenticated encryption, no POODLE variant risk)
+- **Fix:** Use IIS Crypto or Group Policy to reorder: prioritise `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384` and `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256` above all RSA-exchange suites; disable all NULL/EXPORT suites
+
+### A106 — Remote connections authenticating via NTLM
+- **Trigger:** `sys.dm_exec_connections` WHERE `auth_scheme = 'NTLM'` AND `client_net_address NOT IN ('<local machine>', '127.0.0.1', '::1')`
+- **Severity:** Info — NTLM is vulnerable to relay attacks (Pass-the-Hash, NTLM relay); no mutual authentication; Kerberos with armoring provides stronger session security; NTLM on encrypted TLS is lower risk but still a weaker auth plane
+- **Fix:** Register SPNs correctly to enable Kerberos: `setspn -S MSSQLSvc/hostname:1433 [service_account]`; see `/sqlspn-review` for full SPN audit
+
+### A107 — Service Broker: remote endpoint certificate not imported into target database
+- **Trigger:** `sys.endpoints` WHERE `type_desc = 'SERVICE_BROKER'` AND `connection_auth_desc LIKE '%CERTIFICATE%'` AND the endpoint certificate public key is not present as a no-private-key certificate in any other database's `sys.certificates`
+- **Severity:** Warning — Service Broker certificate authentication requires the initiating database's public certificate to be imported into the target database; without it, messages are rejected with "The certificate used to sign the message has an unknown issuer" or "There is no remote service binding"
+- **Fix:** Export cert (public key only): `BACKUP CERTIFICATE [sb_cert] TO FILE = '...'` (no WITH PRIVATE KEY); import into target: `CREATE CERTIFICATE [remote_cert] AUTHORIZATION [user] FROM FILE = '...'`
+
+### A108 — ENCRYPTBYPASSPHRASE used with weak or visible passphrase in T-SQL source
+- **Trigger:** `sys.sql_modules` WHERE `definition` LIKE `'%ENCRYPTBYPASSPHRASE%'` AND the passphrase literal appears in source (not parameterised); flag if passphrase is < 16 characters
+- **Severity:** Warning — `ENCRYPTBYPASSPHRASE` uses a weak key derivation function (few iterations, no salt stretching); on SQL Server 2016 and earlier it uses Triple DES 128-bit; from SQL Server 2017+ it uses AES-256 (a significant improvement, but the weak KDF remains). Short or dictionary passphrases are brute-forceable with GPU acceleration regardless of version; the passphrase is visible in T-SQL source, plan cache, and job step history. On SQL 2016 and earlier, treat all uses as Critical due to Triple DES.
+- **Fix:** Migrate to AES_256 symmetric key: `CREATE SYMMETRIC KEY [k] WITH ALGORITHM = AES_256, ENCRYPTION BY CERTIFICATE [cert]`; use `ENCRYPTBYKEY` instead; if ENCRYPTBYPASSPHRASE must be retained, use a randomly generated 32+ char passphrase stored in a vault, never in T-SQL source
+
+### A109 — HASHBYTES using deprecated algorithm in security-sensitive context
+- **Trigger:** `sys.sql_modules` WHERE `definition` LIKE `'%HASHBYTES%'` AND matches `HASHBYTES('MD2'` OR `HASHBYTES('MD4'` OR `HASHBYTES('MD5'` OR `HASHBYTES('SHA'` (SHA-1 shorthand) in modules with names suggesting password, token, signature, or fingerprint processing
+- **Severity:** Warning — MD2/MD4/MD5 are cryptographically broken (collision attacks practical); SHA-1 is deprecated (NIST 2030 sunset, removed from TLS); using these for password hashing, HMAC, or data integrity provides no meaningful security guarantee
+- **Fix:** Replace with `HASHBYTES('SHA2_256', ...)` or `HASHBYTES('SHA2_512', ...)`; for password storage, use application-layer bcrypt/scrypt/Argon2 (SQL Server has no built-in password-hashing primitive)
+
+### A110 — Database Mail SMTP credentials without modern authentication
+- **Trigger:** `msdb.dbo.sysmail_account` WHERE `enable_ssl = 0` (plaintext SMTP) OR `use_default_credentials = 0` AND password-based auth stored in `sys.credentials` (SMK-encrypted only)
+- **Severity:** Info — Database Mail SMTP credentials are stored in MSDB encrypted only by the SMK; any sysadmin can extract them; plaintext SMTP transmits credentials over the network without TLS
+- **Fix:** Use Windows Authentication for SMTP relay when available; migrate to OAuth2/modern auth for Office 365 SMTP (SQL Server 2022 CU14+ supports OAuth2 for Database Mail); enable `enable_ssl = 1` on all accounts
+
+### A111 — ENCRYPTBYCERT or DECRYPTBYCERT used with certificates lacking expiry monitoring
+- **Trigger:** `sys.sql_modules` WHERE `definition` LIKE `'%ENCRYPTBYCERT%'` OR `'%DECRYPTBYCERT%'` AND the referenced certificate has `expiry_date < DATEADD(DAY, 90, GETDATE())` or is already expired
+- **Severity:** Warning — `ENCRYPTBYCERT` and `DECRYPTBYCERT` succeed on expired certificates (SQL Server does not enforce expiry for T-SQL CLE operations); expired CLE certificates are silently missed by operators who assume TLS cert monitoring covers all certificates
+- **Fix:** Add CLE cert expiry monitoring to the SQL Agent maintenance job: `SELECT name, expiry_date FROM sys.certificates WHERE expiry_date < DATEADD(DAY, 90, GETDATE()) AND name NOT LIKE '##%'`; rotate CLE certs before expiry per `howto-key-rotation.md`
+
+### A112 — Azure SQL Managed Instance: managed identity missing minimum AKV permissions for CMK
+- **Trigger:** Azure SQL Managed Instance using BYOK TDE AND managed identity lacks `wrapKey`, `unwrapKey`, and `get` permissions on the target AKV key (inferred from error 33111 or "TDE Protector is not accessible" in ERRORLOG) — Azure SQL MI only
+- **Severity:** Critical — missing `wrapKey`/`unwrapKey`/`get` permissions cause the TDE protector to become inaccessible; databases fail to start and failover groups cannot activate
+- **Fix:** `az keyvault set-policy --name [vault] --object-id [mi-object-id] --key-permissions wrapKey unwrapKey get list`; for AKV with Azure RBAC: assign `Key Vault Crypto Service Encryption User` role to the managed identity
 
 ---
 
@@ -732,7 +921,7 @@ Structure all output in this order:
 6. **Next Steps** — 3–5 bullet points for the DBA team
 
 Severity labels: `CRITICAL`, `WARNING`, `INFO`
-Output labels: `[A1]` through `[A80]`
+Output labels: `[A1]` through `[A112]`
 
 ### File Output
 
@@ -749,7 +938,7 @@ File headers:
 
 Create directories as needed. When `--verbose` is not present, write nothing to disk.
 
-> Analyzed by: `sqlencryption-review` (A1–A80)
+> Analyzed by: `sqlencryption-review` (A1–A112)
 
 ---
 
@@ -759,7 +948,10 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - Certificate backup history is not tracked by any DMV — A3, A23, A37, A44, A47 rely on SQL Agent job history or maintenance script evidence; if that evidence is not provided, state the assumption that no backup exists.
 - Registry-based checks (A26 ForceEncryption via `sys.dm_server_registry`, TLS cipher suite checks A57–A58) require the SQL Server service account to have registry read permissions or the checks must be verified manually in SQL Server Configuration Manager.
 - T-SQL source-level checks (A18, A19, A43) can only be evaluated when source code is provided or extractable from `sys.sql_modules`; source-only checks not applicable to DMV-only inputs.
-- Azure-specific checks (A50, A51, A77–A80) are applicable only to Azure SQL Database or SQL Server on Azure VM; mark as `NOT ASSESSED` for on-premises instances.
+- Azure-specific checks (A50, A51, A77–A80, A101, A112) are applicable only to Azure SQL Database, Azure SQL Managed Instance, or SQL Server on Azure VM; mark as `NOT ASSESSED` for on-premises instances.
+- DMK password management checks (A81–A86) require access to `master.sys.master_key_passwords`; if the input does not include this view's output, assume non-SMK databases lack registration and flag accordingly.
+- DDM checks (A87–A88) require SQL Server 2016+; `sys.masked_columns` does not exist on older versions.
+- SQL Agent job step checks (A99) require access to `msdb.dbo.sysjobsteps`; plan cache checks (A100) require `sys.dm_exec_sql_text` via VIEW SERVER STATE.
 - SQL Server 2022+ checks (A59 TLS 1.3, A73–A76 Ledger) self-skip on older versions where the features are absent.
 
 ---
@@ -771,7 +963,7 @@ Load `references/check-explanations.md` when:
 - You need DMV query examples or T-SQL code samples to verify a finding
 - The user asks "explain check A5" or "how do I fix X"
 
-The file is 1,500+ lines. Navigate with the Quick Reference Table at the top:
+The file is 2,100+ lines. Navigate with the Quick Reference Table at the top:
 - **A1–A8** — Transparent Data Encryption (TDE)
 - **A9–A16** — Always Encrypted
 - **A17–A21** — Cell-Level Encryption (CLE)
@@ -787,11 +979,16 @@ The file is 1,500+ lines. Navigate with the Quick Reference Table at the top:
 - **A68–A72** — Operational Key Lifecycle
 - **A73–A76** — SQL Server Ledger
 - **A77–A80** — Azure-Specific Encryption
+- **A81–A86** — DMK Password Auto-Open
+- **A87–A91** — Dynamic Data Masking and Permission Patterns
+- **A92–A98** — Compliance Explicit Checks
+- **A99–A104** — Operational Validation
+- **A105–A112** — Advanced Cryptographic Patterns
 
 Load `references/concepts.md` when:
-- The user asks background questions: "what is TDE?", "explain symmetric vs asymmetric encryption", "what TLS version should I use?"
+- The user asks background questions: "what is TDE?", "explain symmetric vs asymmetric encryption", "what TLS version should I use?", "how does sp_control_dbmasterkey_password work?", "what is PBKDF1 vs PBKDF2?"
 - A finding needs regulatory context: "what does PCI-DSS require for SQL Server encryption?", "does GDPR mandate key rotation?"
-- The user needs encryption type comparison: "should I use TDE or Always Encrypted for this column?"
+- The user needs encryption type comparison: "should I use TDE or Always Encrypted for this column?", "when should I use DDM vs encryption?"
 
 Load `references/howto-*.md` guides when the user asks for step-by-step operational procedures:
 - `howto-tde-setup.md` — end-to-end TDE deployment
@@ -800,6 +997,9 @@ Load `references/howto-*.md` guides when the user asks for step-by-step operatio
 - `howto-key-rotation.md` — certificate and key rotation procedures
 - `howto-crypto-shredding.md` — cryptographic erasure for GDPR right-to-erasure
 - `howto-disaster-recovery.md` — encrypted database restore across servers
+- `howto-dmk-password-management.md` — sp_control_dbmasterkey_password, SSISDB DMK, cross-server restore, AG replica registration
+- `howto-dynamic-data-masking.md` — DDM vs encryption decision tree, UNMASK permission, interaction with AE and CLE
+- `howto-agent-jobs.md` — secure SQL Agent job patterns, credential protection, avoiding plaintext keys in job steps
 - `error-reference.md` — common encryption error messages and resolution
 
 ---
@@ -833,14 +1033,19 @@ Checks are self-skipping when the feature they test is absent from the artifact:
 - **A68–A72 (Operational key lifecycle):** A68–A70 all versions; A71 requires SQL Server 2008+ (TDE); A72 requires SQL Server 2014+ (backup encryption)
 - **A73–A76 (SQL Ledger):** All require SQL Server 2022+; Azure SQL Database ledger available in limited regions
 - **A77–A80 (Azure-specific):** All require Azure SQL Database or SQL Server on Azure VM
+- **A81–A86 (DMK password):** SQL Server 2005 and later; A82 (SSISDB) requires SQL 2012+
+- **A87–A91 (DDM/permissions):** A87/A88 require SQL Server 2016+ (Dynamic Data Masking); A89–A91 all versions
+- **A92–A98 (Compliance explicit):** A92–A93 all versions; A94 requires SQL 2022+ (Ledger); A95–A98 all versions
+- **A99–A104 (Operational validation):** A99–A103 all versions; A101 Azure-only; A104 requires Always On AG
+- **A105–A112 (Advanced patterns):** A105–A111 all versions; A112 Azure SQL Managed Instance only
 
-| Version | TDE | AE | CLE | Backup Enc | TLS | Certs | Keys | DMK/SMK | EKM | Compliance | TLS Hardening | AE Adv | Key Ops | Ledger | Azure |
-|---------|-----|----|----|-----------|-----|-------|------|---------|-----|-----------|--------------|--------|---------|--------|-------|
-| SQL 2005 | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | — | A54–A55 | — | — | A68–A70 | — | — |
-| SQL 2008 | ✓ | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | A54–A55 | A57–A58, A60, A62 | — | A68–A70 | — | — |
-| SQL 2012 | ✓ | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | A54–A56 | A57–A58, A60, A62 | — | A68–A70 | — | — |
-| SQL 2014 | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A54–A56 | A57–A58, A60, A62 | — | A68–A72 | — | — |
-| SQL 2016 | ✓ | ✓ (A9–A16) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A54–A56 | A57–A58, A60, A62 | — | A68–A72 | — | — |
-| SQL 2019 | ✓ | ✓ + A12 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A53–A56 | A57–A58, A60, A62 | A63–A67 | A68–A72 | — | — |
-| SQL 2022 | ✓ | ✓ + A12 | ✓ | ✓ | ✓ (TLS 1.3) | ✓ | ✓ | ✓ | ✓ | A53–A56 | A57–A62 | A63–A67 | A68–A72 | A73–A76 | — |
-| Azure SQL | ✓ | ✓ + A12 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A50–A51 | A53–A56 | A57–A58, A60, A62 | A63–A67 | A68–A72 | A73–A76 | A77–A80 |
+| Version | TDE | AE | CLE | Bkp | TLS | Certs | Keys | DMK | EKM | Compliance | TLS Harden | AE Adv | Key Ops | Ledger | Azure | DMK-PW | DDM | Compl+ | Ops | Crypto+ |
+|---------|-----|----|----|-----|-----|-------|------|-----|-----|-----------|-----------|--------|---------|--------|-------|--------|-----|--------|-----|---------|
+| SQL 2005 | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | — | A54–55 | — | — | A68–70 | — | — | A81,83–86 | — | A92–93,95–98 | A99–100,102–103 | A105–111 |
+| SQL 2008 | ✓ | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | A54–55 | A57–58,60,62 | — | A68–70 | — | — | A81,83–86 | — | A92–93,95–98 | A99–100,102–103 | A105–111 |
+| SQL 2012 | ✓ | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | A54–56 | A57–58,60,62 | — | A68–70 | — | — | A81–86 | — | A92–93,95–98 | A99–100,102–103 | A105–111 |
+| SQL 2014 | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A54–56 | A57–58,60,62 | — | A68–72 | — | — | A81–86 | — | A92–93,95–98 | A99–100,102–104 | A105–111 |
+| SQL 2016 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A54–56 | A57–58,60,62 | — | A68–72 | — | — | A81–86 | A87–91 | A92–93,95–98 | A99–100,102–104 | A105–111 |
+| SQL 2019 | ✓ | ✓+enc | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A53–56 | A57–58,60,62 | A63–67 | A68–72 | — | — | A81–86 | A87–91 | A92–93,95–98 | A99–100,102–104 | A105–111 |
+| SQL 2022 | ✓ | ✓+enc | ✓ | ✓ | ✓+1.3 | ✓ | ✓ | ✓ | ✓ | A53–56 | A57–62 | A63–67 | A68–72 | A73–76 | — | A81–86 | A87–91 | A92–98 | A99–100,102–104 | A105–111 |
+| Azure SQL | ✓ | ✓+enc | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | A50–51 | A53–56 | A57–58,60,62 | A63–67 | A68–72 | A73–76 | A77–80 | A81–86 | A87–91 | A92–98,A101 | A99–100,102–104 | A105–111,A112 |

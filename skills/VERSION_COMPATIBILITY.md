@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 637 checks in this library apply to your SQL Server version.
+Which of the 669 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -48,23 +48,23 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqlwait-review` on Azure SQL DB/MI: many wait types differ or are not exposed. Core I/O, lock, and parallelism checks still apply.
 - `sqltrace-review` on Azure: Extended Events are available but some event classes (XE trace capture mechanics) differ from on-premises.
 - `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Azure AD–only auth; K32–K33 are Azure-specific.
-- `sqlencryption-review` on SQL 2008 R2–2013: A9–A16 (Always Encrypted, SQL 2016+) not applicable; A22–A25 (Backup Encryption, SQL 2014+) and A72 (log backup encryption, SQL 2014+) not applicable on SQL 2012 and earlier. On SQL 2016: A9–A16 applicable; A10/A12 (secure enclave, SQL 2019+) skipped; A63–A67 (Always Encrypted Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76 (TLS 1.3, Ledger, SQL 2022+) skipped. Azure SQL DB/MI: A50 (AKV rotation), A51 (service-managed TDE), and A77–A80 (Azure SQL-only checks) are Azure-specific; A53 (`sys.sensitivity_classifications`, SQL 2019+/Azure) partially applicable.
+- `sqlencryption-review` on SQL 2008 R2: A9–A16 (AE, SQL 2016+), A22–A25 (backup enc, SQL 2014+), A82 (SSISDB, SQL 2012+), A87/A88 (DDM, SQL 2016+) not applicable. On SQL 2012: A82 applicable, A87/A88 still skipped. On SQL 2016: A9–A16, A87/A88 applicable; A10/A12 (enclave), A63–A67 (AE Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76, A94 (TLS 1.3, Ledger, GDPR append-only, SQL 2022+) skipped. Azure SQL DB/MI: A50, A51, A77–A80, A101, A112 are Azure-specific; A53 (`sys.sensitivity_classifications`) available SQL 2019+/Azure.
 
 ---
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 637 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 669 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **594** | 10 Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **565** | −29 SQL 2022-only checks unavailable (includes A59, A73–A76) |
-| SQL Server 2017 | **543** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **530** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **498** | −32 more: all Query Store base checks unavailable; plus A9/A11/A13–A16 (Always Encrypted, SQL 2016+) unavailable |
-| SQL Server 2012 | **492** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, and R21 unavailable |
-| SQL Server 2008 R2 | **433** | −59 more: all 57 Always On AG/WSFC checks unavailable; I16 and X23 (Columnstore) unavailable |
+| SQL Server 2022 | **625** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **595** | −30 SQL 2022-only checks unavailable (includes A59, A73–A76, A94) |
+| SQL Server 2017 | **573** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **560** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **526** | −34 more: all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+) unavailable |
+| SQL Server 2012 | **520** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **460** | −60 more: all 57 Always On AG/WSFC checks unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -87,6 +87,8 @@ These checks require features introduced in SQL Server 2012.
 | L30 | `sqlclusterlog-review` | sp_server_diagnostics Component Warning | `sp_server_diagnostics` (SQL 2012+) |
 
 **Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
+
+| A82 | `sqlencryption-review` | SSISDB DMK Password Not Registered | SSISDB catalog (SQL Server Integration Services, SQL 2012+) |
 
 ### SQL Server 2014+
 
@@ -112,6 +114,8 @@ These checks require features introduced in SQL Server 2012.
 **Entire skill at SQL 2016+:** `sqlquerystore-review` (Q1–Q32). Query Store was introduced in SQL 2016. On SQL 2016 only Q1–Q18 and Q23–Q25 are fully active; the remaining checks require SQL 2017–2022 features (see below).
 
 | A9 | `sqlencryption-review` | Deterministic Encryption on Non-Searchable Columns | Always Encrypted (SQL 2016+) |
+| A87 | `sqlencryption-review` | Sensitive Column Masked but Not Encrypted | Dynamic Data Masking (SQL 2016+) |
+| A88 | `sqlencryption-review` | UNMASK Permission Granted to Broad Role | Dynamic Data Masking UNMASK permission (SQL 2016+) |
 | A11 | `sqlencryption-review` | Column Encryption Algorithm is not AEAD_AES_256_CBC_HMAC_SHA_256 | Always Encrypted (SQL 2016+) |
 | A13 | `sqlencryption-review` | Column Master Key Stored in Windows Certificate Store | Always Encrypted CMK (SQL 2016+) |
 | A14 | `sqlencryption-review` | Sensitive-Pattern Column Names Without Always Encrypted | Always Encrypted column check (SQL 2016+) |
@@ -194,6 +198,7 @@ These checks require features introduced in SQL Server 2012.
 | A74 | `sqlencryption-review` | Ledger Digest Storage Not Configured | Ledger tables (SQL 2022+) |
 | A75 | `sqlencryption-review` | Ledger Database Without Automatic Digest Upload | Ledger tables (SQL 2022+) |
 | A76 | `sqlencryption-review` | Ledger Verification Incomplete or Overdue | Ledger verification (SQL 2022+) |
+| A94 | `sqlencryption-review` | GDPR Art. 17: PII in Append-Only Ledger Without Crypto-Shredding Strategy | `sys.tables.ledger_type = 2` append-only ledger (SQL 2022+) |
 
 ### Windows Server Version-Gated Checks
 
@@ -216,6 +221,8 @@ These checks only fire on Azure SQL Database or Azure SQL Managed Instance. They
 | K33 | `sqlspn-review` | Azure SQL MI SPN for On-Premises Clients | Azure SQL Managed Instance only |
 | A50 | `sqlencryption-review` | Azure Key Vault BYOK TDE Without Automatic Key Rotation | Azure SQL / SQL on Azure VM with AKV TDE protector |
 | A51 | `sqlencryption-review` | TDE Using Service-Managed Key in Compliance-Sensitive Azure SQL Environment | Azure SQL service-managed TDE (`encryptor_type = SERVICE_MANAGED`) |
+| A101 | `sqlencryption-review` | Azure Key Vault Soft-Delete or Purge Protection Not Enabled | Azure SQL using AKV BYOK TDE or AE CMK |
+| A112 | `sqlencryption-review` | Azure SQL Managed Instance: Managed Identity Missing AKV Permissions for CMK | Azure SQL Managed Instance BYOK TDE only |
 
 ### Arc-Conditional Checks (On-Premises or Cloud with Azure Arc Agent)
 
@@ -247,7 +254,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**433 of 637 checks (68.0%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**460 of 669 checks (68.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 

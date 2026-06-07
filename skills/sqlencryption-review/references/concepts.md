@@ -1,6 +1,6 @@
-# SQL Server Encryption — Concepts Reference (17 Topics)
+# SQL Server Encryption — Concepts Reference (19 Topics)
 
-This document provides background knowledge for the `sqlencryption-review` skill across 17 topics — from symmetric vs. asymmetric encryption, key hierarchy, and algorithm selection through TDE, Always Encrypted, TLS, backup encryption, and compliance frameworks (PCI-DSS, HIPAA, GDPR, SOX, FedRAMP, ISO 27001) to TDE performance monitoring, disaster recovery, TLS cipher suites, AE performance, SQL Server Ledger, and additional compliance frameworks. Load it when a user asks "what is TDE?", "explain the difference between AE and CLE", "what TLS version should I use?", "what does GDPR require for encryption?", or any conceptual question about SQL Server cryptography.
+This document provides background knowledge for the `sqlencryption-review` skill across 19 topics — from symmetric vs. asymmetric encryption, key hierarchy, and algorithm selection through TDE, Always Encrypted, TLS, backup encryption, and compliance frameworks (PCI-DSS, HIPAA, GDPR, SOX, FedRAMP, ISO 27001) to TDE performance monitoring, disaster recovery, TLS cipher suites, AE performance, SQL Server Ledger, and additional compliance frameworks. Load it when a user asks "what is TDE?", "explain the difference between AE and CLE", "what TLS version should I use?", "what does GDPR require for encryption?", or any conceptual question about SQL Server cryptography.
 
 ---
 
@@ -1085,3 +1085,122 @@ ISO 27001 is an international standard for information security management syste
 | A.12.4.1 — Event logging | SQL Server Audit | Audit on `SCHEMA_OBJECT_ACCESS_GROUP` for key/cert operations |
 | A.13.2.1 — Information transfer | TLS | `ForceEncryption = Yes`, TLS 1.2+ cipher suites |
 | A.13.2.3 — Electronic messaging | TLS + cert validation | Remove `TrustServerCertificate=True`; deploy CA-issued certificates |
+
+
+---
+
+## 18. DMK Password Auto-Open: sp_control_dbmasterkey_password
+
+### The Two DMK Protection Models
+
+A Database Master Key (DMK) must be decryptable before SQL Server can access any encrypted objects (certificates, symmetric keys, asymmetric keys) in that database. Two mechanisms provide automatic decryption:
+
+**Model 1 — SMK protection (default, recommended)**
+The DMK is encrypted by the Service Master Key: `ALTER MASTER KEY ADD ENCRYPTION BY SERVICE MASTER KEY`. At startup, SQL Server automatically decrypts the DMK using the SMK. Check: `SELECT is_master_key_encrypted_by_server FROM sys.databases` = 1.
+
+**Model 2 — Registered password via sp_control_dbmasterkey_password**
+Used when the DMK deliberately lacks SMK protection. `sp_control_dbmasterkey_password` stores the DMK password as a SQL Server credential in `sys.credentials` (encrypted by the SMK), linked to the database via `sys.master_key_passwords`. At startup, SQL Server:
+1. Checks `is_master_key_encrypted_by_server` → 0 (cannot use SMK)
+2. Looks up the database's `family_guid` in `sys.master_key_passwords`
+3. Retrieves the linked credential from `sys.credentials` (decrypts it with the current SMK)
+4. Uses the password to open the DMK
+
+### sys.master_key_passwords Internals
+
+| Column | Type | Meaning |
+|--------|------|---------|
+| `family_guid` | uniqueidentifier | **Stable database identity** — set at DB creation; persists across RESTORE, ATTACH, RENAME, and `ALTER MASTER KEY REGENERATE`; does NOT change with `CREATE MASTER KEY` after dropping the old one |
+| `credential_id` | int | FK → `sys.credentials.credential_id`; the credential name follows the pattern `##DBMKEY_<family_guid>_<random_guid>##` |
+
+### What Invalidates Registrations
+
+- **DOES invalidate:** `RESTORE SERVICE MASTER KEY FROM FILE` using a backup from a DIFFERENT server instance. The stored credentials were encrypted with the source instance's SMK; the restored (foreign) SMK cannot decrypt them. Must re-run `sp_control_dbmasterkey_password @action = 'drop'` then `@action = 'add'` for each database.
+- **Does NOT invalidate:** `ALTER SERVICE MASTER KEY REGENERATE` on the SAME instance — SQL Server re-encrypts all credentials with the new SMK automatically.
+- **Does NOT invalidate:** `ALTER MASTER KEY REGENERATE` (database DMK regeneration) — `family_guid` stays the same.
+
+### When sp_control_dbmasterkey_password Is Required
+
+| Scenario | Why |
+|----------|-----|
+| SSISDB | SSISDB creates its DMK without SMK protection by design; the catalog creation password must be registered on every SQL Server instance hosting SSISDB |
+| Database restored to new server | `sys.master_key_passwords` is instance-local; not transferred in RESTORE |
+| AG secondaries | Seeding does not propagate `sys.master_key_passwords`; each replica needs independent registration |
+| Deliberate SMK isolation | Security design where SA cannot auto-open the DMK; password registered separately |
+| After cross-instance SMK restore | Foreign SMK invalidates existing credential registrations |
+| Read-only databases | Must register BEFORE making database read-only (SQL Server cannot re-encrypt DMK in read-only mode) |
+
+### Quick Reference
+
+```sql
+-- List all registered databases and their credential status
+SELECT d.name, d.is_master_key_encrypted_by_server,
+       c.name AS credential_name, c.create_date
+FROM sys.databases d
+LEFT JOIN master.sys.master_key_passwords mkp ON mkp.family_guid = d.family_guid
+LEFT JOIN master.sys.credentials c ON mkp.credential_id = c.credential_id
+WHERE d.database_id > 4;
+
+-- Register a password
+EXEC sp_control_dbmasterkey_password @db_name = N'SSISDB', @password = N'[password]', @action = N'add';
+
+-- Remove a registration
+EXEC sp_control_dbmasterkey_password @db_name = N'OldDB', @password = N'ignored', @action = N'drop';
+```
+
+See `howto-dmk-password-management.md` for full step-by-step scenarios.
+
+---
+
+## 19. Passphrase-Based Encryption and HASHBYTES Algorithm Selection
+
+### ENCRYPTBYPASSPHRASE: PBKDF1 Weakness
+
+`ENCRYPTBYPASSPHRASE(passphrase, plaintext)` derives an encryption key from the passphrase using PBKDF1 (Password-Based Key Derivation Function 1). PBKDF1 applies SHA-1 (or MD5) exactly once with no iteration count and no memory hardness — making it GPU-acceleratable for brute force. Modern password-hashing schemes (bcrypt, Argon2) use thousands to millions of iterations with memory cost, making GPU attacks impractical.
+
+**PBKDF1 vs modern alternatives:**
+
+| Scheme | Iterations | Memory cost | GPU attack resistance | SQL Server support |
+|--------|-----------|-------------|----------------------|-------------------|
+| PBKDF1 (ENCRYPTBYPASSPHRASE) | 1 | None | None | Yes — but avoid for secrets |
+| PBKDF2 | Configurable (10,000+) | None | Low | .NET `Rfc2898DeriveBytes` in app |
+| bcrypt | 2^cost factor | None | Medium | Application layer only |
+| Argon2id | Configurable | Configurable | High | Application layer only |
+
+**Migration path:** Replace `ENCRYPTBYPASSPHRASE` with AES_256 symmetric key protected by a certificate. Use `ENCRYPTBYKEY`/`DECRYPTBYKEY` instead.
+
+### HASHBYTES Algorithm Reference
+
+| Algorithm | SQL Server name | Status | Bit length | Use for |
+|-----------|----------------|--------|-----------|---------|
+| MD2 | `'MD2'` | Broken (1995) | 128 | Nothing — remove immediately |
+| MD4 | `'MD4'` | Broken (1995) | 128 | Nothing — remove immediately |
+| MD5 | `'MD5'` | Broken (2004) | 128 | Nothing security-sensitive |
+| SHA-1 | `'SHA'` or `'SHA1'` | Deprecated (NIST 2030) | 160 | Non-security checksums only |
+| SHA-256 | `'SHA2_256'` | Current | 256 | Data integrity, fingerprints |
+| SHA-512 | `'SHA2_512'` | Current | 512 | Data integrity (larger output) |
+
+**Key rule:** SQL Server `HASHBYTES` is intentionally FAST — it is a cryptographic hash function, not a password-hashing scheme. Do NOT use `HASHBYTES` for storing user passwords. Use application-layer bcrypt/Argon2.
+
+**Safe use cases for HASHBYTES:**
+- Row change detection (data fingerprinting)
+- Deduplication of large text/binary values
+- Generating deterministic lookup keys from composite fields
+- Checksum for data integrity verification (SHA2_256 only)
+
+**Unsafe uses (regardless of algorithm):**
+- Storing user password hashes
+- Authentication tokens or HMAC without a secret key
+- Digital signatures (use certificates/asymmetric keys instead)
+
+### Dynamic Data Masking vs Encryption: Mental Model
+
+Dynamic Data Masking is a **presentation layer** control. It changes what you SEE, not what is STORED. Think of it as a column-level filter in query results:
+
+- The data at rest is unchanged (no encryption)
+- Any user with `UNMASK` permission sees the real data
+- Privileged users (sysadmin) always see the real data
+- Inference attacks work: `WHERE masked_col BETWEEN x AND y` returns accurate row counts
+
+Encryption is a **data protection** control. The data at rest is transformed — even a storage-level attacker or privileged SQL user sees only ciphertext (for Always Encrypted) or cannot read without the key (for CLE).
+
+**Combined use:** DDM + AE together is meaningful — application users see masked display values (DDM masks the ciphertext placeholder or companion display column), while sysadmins see only encrypted ciphertext (AE) even if UNMASK is granted. This is the strongest SQL Server column protection pattern.

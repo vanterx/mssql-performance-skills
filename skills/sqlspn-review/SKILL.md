@@ -84,9 +84,9 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 - **Severity:** Critical
 - **Fix:** `setspn -S MSSQLSvc/<host>:1433 DOMAIN\sqlsvc` and `setspn -S MSSQLSvc/<host.domain.com>:1433 DOMAIN\sqlsvc`
 ### K2 — Missing Named-Instance SPN
-- **Trigger:** Named SQL instance present but no `MSSQLSvc/<host>:<port>` SPN exists for the instance's TCP port
+- **Trigger:** Named SQL instance present but no `MSSQLSvc/<host>:<port>` SPN exists for the instance's TCP port AND no `MSSQLSvc/<host>:<instancename>` SPN exists for named-pipe / shared-memory connections. Both forms are valid per Microsoft documentation and both should be registered.
 - **Severity:** Critical
-- **Fix:** `setspn -S MSSQLSvc/<host>:<port> DOMAIN\sqlsvc` using the actual dynamic port from SQL Server Configuration Manager
+- **Fix:** Register both SPN forms: `setspn -S MSSQLSvc/<host>:<port> DOMAIN\sqlsvc` (using the actual TCP port from SQL Server Configuration Manager) AND `setspn -S MSSQLSvc/<host>:<instancename> DOMAIN\sqlsvc` (using the instance name, e.g. `SQLNODE1\INST1`). Clients connecting via TCP use the port-based form; clients using named pipes or shared memory use the instance-name form.
 ### K3 — Missing FQDN SPN
 - **Trigger:** Short-hostname SPN exists (`MSSQLSvc/SQLNODE1:1433`) but no fully-qualified SPN (`MSSQLSvc/SQLNODE1.domain.com:1433`)
 - **Severity:** Warning
@@ -202,7 +202,7 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 ### K26 — Connecting User Delegation-Sensitive
 - **Trigger:** `AccountNotDelegated = True` is set on the end-user AD account that needs to authenticate through a delegating SQL Server
 - **Severity:** Critical
-- **Fix:** Remove `AccountNotDelegated` flag if delegation is intentional for this user (`Set-ADUser <user> -AccountNotDelegated 0`); alternatively, use RBCD (K24) which does not require the user's ticket to be forwardable
+- **Fix:** Remove `AccountNotDelegated` flag if delegation is intentional for this user (`Set-ADUser <user> -AccountNotDelegated 0`). Note: RBCD (K24) uses S4U2Proxy which has different ticket requirements than classic KCD, but if the user is also a member of Protected Users (K27), neither KCD nor RBCD will work — Protected Users membership blocks ALL delegation regardless of type.
 ### K27 — User in Protected Users Group
 - **Trigger:** The end-user whose credentials need to be delegated is a member of the Protected Users security group — see Thresholds Reference
 - **Severity:** Critical

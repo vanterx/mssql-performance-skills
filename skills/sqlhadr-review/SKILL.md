@@ -327,7 +327,7 @@ These checks surface AG topology gaps that may not cause immediate problems but 
 - **Fix:** Investigate why the contained system database is not synchronized: `SELECT * FROM sys.dm_hadr_database_replica_states WHERE database_id = DB_ID('master')`. Resolve blocking transactions and confirm redo queue size. Review `sys.availability_groups` for `contained_system_databases` column to confirm the configuration is intentional.
 
 ### H24 — Cloud Witness Inaccessible
-- **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != QUORUM_IN_PROGRESS_NORMAL` — Windows Server 2016+ (Cloud Witness requires WS2016 or later)
+- **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != 'NORMAL_QUORUM'` — Windows Server 2016+ (Cloud Witness requires WS2016 or later); valid `quorum_state_desc` values are `UNKNOWN_QUORUM_STATE`, `NORMAL_QUORUM`, `FORCED_QUORUM`
 - **Severity:** Critical — The Cloud Witness quorum resource is unreachable; the cluster is operating without a functioning quorum witness and is at risk of split-brain or total quorum loss
 - **Fix:** Verify connectivity to the Azure Blob Storage endpoint used as the Cloud Witness: `Test-NetConnection -ComputerName <storageaccount>.blob.core.windows.net -Port 443`. Check the Storage Account access key has not been rotated. Validate the Failover Cluster Manager shows the Cloud Witness online. If the witness is permanently unavailable, switch to a File Share Witness or another Cloud Witness account.
 

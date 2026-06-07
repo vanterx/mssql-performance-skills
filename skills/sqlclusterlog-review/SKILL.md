@@ -65,9 +65,9 @@ Key components:
 | Failover cycling | ≥3 group moves in 30 min → Critical; ≥2 → Warning | L5 |
 | Log time gap | >30 min → Critical; >5 min → Warning | L8 |
 | Pending state duration | >120 sec → Critical; >30 sec → Warning | L12 |
-| Lease timeout | 20 sec (SQL Server default HealthCheckTimeout for lease) | L1 |
-| Health check timeout | 30 sec (SQL Server default HealthCheckTimeout) | L2 |
-| Heartbeat timeout | 3 missed heartbeats (WSFC CrossSubnetDelay × CrossSubnetThreshold) | L20 |
+| Lease timeout | 20 sec (SQL Server default LeaseTimeout — distinct from HealthCheckTimeout) | L1 |
+| Health check timeout | 30 sec (SQL Server default HealthCheckTimeout for sp_server_diagnostics) | L2 |
+| Heartbeat timeout | 5 missed heartbeats (WSFC default SameSubnetThreshold and CrossSubnetThreshold both default to 5) | L20 |
 
 ---
 

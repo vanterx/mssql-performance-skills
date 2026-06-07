@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Analyze multiple `.sqlplan` files in bulk — applying the full 87-check ruleset (S1–S27, N1–N60) from `sqlplan-review` to each plan — and produce a single aggregated dashboard that identifies the most expensive queries, most common violations, and consolidated missing index recommendations.
+Analyze multiple `.sqlplan` files in bulk — applying the full 108-check ruleset (S1–S36, N1–N72) from `sqlplan-review` to each plan — and produce a single aggregated dashboard that identifies the most expensive queries, most common violations, and consolidated missing index recommendations.
 
 ## Input
 
@@ -116,7 +116,7 @@ Write `batch-analysis.md` with the following structure:
 # Batch Execution Plan Analysis
 **Plans analyzed:** N  
 **Generated:** [timestamp]  
-**Checks applied:** 80 (S1–S27, N1–N60)
+**Checks applied:** 108 (S1–S36, N1–N72)
 
 ---
 
@@ -286,7 +286,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 ## Companion Skills
 
-- **sqlplan-review** — Deep-dive analysis on any individual plan from the batch. Apply the full 99-check ruleset to the highest-cost or most-critical plan.
+- **sqlplan-review** — Deep-dive analysis on any individual plan from the batch. Apply the full 108-check ruleset (S1–S36, N1–N72) to the highest-cost or most-critical plan.
 - **sqlindex-advisor** — Generate a deployment-ready `CREATE INDEX` script from the consolidated missing index recommendations in the batch report.
 - **sqlplan-compare** — Diff the worst-performing plan against a known-good baseline to explain why a specific query regressed.
 - **sqldeadlock-review** — If deadlock graphs were captured alongside the `.sqlplan` files, analyze them with this companion skill.
