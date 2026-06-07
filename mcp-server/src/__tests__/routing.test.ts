@@ -33,7 +33,7 @@ function makeSkills(names: readonly string[], withRefs = false): SkillMeta[] {
     content: `# ${name}`,
     references: withRefs
       ? { "check-explanations.md": `# ${name} check explanations`, "README.md": `# ${name} readme` }
-      : {},
+      : ({} as Record<string, string>),
   }));
 }
 
