@@ -3,9 +3,11 @@ import { z } from "zod";
 import type { SkillMeta } from "./skill-loader.js";
 import { buildAnalysisPrompt } from "./prompt-builder.js";
 
-const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
+export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   tsql:        ["tsql-review"],
   sqlplan:     ["sqlplan-review", "sqlindex-advisor"],
+  plancompare: ["sqlplan-compare"],
+  planbatch:   ["sqlplan-batch"],
   deadlock:    ["sqldeadlock-review"],
   waits:       ["sqlwait-review"],
   trace:       ["sqltrace-review"],
@@ -16,6 +18,9 @@ const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   clusterlog:  ["sqlclusterlog-review"],
   errorlog:    ["sqlerrorlog-review"],
   spn:         ["sqlspn-review"],
+  memory:      ["sqlmemory-review"],
+  diskio:      ["sqldiskio-review"],
+  encryption:  ["sqlencryption-review"],
   mixed:       ["mssql-performance-review"],
 };
 
@@ -24,7 +29,7 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
 
   server.tool(
     "list_skills",
-    "List all 16 available SQL Server performance tuning skills with their check counts and triggers",
+    `List all ${skills.length} available SQL Server performance tuning skills with their check counts and triggers`,
     {},
     async () => ({
       content: [
@@ -68,11 +73,18 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
     {
       artifact_type: z
         .enum([
-          "tsql", "sqlplan", "deadlock", "waits", "trace",
-          "stats", "querystore", "procstats", "hadr", "clusterlog", "errorlog", "spn",
-          "mixed",
+          "tsql", "sqlplan", "plancompare", "planbatch",
+          "deadlock", "waits", "trace", "stats", "querystore",
+          "procstats", "hadr", "clusterlog", "errorlog", "spn",
+          "memory", "diskio", "encryption", "mixed",
         ])
-        .describe("Type of artifact to analyze. Use 'mixed' when the artifact combines multiple types or the type is unknown — routes to the mssql-performance-review orchestrator."),
+        .describe(
+          "Type of artifact to analyze. " +
+          "plancompare = two plans for regression diff; planbatch = folder of many plans; " +
+          "memory = sys.dm_os_memory_clerks/PLE output; diskio = sys.dm_io_virtual_file_stats output; " +
+          "encryption = TDE/AE/CLE/TLS audit output. " +
+          "Use 'mixed' when the artifact combines multiple types or the type is unknown — routes to the mssql-performance-review orchestrator."
+        ),
     },
     async ({ artifact_type }) => {
       const skillNames = ARTIFACT_SKILL_MAP[artifact_type] ?? [];

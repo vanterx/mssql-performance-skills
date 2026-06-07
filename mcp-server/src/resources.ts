@@ -10,7 +10,7 @@ export function registerResources(
   server.resource(
     "skills-index",
     "mssql://skills",
-    { mimeType: "application/json", description: "Index of all 16 skills with metadata" },
+    { mimeType: "application/json", description: `Index of all ${skills.length} skills with metadata` },
     async () => ({
       contents: [
         {
