@@ -3,6 +3,7 @@
 // Run before deploying: npm run bundle
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
+import { parseFrontmatter } from "./frontmatter-parser.js";
 
 interface SkillMeta {
   name: string;
@@ -10,39 +11,6 @@ interface SkillMeta {
   triggers: string[];
   checkCount: number;
   content: string;
-}
-
-function parseFrontmatter(raw: string): { meta: Record<string, unknown>; content: string } {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-  if (!match) return { meta: {}, content: raw };
-
-  const yamlBlock = match[1];
-  const content = match[2];
-  const meta: Record<string, unknown> = {};
-  const lines = yamlBlock.split(/\r?\n/);
-  let currentKey = "";
-  let inList = false;
-
-  for (const line of lines) {
-    const listItem = line.match(/^\s{2,}-\s+(.+)$/);
-    const keyValue = line.match(/^(\w[\w-]*):\s*(.*)$/);
-
-    if (listItem && inList) {
-      (meta[currentKey] as string[]).push(listItem[1].trim());
-    } else if (keyValue) {
-      currentKey = keyValue[1];
-      const val = keyValue[2].trim();
-      if (val === "") {
-        meta[currentKey] = [];
-        inList = true;
-      } else {
-        meta[currentKey] = val;
-        inList = false;
-      }
-    }
-  }
-
-  return { meta, content };
 }
 
 const repoRoot = resolve(__dirname, "../..");
@@ -58,16 +26,30 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
   .map((e) => join(skillsDir, e.name, "SKILL.md"))
   .filter((p) => existsSync(p))
   .map((p) => {
+    const skillDir = p.replace(/[\\/]SKILL\.md$/, "");
     const raw = readFileSync(p, "utf-8");
     const { meta } = parseFrontmatter(raw);
     const description = (meta["description"] as string) ?? "";
-    const countMatch = description.match(/(\d+)\s+checks?/i);
+    const countMatch = description.match(/\b(\d+)(?:\s+\w+){0,3}\s+(?:checks?|patterns?)\b/i);
+
+    const references: Record<string, string> = {};
+    const refsDir = join(skillDir, "references");
+    if (existsSync(refsDir)) {
+      readdirSync(refsDir, { withFileTypes: true })
+        .filter((f) => f.isFile())
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((f) => {
+          references[f.name] = readFileSync(join(refsDir, f.name), "utf-8");
+        });
+    }
+
     return {
       name: (meta["name"] as string) ?? "",
       description,
       triggers: Array.isArray(meta["triggers"]) ? (meta["triggers"] as string[]) : [],
       checkCount: countMatch ? parseInt(countMatch[1], 10) : 0,
       content: raw,
+      references,
     };
   })
   .sort((a, b) => a.name.localeCompare(b.name));

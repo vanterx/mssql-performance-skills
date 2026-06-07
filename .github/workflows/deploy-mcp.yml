@@ -28,8 +28,19 @@ jobs:
         run: npm ci
         working-directory: mcp-server
 
+      - name: Verify documentation invariants
+        run: bash scripts/verify-docs.sh
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: mcp-server
+
       - name: Bundle skills
         run: npm run bundle
+        working-directory: mcp-server
+
+      - name: Run tests
+        run: npm test
         working-directory: mcp-server
 
       - name: Deploy to Cloudflare Workers
