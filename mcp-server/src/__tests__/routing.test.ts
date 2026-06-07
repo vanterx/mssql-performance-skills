@@ -24,13 +24,16 @@ const ALL_SKILL_NAMES = [
   "tsql-review",
 ] as const;
 
-function makeSkills(names: readonly string[]): SkillMeta[] {
+function makeSkills(names: readonly string[], withRefs = false): SkillMeta[] {
   return names.map((name) => ({
     name,
     description: `${name} description`,
     triggers: [`/${name}`],
     checkCount: 10,
     content: `# ${name}`,
+    references: withRefs
+      ? { "check-explanations.md": `# ${name} check explanations`, "README.md": `# ${name} readme` }
+      : {},
   }));
 }
 
@@ -98,7 +101,7 @@ describe("ARTIFACT_SKILL_MAP", () => {
 
 describe("registerTools — list_skills", () => {
   it("registers list_skills tool and returns all skills as JSON", async () => {
-    const skills = makeSkills(ALL_SKILL_NAMES);
+    const skills = makeSkills(ALL_SKILL_NAMES, true);
     const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
 
     const mockServer = {
@@ -117,6 +120,24 @@ describe("registerTools — list_skills", () => {
 
     expect(parsed).toHaveLength(ALL_SKILL_NAMES.length);
     expect(parsed.map((s: { name: string }) => s.name).sort()).toEqual([...ALL_SKILL_NAMES].sort());
+  });
+
+  it("list_skills includes referenceFiles array for each skill", async () => {
+    const skills = makeSkills(["tsql-review"], true);
+    const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+
+    const mockServer = {
+      tool: vi.fn((name: string, _d: unknown, _s: unknown, handler: (args: Record<string, unknown>) => Promise<unknown>) => {
+        handlers.set(name, handler);
+      }),
+    };
+
+    registerTools(mockServer as never, skills);
+
+    const result = await handlers.get("list_skills")!({}) as { content: Array<{ text: string }> };
+    const parsed = JSON.parse(result.content[0].text) as Array<{ referenceFiles: string[] }>;
+    expect(parsed[0].referenceFiles).toContain("check-explanations.md");
+    expect(parsed[0].referenceFiles).toContain("README.md");
   });
 
   it("list_skills description includes the real skill count", () => {
@@ -149,7 +170,25 @@ describe("registerTools — get_skill", () => {
 
     const handler = handlers.get("get_skill");
     const result = await handler!({ name: "tsql-review" }) as { content: Array<{ text: string }> };
-    expect(result.content[0].text).toBe("# tsql-review");
+    expect(result.content[0].text).toContain("# tsql-review");
+  });
+
+  it("appends reference file list when skill has references", async () => {
+    const skills = makeSkills(["tsql-review"], true);
+    const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+
+    const mockServer = {
+      tool: vi.fn((name: string, _d: unknown, _s: unknown, handler: (args: Record<string, unknown>) => Promise<unknown>) => {
+        handlers.set(name, handler);
+      }),
+    };
+
+    registerTools(mockServer as never, skills);
+
+    const result = await handlers.get("get_skill")!({ name: "tsql-review" }) as { content: Array<{ text: string }> };
+    const text = result.content[0].text;
+    expect(text).toContain("check-explanations.md");
+    expect(text).toContain("get_reference");
   });
 
   it("returns an error response for an unknown skill", async () => {
@@ -168,6 +207,56 @@ describe("registerTools — get_skill", () => {
     const result = await handler!({ name: "nonexistent-skill" }) as { isError: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("not found");
+  });
+});
+
+describe("registerTools — get_reference", () => {
+  function makeServer() {
+    const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+    const mockServer = {
+      tool: vi.fn((name: string, _d: unknown, _s: unknown, handler: (args: Record<string, unknown>) => Promise<unknown>) => {
+        handlers.set(name, handler);
+      }),
+    };
+    return { handlers, mockServer };
+  }
+
+  it("returns reference content for a known skill and filename", async () => {
+    const skills = makeSkills(["tsql-review"], true);
+    const { handlers, mockServer } = makeServer();
+    registerTools(mockServer as never, skills);
+
+    const result = await handlers.get("get_reference")!({ skill: "tsql-review", reference: "check-explanations.md" }) as { content: Array<{ text: string }> };
+    expect(result.content[0].text).toContain("tsql-review check explanations");
+  });
+
+  it("returns an error for an unknown skill", async () => {
+    const skills = makeSkills(["tsql-review"], true);
+    const { handlers, mockServer } = makeServer();
+    registerTools(mockServer as never, skills);
+
+    const result = await handlers.get("get_reference")!({ skill: "no-such-skill", reference: "check-explanations.md" }) as { isError: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not found");
+  });
+
+  it("returns an error for an unknown reference filename", async () => {
+    const skills = makeSkills(["tsql-review"], true);
+    const { handlers, mockServer } = makeServer();
+    registerTools(mockServer as never, skills);
+
+    const result = await handlers.get("get_reference")!({ skill: "tsql-review", reference: "no-such-file.md" }) as { isError: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not found");
+    expect(result.content[0].text).toContain("check-explanations.md");
+  });
+
+  it("is registered as a tool", () => {
+    const skills = makeSkills(ALL_SKILL_NAMES);
+    const registeredNames: string[] = [];
+    const mockServer = { tool: vi.fn((name: string) => { registeredNames.push(name); }) };
+    registerTools(mockServer as never, skills);
+    expect(registeredNames).toContain("get_reference");
   });
 });
 

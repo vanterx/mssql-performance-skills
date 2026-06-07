@@ -4,4 +4,5 @@ export interface SkillMeta {
   triggers: string[];
   checkCount: number;
   content: string;
+  references: Record<string, string>; // filename → full file content
 }

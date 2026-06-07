@@ -75,6 +75,26 @@ describe("SKILL.md bundle integrity", () => {
     }
   );
 
+  it.each(skillFiles)(
+    "$name — all reference files in references/ directory are present in the bundle",
+    ({ name, path: skillMdPath }) => {
+      const skillsDataPath = join(REPO_ROOT, "mcp-server/src/skills-data.ts");
+      if (!existsSync(skillsDataPath)) return;
+
+      const refsDir = join(skillMdPath.replace(/[\\/]SKILL\.md$/, ""), "references");
+      if (!existsSync(refsDir)) return;
+
+      const diskFiles = readdirSync(refsDir)
+        .filter((f) => f.endsWith(".md") || f.endsWith(".json") || f.endsWith(".ps1"));
+
+      const skillsData = readFileSync(skillsDataPath, "utf-8");
+
+      for (const filename of diskFiles) {
+        expect(skillsData, `${name}: reference file '${filename}' is on disk but not bundled`).toContain(filename);
+      }
+    }
+  );
+
   it("all skills bundled in skills-data.ts are present as skill directories", () => {
     const skillsDataPath = join(REPO_ROOT, "mcp-server/src/skills-data.ts");
     if (!existsSync(skillsDataPath)) return;

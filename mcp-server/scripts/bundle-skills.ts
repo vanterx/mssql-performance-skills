@@ -26,16 +26,30 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
   .map((e) => join(skillsDir, e.name, "SKILL.md"))
   .filter((p) => existsSync(p))
   .map((p) => {
+    const skillDir = p.replace(/[\\/]SKILL\.md$/, "");
     const raw = readFileSync(p, "utf-8");
     const { meta } = parseFrontmatter(raw);
     const description = (meta["description"] as string) ?? "";
-    const countMatch = description.match(/(\d+)\s+checks?/i);
+    const countMatch = description.match(/\b(\d+)(?:\s+\w+){0,3}\s+(?:checks?|patterns?)\b/i);
+
+    const references: Record<string, string> = {};
+    const refsDir = join(skillDir, "references");
+    if (existsSync(refsDir)) {
+      readdirSync(refsDir, { withFileTypes: true })
+        .filter((f) => f.isFile())
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((f) => {
+          references[f.name] = readFileSync(join(refsDir, f.name), "utf-8");
+        });
+    }
+
     return {
       name: (meta["name"] as string) ?? "",
       description,
       triggers: Array.isArray(meta["triggers"]) ? (meta["triggers"] as string[]) : [],
       checkCount: countMatch ? parseInt(countMatch[1], 10) : 0,
       content: raw,
+      references,
     };
   })
   .sort((a, b) => a.name.localeCompare(b.name));

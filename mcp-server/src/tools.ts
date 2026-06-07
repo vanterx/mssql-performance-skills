@@ -36,11 +36,12 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
         {
           type: "text",
           text: JSON.stringify(
-            skills.map(({ name, description, triggers, checkCount }) => ({
+            skills.map(({ name, description, triggers, checkCount, references }) => ({
               name,
               description,
               triggers,
               checkCount,
+              referenceFiles: Object.keys(references),
             })),
             null,
             2
@@ -52,7 +53,7 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
 
   server.tool(
     "get_skill",
-    "Get the full content of a named skill (SKILL.md) including all checks, thresholds, and output format",
+    "Get the full content of a named skill (SKILL.md) including all checks, thresholds, and output format. Also lists available reference files (check explanations, how-to guides) that can be fetched with get_reference.",
     { name: z.string().describe("Skill name, e.g. tsql-review or sqlplan-review") },
     async ({ name }) => {
       const skill = byName.get(name);
@@ -63,7 +64,39 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
           isError: true,
         };
       }
-      return { content: [{ type: "text", text: skill.content }] };
+      const refNames = Object.keys(skill.references);
+      const refNote = refNames.length > 0
+        ? `\n\n---\n**Reference files available** (use get_reference to fetch):\n${refNames.map((f) => `- ${f}`).join("\n")}`
+        : "";
+      return { content: [{ type: "text", text: skill.content + refNote }] };
+    }
+  );
+
+  server.tool(
+    "get_reference",
+    "Get the content of a reference file for a skill — check explanations, how-to guides, concept docs, or error references. Use list_skills or get_skill to discover available reference filenames.",
+    {
+      skill: z.string().describe("Skill name, e.g. tsql-review"),
+      reference: z.string().describe("Reference filename, e.g. check-explanations.md or howto-tde-setup.md"),
+    },
+    async ({ skill: skillName, reference }) => {
+      const skill = byName.get(skillName);
+      if (!skill) {
+        const available = skills.map((s) => s.name).join(", ");
+        return {
+          content: [{ type: "text", text: `Skill '${skillName}' not found. Available: ${available}` }],
+          isError: true,
+        };
+      }
+      const content = skill.references[reference];
+      if (content === undefined) {
+        const available = Object.keys(skill.references).join(", ") || "(none)";
+        return {
+          content: [{ type: "text", text: `Reference '${reference}' not found for skill '${skillName}'. Available: ${available}` }],
+          isError: true,
+        };
+      }
+      return { content: [{ type: "text", text: content }] };
     }
   );
 
