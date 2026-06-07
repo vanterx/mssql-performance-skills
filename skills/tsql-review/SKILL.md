@@ -25,7 +25,7 @@ If the user provides a file path, read the file and analyze its content. If the 
 
 ## How to Run
 
-Walk T1–T50 in category order. Report every triggered finding — do not stop at the first match. For checks where the SQL construct is absent, note them as passing in the Passed Checks section. For checks where schema or parameter type information is unknown, state your assumption explicitly rather than skipping the check.
+Walk T1–T85 in category order. Report every triggered finding — do not stop at the first match. For checks where the SQL construct is absent, note them as passing in the Passed Checks section. For checks where schema or parameter type information is unknown, state your assumption explicitly rather than skipping the check.
 
 ---
 
@@ -227,7 +227,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 ### T41 — RAISERROR Instead of THROW
 - **Trigger:** `RAISERROR` statement
 - **Severity:** Info
-- **Fix:** `RAISERROR` is not deprecated but `THROW` (SQL Server 2012+) is the modern replacement. `THROW` re-raises the original error number and severity, works more intuitively with `BEGIN CATCH`, and does not require format string syntax. Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new code. In CATCH blocks, use bare `THROW;` to re-raise the caught error with its original metadata.
+- **Fix:** `RAISERROR` is not deprecated but `THROW` (SQL Server 2012+) is the modern replacement. Two distinct forms: (1) Bare `THROW;` inside a CATCH block re-raises the caught exception with its original error number and severity — use this to propagate errors up the call stack. (2) `THROW error_number, message, state` raises a new exception; the severity is always 16 (the caller cannot change it). Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new application errors; in CATCH blocks, use bare `THROW;` instead of `RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState)`.
 ### T42 — GETDATE() Where SYSDATETIME() Preferred
 - **Trigger:** `GETDATE()` function call in a context where higher precision or UTC time is appropriate
 - **Severity:** Info

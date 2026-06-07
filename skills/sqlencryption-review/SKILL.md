@@ -113,16 +113,22 @@ JOIN sys.column_master_keys cmk ON cekv.column_master_key_id = cmk.column_master
 
 -- 4. Symmetric and asymmetric keys
 SELECT
-    name,
-    symmetric_key_id                AS key_id,
-    'SYMMETRIC'                     AS key_type,
-    algorithm_desc,
-    CAST(key_length AS VARCHAR(10)) AS key_length,
-    create_date,
-    modify_date,
-    pvt_key_encryption_type_desc
-FROM sys.symmetric_keys
-WHERE name NOT LIKE '##%'
+    sk.name,
+    sk.symmetric_key_id                AS key_id,
+    'SYMMETRIC'                        AS key_type,
+    sk.algorithm_desc,
+    CAST(sk.key_length AS VARCHAR(10)) AS key_length,
+    sk.create_date,
+    sk.modify_date,
+    ke.crypt_type_desc                 AS key_protection_type
+FROM sys.symmetric_keys sk
+OUTER APPLY (
+    SELECT TOP 1 crypt_type_desc
+    FROM sys.key_encryptions
+    WHERE key_id = sk.symmetric_key_id
+    ORDER BY crypt_type
+) ke
+WHERE sk.name NOT LIKE '##%'
 UNION ALL
 SELECT
     name,
@@ -146,7 +152,7 @@ SELECT
     start_date,
     expiry_date,
     DATEDIFF(DAY, GETDATE(), expiry_date) AS days_until_expiry,
-    CERTPROPERTY(name, 'Algorithm')       AS sig_algorithm
+    NULL                                   AS sig_algorithm  -- CERTPROPERTY does not expose 'Algorithm'; verify via certutil or Get-ChildItem Cert:\ | Select SignatureAlgorithm
 FROM sys.certificates
 WHERE name NOT LIKE '##%'
 ORDER BY expiry_date;
@@ -259,8 +265,8 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** In master DB, create a certificate and Database Encryption Key, then `ALTER DATABASE [db] SET ENCRYPTION ON`. Note: tempdb will encrypt automatically.
 
 ### A2 — TDE encryption scan in progress
-- **Trigger:** `sys.dm_database_encryption_keys` WHERE `encryption_state IN (2, 4, 5)` AND `percent_complete < 100`
-- **Severity:** Info — the scan consumes additional I/O and CPU proportional to database size; on SQL 2019+ the scan can be suspended. State values: `2` = encrypting, `4` = key change in progress (certificate or asymmetric key being changed), `5` = decrypting
+- **Trigger:** `sys.dm_database_encryption_keys` WHERE `encryption_state IN (2, 4, 5, 6)` AND `percent_complete < 100`
+- **Severity:** Info — the scan consumes additional I/O and CPU proportional to database size; on SQL 2019+ the scan can be suspended. State values: `2` = encryption in progress, `4` = key change in progress (DEK algorithm or key being regenerated via `ALTER DATABASE ENCRYPTION KEY REGENERATE`), `5` = decryption in progress, `6` = protection change in progress (the certificate or asymmetric key encrypting the DEK is being replaced)
 - **Fix:** Monitor `percent_complete`; avoid heavy index rebuild or backup jobs during scan; on SQL 2019+, use `ALTER DATABASE [db] SET ENCRYPTION SUSPEND | RESUME` if I/O pressure is high
 
 ### A3 — TDE certificate not backed up
@@ -342,8 +348,8 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 ## Cell-Level Encryption — A17–A21
 
 ### A17 — Symmetric key using deprecated or broken algorithm
-- **Trigger:** `sys.symmetric_keys` WHERE `algorithm_desc IN ('DES', 'TRIPLE_DES', 'RC2', 'RC4', 'DESX', 'TRIPLE_DES_3KEY')` AND `name NOT LIKE '##%'`
-- **Severity:** Critical for RC4 and RC2 (cryptographically broken; trivially decryptable); Warning for DES/DESX (56-bit key, brute-forceable); Warning for TRIPLE_DES / TRIPLE_DES_3KEY (deprecated post-2023 per NIST SP 800-131A)
+- **Trigger:** `sys.symmetric_keys` WHERE `algorithm_desc IN ('DES', 'Triple_DES', 'RC2', 'RC4', 'DESX', 'TRIPLE_DES_3KEY')` AND `name NOT LIKE '##%'`
+- **Severity:** Critical for RC4 and RC2 (cryptographically broken; trivially decryptable); Warning for DES/DESX (56-bit key, brute-forceable); Warning for Triple_DES / TRIPLE_DES_3KEY (deprecated post-2023 per NIST SP 800-131A)
 - **Fix:** `CREATE SYMMETRIC KEY [key_new] WITH ALGORITHM = AES_256, KEY_SOURCE = '...', IDENTITY_VALUE = '...', ENCRYPTION BY CERTIFICATE [cert]`; re-encrypt all data with `ENCRYPTBYKEY(KEY_GUID('[key_new]'), plaintext)`; close and `DROP SYMMETRIC KEY [key_old]`
 
 ### A18 — OPEN SYMMETRIC KEY without matching CLOSE in the same scope
@@ -352,7 +358,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** Add `CLOSE SYMMETRIC KEY [key_name]` after every use; add a CATCH block that also closes the key on error; add `CLOSE ALL SYMMETRIC KEYS` as a session cleanup safeguard in session-level error handlers
 
 ### A19 — Symmetric key protected by password only
-- **Trigger:** `sys.key_encryptions` WHERE `crypt_type_desc = 'ENCRYPTION_BY_PASSWORD'` AND the same `key_id` does NOT also appear in a row with `crypt_type_desc IN ('ENCRYPTION_BY_CERT', 'ENCRYPTION_BY_ASYMMETRIC_KEY')`
+- **Trigger:** `sys.key_encryptions` WHERE `crypt_type_desc = 'ENCRYPTION BY PASSWORD'` AND the same `key_id` does NOT also appear in a row with `crypt_type_desc IN ('ENCRYPTION BY CERTIFICATE', 'ENCRYPTION BY ASYMMETRIC KEY')`
 - **Severity:** Warning — the password must be embedded in T-SQL scripts or agent jobs to open the key; passwords can appear in plan cache text, SQL Agent job step history, and memory dumps; certificate-based protection integrates cleanly with the key hierarchy and never requires a password at runtime
 - **Fix:** `ALTER SYMMETRIC KEY [key] ADD ENCRYPTION BY CERTIFICATE [cert]` — then test the OPEN statement without the password parameter — then `ALTER SYMMETRIC KEY [key] DROP ENCRYPTION BY PASSWORD = 'old_password'`
 
@@ -395,7 +401,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 ## Transport and Connection Encryption — A26–A30
 
 ### A26 — ForceEncryption not enabled at server level
-- **Trigger:** `sys.dm_server_registry` WHERE `registry_key LIKE N'%SuperSocketNetLib%'` AND `value_name = N'Encrypt'` AND `value_data = 0`; or no TLS certificate configured in SQL Server Configuration Manager
+- **Trigger:** `sys.dm_server_registry` WHERE `registry_key LIKE N'%SuperSocketNetLib%'` AND `value_name = N'ForceEncryption'` AND `value_data = 0`; or no TLS certificate configured in SQL Server Configuration Manager
 - **Severity:** Warning — without ForceEncryption, any client that connects with `Encrypt=False` (which was the default in drivers before ODBC 18 / JDBC 12 / .NET 7) establishes a plaintext session; credentials and query results travel in clear text over the network
 - **Fix:** SQL Server Configuration Manager → SQL Server Network Configuration → Protocols for [Instance] → Properties → Certificate tab (bind a CA-signed cert) → Flags tab → Force Encryption = Yes; restart the SQL Server service
 
@@ -444,7 +450,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** Remove the certificate login from elevated fixed server roles; grant only the specific permissions needed (e.g., `GRANT EXECUTE ON [schema].[proc] TO [cert_login]`); consider using `EXECUTE AS` within the signed procedure instead of elevating the cert login itself
 
 ### A35 — Certificate signed with MD5 or SHA1 signature hash
-- **Trigger:** `CERTPROPERTY(name, 'Algorithm')` returns `'MD5'` or `'SHA1'` for any certificate in `sys.certificates WHERE name NOT LIKE '##%'`
+- **Trigger:** Certificates in `sys.certificates WHERE name NOT LIKE '##%'` where the signature algorithm cannot be confirmed as SHA256 or stronger; verify via `certutil -dump <certfile>` (shows `Signature Algorithm`) or PowerShell `Get-ChildItem Cert:\ | Select-Object Subject, SignatureAlgorithm` — `CERTPROPERTY()` does not expose the signature algorithm and cannot be used for this check
 - **Severity:** Critical for MD5 (collision attacks demonstrated in practice since 2004; do not use for any purpose); Warning for SHA1 (deprecated by NIST and Microsoft since 2016; CABrowser Forum banned SHA1 cert issuance)
 - **Fix:** Re-issue all affected certificates using SHA256 or SHA384 signature algorithm; SQL Server's `CREATE CERTIFICATE` uses SHA1 by default on older instances — explicitly specify a stronger algorithm in newer versions or generate via OpenSSL/certreq with `SignatureAlgorithm = sha256RSA`
 
@@ -519,7 +525,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 ### A48 — Linked server connections not using TLS encryption
 - **Trigger:** `sys.servers` WHERE `is_linked = 1` AND server is on a different host (different from `@@SERVERNAME`) AND the provider string in `sys.linked_logins` or SSMS Linked Server properties does not include `Encrypt=yes` or `Use Encryption for Data=True`
 - **Severity:** Warning — distributed queries, OPENQUERY, and four-part name queries over linked servers traverse the network as plaintext if the connection is not encrypted; linked server credentials are also visible during session setup
-- **Fix:** Drop and re-create the linked server with encryption in the provider string: `EXEC sp_addlinkedserver @server = N'RemoteSrv', @srvproduct = N'SQL Server', @provider = N'SQLNCLI11', @provstr = N'Encrypt=yes;TrustServerCertificate=no'` — ensure the remote SQL Server has a valid CA-signed TLS cert
+- **Fix:** Drop and re-create the linked server with encryption in the provider string: `EXEC sp_addlinkedserver @server = N'RemoteSrv', @srvproduct = N'SQL Server', @provider = N'MSOLEDBSQL', @provstr = N'Encrypt=Mandatory;TrustServerCertificate=no'` — ensure the remote SQL Server has a valid CA-signed TLS cert; use `MSOLEDBSQL` (OLE DB Driver 19+) rather than the deprecated `SQLNCLI11` which is removed in SQL Server 2022
 
 ---
 
@@ -560,8 +566,8 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** Classify columns with `ADD SENSITIVITY CLASSIFICATION TO [schema].[table].[column] WITH (LABEL = '…', INFORMATION_TYPE = '…', RANK = HIGH)`; apply encryption (A14 fix paths); run a data discovery scan (SQL Data Discovery & Classification in SSMS) to confirm column contents
 
 ### A55 — Non-FIPS compliant algorithm detected anywhere in the encryption hierarchy
-- **Trigger:** Any of: `sys.dm_database_encryption_keys.key_algorithm` = TRIPLE_DES_3KEY; `sys.symmetric_keys.algorithm_desc` IN (DES, RC4, DESX, RC2, TRIPLE_DES); `CERTPROPERTY(name, 'Algorithm')` returns MD5 or SHA1; `msdb.dbo.backupset.key_algorithm` = TRIPLE_DES_3KEY; `sys.asymmetric_keys.key_length` ≤ 1024
-- **Severity:** Critical for RC4, RC2, and MD5 (cryptographically broken; not fixable with configuration; all data protected by these must be considered potentially exposed); Warning for SHA1, DES, DESX, TRIPLE_DES, RSA_1024 (deprecated; not immediately broken but must be replaced for compliance)
+- **Trigger:** Any of: `sys.dm_database_encryption_keys.key_algorithm` = TRIPLE_DES_3KEY; `sys.symmetric_keys.algorithm_desc` IN ('DES', 'RC4', 'DESX', 'RC2', 'Triple_DES'); certificate signature algorithm is MD5 or SHA1 (verify via certutil or PowerShell — `CERTPROPERTY()` does not expose signature algorithm); `msdb.dbo.backupset.key_algorithm` = TRIPLE_DES_3KEY; `sys.asymmetric_keys.key_length` ≤ 1024
+- **Severity:** Critical for RC4, RC2, and MD5 (cryptographically broken; not fixable with configuration; all data protected by these must be considered potentially exposed); Warning for SHA1, DES, DESX, Triple_DES, RSA_1024 (deprecated; not immediately broken but must be replaced for compliance)
 - **Fix:** Each algorithm type requires its corresponding fix: TDE DEK (A5), CLE symmetric keys (A17), certificate hash (A35), backup encryption (A24), asymmetric keys (A39); treat this check as an umbrella finding that points to the individual fixes
 
 ### A56 — No SQL Server Audit configured for cryptographic key access events

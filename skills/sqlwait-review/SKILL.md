@@ -339,7 +339,7 @@ ORDER BY io_stall_read_ms + io_stall_write_ms DESC;
 | PAGEIOLATCH — I/O pressure | ≥ 10% investigate; ≥ 40% critical |
 | LCK_M — lock wait | any presence; ≥ 20% critical |
 | CXPACKET alone (not CXCONSUMER) | ≥ 15% investigate; ≥ 40% critical |
-| CXCONSUMER (SQL 2016 SP2 CU3+) | generally benign — only investigate alongside very high CXPACKET |
+| CXCONSUMER (SQL 2016 SP2+ / SQL 2017 CU3+) | generally benign — only investigate alongside very high CXPACKET |
 | RESOURCE_SEMAPHORE — memory grant queue | any presence > 0 ms |
 | RESOURCE_SEMAPHORE — critical | ≥ 5% of total wait time |
 | WRITELOG — log I/O | ≥ 10% investigate |

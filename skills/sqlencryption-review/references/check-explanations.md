@@ -620,7 +620,7 @@ Cell-Level Encryption uses symmetric keys to encrypt individual cell values via 
 ```sql
 SELECT name, algorithm_desc, key_length, create_date
 FROM sys.symmetric_keys
-WHERE algorithm_desc IN ('DES', 'TRIPLE_DES', 'RC2', 'RC4', 'DESX', 'TRIPLE_DES_3KEY')
+WHERE algorithm_desc IN ('DES', 'Triple_DES', 'RC2', 'RC4', 'DESX', 'TRIPLE_DES_3KEY')
   AND name NOT LIKE '##%';
 ```
 
@@ -708,9 +708,9 @@ A symmetric key can be protected by a certificate, an asymmetric key, a password
 SELECT sk.name AS key_name, ke.crypt_type_desc
 FROM sys.key_encryptions ke
 JOIN sys.symmetric_keys sk ON ke.key_id = sk.symmetric_key_id
-WHERE ke.crypt_type_desc = 'ENCRYPTION_BY_PASSWORD'
+WHERE ke.crypt_type_desc = 'ENCRYPTION BY PASSWORD'
   AND sk.symmetric_key_id NOT IN (
-      SELECT key_id FROM sys.key_encryptions WHERE crypt_type_desc IN ('ENCRYPTION_BY_CERT', 'ENCRYPTION_BY_ASYMMETRIC_KEY')
+      SELECT key_id FROM sys.key_encryptions WHERE crypt_type_desc IN ('ENCRYPTION BY CERTIFICATE', 'ENCRYPTION BY ASYMMETRIC KEY')
   )
   AND sk.name NOT LIKE '##%';
 ```
@@ -893,7 +893,7 @@ Or check the registry (read-only DBA):
 SELECT value_name, value_data
 FROM sys.dm_server_registry
 WHERE registry_key LIKE N'%SuperSocketNetLib%'
-  AND value_name = N'Encrypt';
+  AND value_name = N'ForceEncryption';
 -- 0 = not forced; 1 = forced
 ```
 
@@ -1113,10 +1113,14 @@ The certificate's signature hash algorithm determines how tamper-evident it is. 
 
 **How to spot it**
 ```sql
-SELECT name, CERTPROPERTY(name, 'Algorithm') AS sig_algorithm, expiry_date
+-- CERTPROPERTY() does not expose the 'Algorithm' property — always returns NULL for that argument.
+-- Verify signature algorithm via certutil or PowerShell:
+--   certutil -dump <cert.cer>  (shows "Signature Algorithm")
+--   Get-ChildItem Cert:\ | Select-Object Subject, SignatureAlgorithm
+-- For SQL Server-generated certs, newer versions (2022+) default to SHA256; older default to SHA1.
+SELECT name, expiry_date, pvt_key_encryption_type_desc
 FROM sys.certificates
-WHERE name NOT LIKE '##%'
-  AND CERTPROPERTY(name, 'Algorithm') IN ('MD5', 'SHA1');
+WHERE name NOT LIKE '##%';
 ```
 
 **Fix options**
@@ -1411,8 +1415,8 @@ WHERE s.is_linked = 1;
    EXEC sp_addlinkedserver
        @server = N'RemoteSrv',
        @srvproduct = N'SQL Server',
-       @provider = N'SQLNCLI11',
-       @provstr = N'Encrypt=yes;TrustServerCertificate=no'
+       @provider = N'MSOLEDBSQL',     -- SQLNCLI11 is deprecated and removed in SQL Server 2022
+       @provstr = N'Encrypt=Mandatory;TrustServerCertificate=no'
    ```
 2. Ensure the remote SQL Server has a valid CA-signed TLS cert installed (required for `TrustServerCertificate=no`)
 3. Test linked server query after updating
@@ -1573,9 +1577,9 @@ UNION ALL
 SELECT 'ASYM_KEY', name, algorithm_desc + '_' + CAST(key_length AS VARCHAR(10))
 FROM sys.asymmetric_keys WHERE key_length <= 1024 AND name NOT LIKE '##%'
 UNION ALL
--- Certificates with weak hash
-SELECT 'CERT_HASH', name, CERTPROPERTY(name, 'Algorithm')
-FROM sys.certificates WHERE CERTPROPERTY(name, 'Algorithm') IN ('MD5', 'SHA1') AND name NOT LIKE '##%'
+-- Certificates with potentially weak hash (CERTPROPERTY does not expose 'Algorithm'; list all for out-of-band review)
+SELECT 'CERT_HASH', name, NULL AS sig_algorithm  -- verify hash via certutil or PowerShell
+FROM sys.certificates WHERE name NOT LIKE '##%'  -- review each cert's SignatureAlgorithm externally
 UNION ALL
 -- Backup encryption
 SELECT 'BACKUP', database_name, key_algorithm

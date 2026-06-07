@@ -80,9 +80,9 @@ klist purge
 
 Run these first. They confirm the KDC can resolve the SQL Server target.
 ### K1 — Missing Default-Instance SPN
-- **Trigger:** SQL Server is the default instance (port 1433) but no `MSSQLSvc/<host>:1433` or `MSSQLSvc/<FQDN>:1433` SPN is present on the service account
+- **Trigger:** SQL Server is the default instance (port 1433) but none of the required SPN forms are present on the service account: `MSSQLSvc/<host>:1433`, `MSSQLSvc/<FQDN>:1433`, or the portless form `MSSQLSvc/<FQDN>` (used by clients that do not specify a port in their connection string)
 - **Severity:** Critical
-- **Fix:** `setspn -S MSSQLSvc/<host>:1433 DOMAIN\sqlsvc` and `setspn -S MSSQLSvc/<host.domain.com>:1433 DOMAIN\sqlsvc`
+- **Fix:** Register all three forms: `setspn -S MSSQLSvc/<host>:1433 DOMAIN\sqlsvc`, `setspn -S MSSQLSvc/<host.domain.com>:1433 DOMAIN\sqlsvc`, and `setspn -S MSSQLSvc/<host.domain.com> DOMAIN\sqlsvc` (portless form for legacy or unspecified-port clients)
 ### K2 — Missing Named-Instance SPN
 - **Trigger:** Named SQL instance present but no `MSSQLSvc/<host>:<port>` SPN exists for the instance's TCP port AND no `MSSQLSvc/<host>:<instancename>` SPN exists for named-pipe / shared-memory connections. Both forms are valid per Microsoft documentation and both should be registered.
 - **Severity:** Critical
@@ -206,7 +206,7 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 ### K27 — User in Protected Users Group
 - **Trigger:** The end-user whose credentials need to be delegated is a member of the Protected Users security group — see Thresholds Reference
 - **Severity:** Critical
-- **Fix:** Remove the user from Protected Users if Kerberos delegation is required; note that Protected Users also disables NTLM authentication and RC4 encryption for the user — review the security implications before removing
+- **Fix:** Remove the user from Protected Users if Kerberos delegation is required; note that Protected Users disables NTLM authentication, RC4 encryption, and all Kerberos delegation for the user — these protections require Windows Server 2012 R2 or later domain functional level (DFL) to take effect; review security implications before removing the user from the group
 ### K28 — Computer Account SPN Conflict
 - **Trigger:** SQL Server runs under a domain service account but the host computer account also holds `MSSQLSvc/<host>:<port>` SPNs — both accounts have the same SPN
 - **Severity:** Warning
@@ -218,7 +218,7 @@ Run these first. They confirm the KDC can resolve the SQL Server target.
 ### K30 — Service Account in Protected Users
 - **Trigger:** The SQL Server service account is a member of the Protected Users security group — see Thresholds Reference
 - **Severity:** Critical
-- **Fix:** Remove the SQL service account from Protected Users immediately; Protected Users disables delegation, RC4, and DES encryption, and may prevent Kerberos authentication from working for the service at all
+- **Fix:** Remove the SQL service account from Protected Users immediately; Protected Users disables delegation, RC4, and DES encryption — a service account in Protected Users will cause Kerberos authentication to fail for the service (domain functional level Windows Server 2012 R2+ required for the protections to apply, but when they apply, failure is certain, not partial)
 
 ---
 

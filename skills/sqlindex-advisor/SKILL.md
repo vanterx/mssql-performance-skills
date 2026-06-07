@@ -37,7 +37,7 @@ SELECT
     migs.user_scans,
     migs.avg_total_user_cost,
     migs.avg_user_impact,
-    ROUND(migs.user_seeks * migs.avg_total_user_cost * (migs.avg_user_impact / 100.0), 2) AS weighted_impact,
+    ROUND(migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans), 2) AS weighted_impact,
     mid.statement            AS table_name,
     mid.equality_columns,
     mid.inequality_columns,
@@ -346,7 +346,7 @@ Per suggestion, extract: `Impact`, `Database/Schema/Table`, EQUALITY columns, IN
 
 ## Source C: DMV-Based Suggestions
 
-When `sys.dm_db_missing_index_group_stats` output is pasted, treat each row as a candidate. The `weighted_impact` column (`user_seeks × avg_total_user_cost × avg_user_impact / 100`) is a much better ranking signal than the static optimizer Impact because it accounts for how frequently the query actually runs.
+When `sys.dm_db_missing_index_group_stats` output is pasted, treat each row as a candidate. The `weighted_impact` column (`avg_total_user_cost × avg_user_impact × (user_seeks + user_scans)`) is a much better ranking signal than the static optimizer Impact because it accounts for how frequently the query actually runs (both seeks and scans).
 
 Extract per row: `table_name`, `equality_columns`, `inequality_columns`, `included_columns`, `weighted_impact`.
 

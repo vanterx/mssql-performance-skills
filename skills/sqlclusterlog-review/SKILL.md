@@ -29,7 +29,7 @@ Availability Group failures at the cluster level — the layer below SQL Server 
 
 Accept any of:
 
-- **File path** — path to `CLUSTER.LOG` (e.g., `C:\Windows\Cluster\Reports\CLUSTER.LOG`)
+- **File path** — path to `CLUSTER.LOG` (live log: `C:\Windows\Cluster\cluster.log`; log generated via `Get-ClusterLog`: `C:\Windows\Cluster\Reports\CLUSTER.LOG`)
 - **Inline paste** — raw CLUSTER.LOG content pasted directly into chat
 - **Natural language description** — describe symptoms ("the AG went offline at 14:32,
   SQL error log shows lease expiry")
@@ -187,7 +187,7 @@ These checks fire on SQL Server AG-specific resource events within the WSFC log 
 ### L25 — Missing Node Coverage
 - **Trigger:** Log entries reference nodes or IP addresses not seen in the file-wide node list, or the expected number of cluster nodes (from `[NODE]` membership entries) is greater than the number of distinct node identifiers that appear as log entry sources
 - **Severity:** Info — incomplete node coverage means the analysis cannot rule out failures on uncovered nodes
-- **Fix:** CLUSTER.LOG is per-node — each node writes its own log. Collect logs from all cluster nodes for the same time window: `Get-ClusterLog -Node * -Destination C:\ClusterLogs -TimeSpan 60`. Without logs from all nodes, an isolated node failure or network partition seen only from the failing node's perspective may not be visible. State which nodes are covered in the analysis summary.
+- **Fix:** CLUSTER.LOG is per-node — each node writes its own log. Collect logs from all cluster nodes for the same time window: `Get-ClusterLog -Destination C:\ClusterLogs -TimeSpan 60` (omit `-Node` to collect from all nodes by default). Without logs from all nodes, an isolated node failure or network partition seen only from the failing node's perspective may not be visible. State which nodes are covered in the analysis summary.
 
 ## Modern Cluster Feature Checks (L26–L30)
 

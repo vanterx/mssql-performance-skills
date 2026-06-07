@@ -57,7 +57,7 @@ SELECT
     drs.log_send_rate,
     drs.redo_queue_size,
     drs.redo_rate,
-    drs.secondary_lag_seconds,
+    drs.secondary_lag_seconds,          /* SQL Server 2016+ only; NULL on 2014 and earlier */
     drs.estimated_data_loss_seconds,
     drs.estimated_recovery_time_seconds
 FROM sys.availability_groups ag
@@ -188,7 +188,7 @@ These checks quantify the risk of data loss and the time to recover if the prima
   to reduce recovery time. Check secondary disk I/O — redo is sequential log apply and is
   bounded by disk write throughput. Evaluate whether this RTO is acceptable for the SLA.
 ### H9 — Secondary Lag
-- **Trigger:** `secondary_lag_seconds` exceeds the lag threshold (see Thresholds Reference)
+- **Trigger:** `secondary_lag_seconds` exceeds the lag threshold (see Thresholds Reference). **Version note:** `secondary_lag_seconds` was added in SQL Server 2016; this column does not exist in SQL Server 2014 and earlier — skip H9 if the instance is pre-2016
 - **Severity:** Critical if >60 sec; Warning if >10 sec
 - **Fix:** The secondary is behind the primary. For async replicas, check `log_send_rate`
   (H13) — if zero, log is not being sent. For sync replicas, lag indicates the primary is

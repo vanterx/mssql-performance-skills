@@ -4,7 +4,9 @@
   Deadlock Graph Capture for /sqlplan-deadlock
 ================================================================================
   The system_health Extended Events session captures deadlock graphs
-  automatically on every SQL Server instance (2008+). No setup required.
+  automatically on every SQL Server instance (2012+). No setup required.
+  On SQL Server 2008/2008 R2 the system_health session exists but does not
+  capture xml_deadlock_report events — use Profiler or a custom XE session there.
 
   Run Query A to retrieve recent deadlock graphs, then either:
     a) Paste the XML directly into Claude and run /sqlplan-deadlock

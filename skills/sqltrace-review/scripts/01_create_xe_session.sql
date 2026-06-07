@@ -80,7 +80,8 @@ ADD EVENT sqlserver.sql_batch_completed
         )
     )
 ADD TARGET package0.ring_buffer
-    (SET max_memory = 102400)    /* 100 MB */
+    (SET max_memory = 4096,      /* 4 MB — keep ≤ 4096 KB; larger values can pin significant memory */
+         max_events_limit = 1000)
 WITH
 (
     MAX_DISPATCH_LATENCY = 5 SECONDS,
