@@ -78,6 +78,10 @@ FROM sys.master_files
 ORDER BY database_id, type;
 
 -- 4. CPU and NUMA topology
+-- numa_node_count: number of NUMA nodes (physical CPU sockets + any soft-NUMA partitions)
+-- scheduler_count: user schedulers = logical CPUs visible to SQL Server
+-- Recommended MAXDOP = MIN(scheduler_count / numa_node_count, 8)
+-- On single-NUMA or single-socket systems B1/B3 do not fire
 SELECT
     cpu_count,
     scheduler_count,
@@ -132,7 +136,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'max degree of parallelism' config_value = 0` AND `sys.dm_os_sys_info.numa_node_count > 1`
 - **Severity:** Warning
-- **Fix:** Set MAXDOP to the number of logical CPUs per NUMA node (up to 8). For a 2-NUMA, 16-core box: MAXDOP = 8. Use `EXEC sp_configure 'max degree of parallelism', 8; RECONFIGURE;`
+- **Fix:** NUMA (Non-Uniform Memory Access) is a hardware architecture where each CPU socket has its own local memory bank. Accessing memory on a remote NUMA node — one owned by a different socket — is 2–3× slower than accessing local memory. When MAXDOP = 0 (unlimited), a single parallel query can be spread across all NUMA nodes, forcing cross-NUMA memory access and monopolising every CPU. Set MAXDOP to the number of logical schedulers per NUMA node (capped at 8): `scheduler_count / numa_node_count`. For example, a 4-NUMA server with 64 schedulers → MAXDOP = 8 (16 per node, capped). `EXEC sp_configure 'max degree of parallelism', 8; RECONFIGURE;`
 
 ### B2 — Cost Threshold for Parallelism at Default
 
@@ -144,7 +148,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `max degree of parallelism config_value > (scheduler_count / numa_node_count)` when `numa_node_count > 1`
 - **Severity:** Warning
-- **Fix:** Cap MAXDOP at the number of schedulers per NUMA node to prevent cross-NUMA memory allocation. Recalculate: `MAXDOP = scheduler_count / numa_node_count` (max 8).
+- **Fix:** Each NUMA node owns a local memory pool. When a parallel query uses more threads than fit within one NUMA node, the query's memory allocations spill across nodes — threads on socket 0 read data allocated on socket 1's memory, paying the remote-access latency penalty on every page touch. Keeping MAXDOP ≤ schedulers-per-NUMA ensures the query's buffer pool allocations stay local. Recalculate: `MAXDOP = scheduler_count / numa_node_count` (max 8). `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
 
 ### B4 — Optimize for Ad Hoc Workloads Disabled
 
