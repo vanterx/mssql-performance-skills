@@ -21,6 +21,7 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   memory:      ["sqlmemory-review"],
   diskio:      ["sqldiskio-review"],
   encryption:  ["sqlencryption-review"],
+  dbconfig:    ["sqldbconfig-review"],
   mixed:       ["mssql-performance-review"],
 };
 

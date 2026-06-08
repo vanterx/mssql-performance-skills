@@ -63,7 +63,9 @@ triggers:
 | `skills/sqlspn-review/` | `/sqlspn-review` | K |
 | `skills/sqlmemory-review/` | `/sqlmemory-review` | O |
 | `skills/sqldiskio-review/` | `/sqldiskio-review` | Z |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 17) |
+| `skills/sqlencryption-review/` | `/sqlencryption-review` | A |
+| `skills/sqldbconfig-review/` | `/sqldbconfig-review` | B |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 19) |
 
 ---
 
@@ -107,10 +109,12 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `K` | `sqlspn-review` | SPN and Kerberos delegation checks | K1–K40 |
 | `O` | `sqlmemory-review` | Memory pressure: PLE, plan cache, grants, clerks | O1–O20 |
 | `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
+| `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
+| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B28 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 17 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to all 19 specialised skills | n/a |
 
-**Available prefixes for new skills:** A, B, F, G, J, M, U, Y.
+**Available prefixes for new skills:** F, G, J, M, U, Y.
 
 ---
 
