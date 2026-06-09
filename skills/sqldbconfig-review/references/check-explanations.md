@@ -41,15 +41,21 @@ FROM sys.dm_os_sys_info;
 -- Problem: 4-NUMA server, 64 schedulers, MAXDOP = 0
 -- A single MERGE query consumes all 64 threads across 4 NUMA nodes
 
--- Fix: set to schedulers per NUMA node (64 / 4 = 16, capped at 8 per Microsoft guidance)
+-- SQL 2016+ rule: 4-NUMA, 64 schedulers → 16 per NUMA node → ≤ 16, so MAXDOP ≤ 16
+-- Microsoft guidance for ≤ 16 per node: MAXDOP ≤ logical-per-node (8 is a common starting point)
 EXEC sp_configure 'max degree of parallelism', 8;
+RECONFIGURE;
+
+-- Example: 2-NUMA, 64 schedulers → 32 per NUMA node → > 16, so MAXDOP = half(32) = 16
+EXEC sp_configure 'max degree of parallelism', 16;
 RECONFIGURE;
 ```
 
 **Fix options**
-1. Calculate per-NUMA scheduler count: `scheduler_count / numa_node_count`, cap at 8
-2. For OLTP-heavy servers with short queries, consider MAXDOP 4 or lower
-3. Use Resource Governor to apply different MAXDOP per workload group for mixed environments
+1. SQL 2016+: `logical_per_node = scheduler_count / numa_node_count`. If ≤ 16: MAXDOP ≤ logical_per_node. If > 16: MAXDOP = half(logical_per_node), max 16
+2. SQL 2014 and earlier: MAXDOP ≤ logical_per_node, cap at 8
+3. For OLTP-heavy servers with short queries, consider MAXDOP 4 or lower regardless of the formula
+4. Use Resource Governor to apply different MAXDOP per workload group for mixed environments
 
 **Related checks:** B3 (MAXDOP too high), B2 (CTP too low causing excessive parallelism)
 
@@ -113,14 +119,17 @@ WHERE name = 'max degree of parallelism';
 -- 2-NUMA server, 32 schedulers total → 16 per NUMA node
 -- MAXDOP = 20 → forces cross-NUMA allocation on parallel queries
 
--- Fix: cap MAXDOP at 8 (16 per NUMA, but Microsoft recommends cap at 8)
-EXEC sp_configure 'max degree of parallelism', 8;
+-- SQL 2016+ rule: 16 per NUMA ≤ 16, so MAXDOP ≤ 16. MAXDOP 20 exceeds it → reduce
+EXEC sp_configure 'max degree of parallelism', 16;
 RECONFIGURE;
+
+-- If this were > 16 per NUMA (e.g. 2-NUMA, 80 schedulers = 40 per node):
+-- MAXDOP = half(40) = 20, max 16 → MAXDOP = 16
 ```
 
 **Fix options**
-1. Set MAXDOP = MIN(schedulers_per_numa, 8) as a starting point
-2. For very large NUMA nodes (> 16 cores per node), MAXDOP 8 is still the typical cap
+1. SQL 2016+: if logical-per-NUMA ≤ 16 → MAXDOP ≤ logical-per-NUMA; if > 16 → MAXDOP = half(logical-per-NUMA), max 16
+2. SQL 2014 and earlier: MAXDOP ≤ logical-per-NUMA, cap at 8
 3. Verify the change reduces NUMA-remote memory in `sys.dm_os_memory_nodes`
 
 **Related checks:** B1 (MAXDOP = 0), B2 (CTP too low)
@@ -776,11 +785,12 @@ When SQL Server creates or expands a data file, it must initialise the new space
 
 **How to spot it**
 ```sql
--- SQL Server 2012 SP4 / 2016 SP1+:
+-- SQL Server 2012 SP4, 2014 SP3, 2016 SP1+
+-- Column is nvarchar(1): 'Y' = IFI enabled, 'N' = IFI disabled
 SELECT servicename, instant_file_initialization_enabled
 FROM sys.dm_server_services
 WHERE servicename LIKE 'SQL Server (%';
--- instant_file_initialization_enabled = 0 → B22 fires
+-- instant_file_initialization_enabled = 'N' → B22 fires
 
 -- Legacy detection (check ERRORLOG at startup):
 -- Look for: "Database Instant File Initialization: disabled"
@@ -796,11 +806,11 @@ WHERE servicename LIKE 'SQL Server (%';
 -- 2. "Perform volume maintenance tasks" → Add the SQL Server service account
 -- 3. Restart the SQL Server service
 
--- Verify after restart:
+-- Verify after restart (column is nvarchar(1)):
 SELECT instant_file_initialization_enabled
 FROM sys.dm_server_services
 WHERE servicename LIKE 'SQL Server (%';
--- Should return 1
+-- Should return 'Y'
 ```
 
 **Fix options**

@@ -68,8 +68,8 @@ tempdb         3
 -- 6. Instant File Initialization status
 servicename                  instant_file_initialization_enabled
 ---------------------------  ------------------------------------
-SQL Server (MSSQLSERVER)     0
-SQL Server Agent (MSSQLSERVER) 0
+SQL Server (MSSQLSERVER)     N
+SQL Server Agent (MSSQLSERVER) N
 
 -- 7. TempDB file count
 type_desc  file_count  total_size_mb

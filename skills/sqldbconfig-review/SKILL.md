@@ -80,7 +80,10 @@ ORDER BY database_id, type;
 -- 4. CPU and NUMA topology
 -- numa_node_count: number of NUMA nodes (physical CPU sockets + any soft-NUMA partitions)
 -- scheduler_count: user schedulers = logical CPUs visible to SQL Server
--- Recommended MAXDOP = MIN(scheduler_count / numa_node_count, 8)
+-- SQL 2016+ MAXDOP guidance (multi-NUMA):
+--   ≤ 16 logical processors per NUMA node → MAXDOP ≤ logical-per-NUMA-node
+--   > 16 logical processors per NUMA node → MAXDOP = half(logical-per-NUMA-node), max 16
+-- SQL 2014 and earlier: MAXDOP = logical-per-NUMA-node, max 8
 -- On single-NUMA or single-socket systems B1/B3 do not fire
 SELECT
     cpu_count,
@@ -136,7 +139,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'max degree of parallelism' config_value = 0` AND `sys.dm_os_sys_info.numa_node_count > 1`
 - **Severity:** Warning
-- **Fix:** NUMA (Non-Uniform Memory Access) is a hardware architecture where each CPU socket has its own local memory bank. Accessing memory on a remote NUMA node — one owned by a different socket — is 2–3× slower than accessing local memory. When MAXDOP = 0 (unlimited), a single parallel query can be spread across all NUMA nodes, forcing cross-NUMA memory access and monopolising every CPU. Set MAXDOP to the number of logical schedulers per NUMA node (capped at 8): `scheduler_count / numa_node_count`. For example, a 4-NUMA server with 64 schedulers → MAXDOP = 8 (16 per node, capped). `EXEC sp_configure 'max degree of parallelism', 8; RECONFIGURE;`
+- **Fix:** NUMA (Non-Uniform Memory Access) is a hardware architecture where each CPU socket has its own local memory bank. Accessing memory on a remote NUMA node is 2–3× slower than local access. When MAXDOP = 0, a single query can span all NUMA nodes. Apply the SQL Server 2016+ guidance: if ≤ 16 logical processors per NUMA node, set MAXDOP ≤ logical-per-node; if > 16 per node, set MAXDOP = half that count, max 16. For SQL 2014 and earlier the cap is 8. Example: 4-NUMA, 64 schedulers → 16 per node → MAXDOP = 8 (≤ 16 rule). Example: 2-NUMA, 64 schedulers → 32 per node → MAXDOP = 16 (half of 32, max 16). `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
 
 ### B2 — Cost Threshold for Parallelism at Default
 
@@ -148,7 +151,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `max degree of parallelism config_value > (scheduler_count / numa_node_count)` when `numa_node_count > 1`
 - **Severity:** Warning
-- **Fix:** Each NUMA node owns a local memory pool. When a parallel query uses more threads than fit within one NUMA node, the query's memory allocations spill across nodes — threads on socket 0 read data allocated on socket 1's memory, paying the remote-access latency penalty on every page touch. Keeping MAXDOP ≤ schedulers-per-NUMA ensures the query's buffer pool allocations stay local. Recalculate: `MAXDOP = scheduler_count / numa_node_count` (max 8). `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
+- **Fix:** Each NUMA node owns a local memory pool. When a parallel query uses more threads than fit within one NUMA node, allocations spill across nodes — paying the remote-access latency penalty on every page touch. Recalculate using the SQL Server 2016+ formula: logical-per-NUMA = `scheduler_count / numa_node_count`. If ≤ 16: MAXDOP ≤ logical-per-NUMA. If > 16: MAXDOP = half(logical-per-NUMA), max 16. SQL 2014 and earlier: max 8. `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
 
 ### B4 — Optimize for Ad Hoc Workloads Disabled
 
@@ -260,7 +263,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 ### B22 — Instant File Initialization Not Enabled
 
-- **Trigger:** `sys.dm_server_services.instant_file_initialization_enabled = 0` for the SQL Server service
+- **Trigger:** `sys.dm_server_services.instant_file_initialization_enabled = 'N'` for the SQL Server service (column is nvarchar(1): 'Y' = enabled, 'N' = disabled; applies SQL 2012 SP4, SQL 2014 SP3, SQL 2016 SP1+)
 - **Severity:** Warning
 - **Fix:** Without IFI, SQL Server must zero-initialise new data file space before use, causing multi-second or multi-minute stalls during auto-growth events and `RESTORE DATABASE`. Grant the SQL Server service account the `SE_MANAGE_VOLUME_NAME` Windows privilege ("Perform volume maintenance tasks" in Local Security Policy), then restart the SQL Server service. IFI does not apply to log files (they always require zeroing). Verify after restart: `SELECT instant_file_initialization_enabled FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';`
 
