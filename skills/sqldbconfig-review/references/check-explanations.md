@@ -589,6 +589,34 @@ Normally, even an `EXECUTE AS OWNER` stored procedure is sandboxed to the curren
 
 By default, TRUSTWORTHY is OFF on all user databases and is reset to OFF whenever a database is attached or restored.
 
+**Owner considerations — three things that look alike but are not**
+
+MS Learn explicitly states: *"the `dbo` user account isn't the same as the `db_owner` fixed database role, and the `db_owner` fixed database role isn't the same as the user account that is recorded as the owner of the database."*
+
+| Concept | What it is | Where stored |
+|---------|-----------|-------------|
+| **Database owner login** | The server login whose SID is recorded as the database owner. Stored procedures using `EXECUTE AS OWNER` impersonate this login. | `sys.databases.owner_sid` |
+| **`dbo` user** | A special database principal that all `sysadmin` members, the `sa` login, and the database owner enter the database as. Always maps to the database owner login. | `sys.database_principals WHERE name = 'dbo'` |
+| **`db_owner` role** | A fixed database role whose members have full control inside the database — but are NOT automatically the database owner unless the database was created by that login. | `sys.database_role_members` |
+
+**Why `db_owner` membership is the attack precondition for B17:**
+
+When a `db_owner` role member creates a stored procedure, the proc is created in `dbo` schema and effectively owned by `dbo`. Using `WITH EXECUTE AS OWNER` in that proc impersonates the **database owner login** (the one in `sys.databases.owner_sid`) — not just the `dbo` user. If that login is `sa` or a sysadmin member, and TRUSTWORTHY is ON, the impersonation carries full server-level authority.
+
+```sql
+-- Identify who the real database owner login is (sys.databases.owner_sid)
+SELECT d.name              AS database_name,
+       SUSER_SNAME(d.owner_sid) AS database_owner_login,  -- this is what EXECUTE AS OWNER resolves to
+       dp.name             AS dbo_user,                    -- always 'dbo' inside the DB
+       IS_SRVROLEMEMBER('sysadmin', SUSER_SNAME(d.owner_sid)) AS owner_is_sysadmin
+FROM sys.databases d
+LEFT JOIN sys.database_principals dp
+    ON d.database_id = DB_ID(d.name) AND dp.name = 'dbo'
+WHERE d.is_trustworthy_on = 1
+  AND d.database_id <> 4;
+-- owner_is_sysadmin = 1 → EXECUTE AS OWNER gives sysadmin authority when TRUSTWORTHY is ON
+```
+
 **How to spot it**
 
 ```sql
@@ -710,6 +738,36 @@ SQL Server's **ownership chain** rule: when object A (a stored proc) calls objec
 **Cross-database ownership chaining** extends this rule across database boundaries. When `DB_CHAINING` is ON in both the calling database and the target database, and both are owned by the same login, the permission check on the target database's objects is also skipped.
 
 This means: a user with `EXECUTE` on a stored proc in DB1 can read (or modify) data in DB2 without any explicit `SELECT` on DB2 objects, without being a user in DB2, and without the DBA being aware they have that access.
+
+**Owner considerations — what "same owner" actually means**
+
+The chain fires when **the same server login owns both the calling object and the target object**. This is determined by `sys.databases.owner_sid` — not by `db_owner` role membership.
+
+| Concept | Role in chaining |
+|---------|-----------------|
+| **Database owner login** (`sys.databases.owner_sid`) | The login that must match on both ends. Identified via `SUSER_SNAME(owner_sid)`. |
+| **`dbo` user** | Inside the database, the `dbo` user IS the database owner login. Objects created in the `dbo` schema are owned by this login. |
+| **`db_owner` role** | Members can CREATE objects (which land in `dbo` schema and become owned by `dbo`), but `db_owner` membership alone does NOT make the chain fire. The owner_sid match is what matters. |
+
+**The `db_owner` role's indirect part:** A `db_owner` member can create a stored procedure that references cross-database objects. That proc is created in the `dbo` schema, making the database owner login its effective owner. If the two databases share the same `owner_sid`, the chain fires for anyone who executes that proc — even users with zero rights in the target database.
+
+```sql
+-- Find database pairs that share the same owner_sid (chain candidates)
+SELECT a.name       AS calling_db,
+       b.name       AS target_db,
+       SUSER_SNAME(a.owner_sid) AS shared_owner_login,
+       a.is_db_chaining_on      AS calling_chaining_on,
+       b.is_db_chaining_on      AS target_chaining_on
+FROM sys.databases a
+JOIN sys.databases b
+    ON a.owner_sid = b.owner_sid   -- same login owns both
+   AND a.database_id <> b.database_id
+WHERE a.is_db_chaining_on = 1
+  AND b.is_db_chaining_on = 1
+  AND a.database_id > 4
+ORDER BY shared_owner_login, calling_db;
+-- Any row = a live cross-DB chain path
+```
 
 **How to spot it**
 
