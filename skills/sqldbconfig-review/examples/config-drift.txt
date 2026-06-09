@@ -1,0 +1,78 @@
+-- sqldbconfig-review example input
+-- SQL Server 2019 (15.0), 4-NUMA, 64-core, 256 GB RAM
+-- Captured 2026-06-08 using capture-dbconfig.sql
+
+-- 1. Instance configuration (sp_configure)
+name                              minimum     maximum       config_value  run_value
+--------------------------------  ----------  ----------    ------------  ---------
+Ad Hoc Distributed Queries        0           1             0             0
+awe enabled                       0           1             0             0
+clr enabled                       0           1             0             0
+cost threshold for parallelism    0           32767         5             5
+cross db ownership chaining       0           1             1             1
+max degree of parallelism         0           32767         0             0
+max server memory (MB)            16          2147483647    0             2147483647
+min server memory (MB)            0           2147483647    0             16
+Ole Automation Procedures         0           1             1             1
+optimize for ad hoc workloads     0           1             0             0
+query governor cost limit         0           2147483647    0             0
+remote admin connections          0           1             0             0
+show advanced options             0           1             1             1
+
+-- 2. Database settings
+name          compatibility_level  auto_shrink  auto_close  rcsi  page_verify   auto_create  auto_update  trustworthy  db_chaining  recovery   state
+------------  -------------------  -----------  ----------  ----  ------------- -----------  -----------  -----------  -----------  ---------  ------
+master        150                  0            0           0     CHECKSUM      1            1            0            0            SIMPLE     ONLINE
+model         150                  0            0           0     CHECKSUM      1            1            0            0            FULL       ONLINE
+msdb          150                  0            0           0     CHECKSUM      1            1            1            0            SIMPLE     ONLINE
+tempdb        150                  0            0           0     CHECKSUM      1            1            0            0            SIMPLE     ONLINE
+SalesDB       130                  1            0           0     CHECKSUM      1            1            0            0            FULL       ONLINE
+ReportDB      100                  0            1           0     NONE          1            0            1            1            FULL       ONLINE
+ArchiveDB     150                  0            0           0     CHECKSUM      1            1            0            0            SIMPLE     ONLINE
+HRDB          140                  0            0           1     CHECKSUM      1            1            0            0            FULL       ONLINE
+
+-- 3. File growth configuration
+database_name  logical_name      type_desc  size_mb  growth_setting  is_percent_growth  growth  max_size
+-------------  ----------------  ---------  -------  --------------  -----------------  ------  --------
+SalesDB        SalesDB_Data      ROWS       51200    10%             1                  10      -1
+SalesDB        SalesDB_log       LOG        8192     10%             1                  10      -1
+ReportDB       ReportDB_Data     ROWS       102400   1024 MB         0                  131072  -1
+ReportDB       ReportDB_log      LOG        20480    512 MB          0                  65536   -1
+ArchiveDB      ArchiveDB_Data    ROWS       204800   512 MB          0                  65536   -1
+ArchiveDB      ArchiveDB_log     LOG        4096     256 MB          0                  32768   -1
+HRDB           HRDB_Data         ROWS       10240    256 MB          0                  32768   -1
+HRDB           HRDB_log          LOG        2048     256 MB          0                  32768   -1
+master         master            ROWS       4        1 MB            0                  128     268435456
+model          modeldev          ROWS       8        64 MB           0                  8192    268435456
+tempdb         tempdev           ROWS       8192     512 MB          0                  65536   -1
+tempdb         tempdev2          ROWS       8192     512 MB          0                  65536   -1
+tempdb         templog           LOG        512      10%             1                  10      -1
+
+-- 4. CPU and NUMA topology
+cpu_count  scheduler_count  numa_node_count  socket_count  cores_per_socket  sql_memory_model_desc
+---------  ---------------  ---------------  ------------  ----------------  ---------------------
+64         64               4                4             16                CONVENTIONAL
+
+-- 5. VLF count per database
+database_name  vlf_count
+-------------  ---------
+SalesDB        4821
+ReportDB       312
+HRDB           45
+ArchiveDB      18
+master         5
+model          4
+msdb           8
+tempdb         3
+
+-- 6. Instant File Initialization status
+servicename                  instant_file_initialization_enabled
+---------------------------  ------------------------------------
+SQL Server (MSSQLSERVER)     N
+SQL Server Agent (MSSQLSERVER) N
+
+-- 7. TempDB file count
+type_desc  file_count  total_size_mb
+---------  ----------  -------------
+ROWS       2           16384
+LOG        1           512

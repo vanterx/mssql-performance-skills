@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides nineteen slash-command skills — eighteen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, and full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance). No application code — content is Markdown only.
+Provides twenty slash-command skills — nineteen specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance), and instance/database configuration drift (MAXDOP, Max Server Memory, auto-shrink, compatibility level, RCSI, VLF count, IFI, TempDB sizing, surface area). No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -37,6 +37,7 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlmemory-review/SKILL.md](skills/sqlmemory-review/SKILL.md) | Memory pressure analysis: `sqlmemory-review`. 20 checks (O1–O20) — PLE, plan cache bloat, memory grants, memory clerks, ColumnStore/XTP footprint, OS pressure, LPIM, Max Server Memory |
 | [skills/sqldiskio-review/SKILL.md](skills/sqldiskio-review/SKILL.md) | File-level I/O latency and auto-growth analysis: `sqldiskio-review`. 15 checks (Z1–Z15) — data/log latency, hot files, stall ratio, storage placement, auto-growth events and sizing |
 | [skills/sqlencryption-review/SKILL.md](skills/sqlencryption-review/SKILL.md) | Full SQL Server encryption infrastructure analysis: `sqlencryption-review`. 112 checks (A1–A112) — TDE, Always Encrypted, CLE symmetric keys, backup encryption, transport/TLS, certificate lifecycle, asymmetric/symmetric key management, DMK/SMK key hierarchy (including sp_control_dbmasterkey_password and SSISDB), EKM/AKV, TLS/network hardening, Always Encrypted advanced (enclave attestation, driver compatibility), operational key lifecycle, SQL Server 2022 Ledger, Azure-specific encryption, dynamic data masking patterns, compliance explicit checks (PCI-DSS v4, HIPAA, GDPR, FedRAMP, CMMC, NY-DFS), operational validation (job step passwords, plan cache exposure, AKV soft-delete), advanced cryptographic patterns (ENCRYPTBYPASSPHRASE, HASHBYTES, Service Broker certs, NTLM) |
+| [skills/sqldbconfig-review/SKILL.md](skills/sqldbconfig-review/SKILL.md) | Instance and database configuration drift analysis: `sqldbconfig-review`. 28 checks (B1–B28) — MAXDOP/NUMA alignment, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads, Max Server Memory, LPIM, auto-shrink, auto-close, compatibility level, RCSI, page verification, auto-statistics, Trustworthy, cross-DB chaining, VLF count, percent auto-growth, Instant File Initialization, TempDB file count, surface area exposure |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -72,12 +73,13 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlencryption-review/references/howto-dynamic-data-masking.md](skills/sqlencryption-review/references/howto-dynamic-data-masking.md) | DDM decision guide: masking vs encryption, UNMASK permission management, DDM interaction with AE/CLE, DDM + RLS patterns |
 | [skills/sqlencryption-review/references/howto-agent-jobs.md](skills/sqlencryption-review/references/howto-agent-jobs.md) | Secure SQL Agent job patterns: certificate-based key opens, proxy credentials, TRY/CATCH cleanup, alerts for encryption errors, job step audit queries |
 | [skills/sqlencryption-review/references/error-reference.md](skills/sqlencryption-review/references/error-reference.md) | Common encryption errors reference: Msg 33111, 33104, 15581, 33081, 15318, self-signed cert, audit failures, EKM errors, enclave attestation, TLS handshake errors |
+| [skills/sqldbconfig-review/references/check-explanations.md](skills/sqldbconfig-review/references/check-explanations.md) | Plain-English explanation of all 28 B-checks with T-SQL examples, fix recipes, and Quick Reference table |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 19 skills |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 20 skills |
 | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 613-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
 | [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 669 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
@@ -118,6 +120,7 @@ Provides nineteen slash-command skills — eighteen specialised review skills pl
 | [skills/sqlmemory-review/examples/](skills/sqlmemory-review/examples/) | Memory clerk + PLE + grant queue output: ColumnStore pressure, single-use plan bloat, oversized grant blocking 4 sessions + analysis |
 | [skills/sqldiskio-review/examples/](skills/sqldiskio-review/examples/) | sys.dm_io_virtual_file_stats + auto-growth trace: 47 ms data reads, 31 ms log writes, 3 auto-grow events on same volume + analysis |
 | [skills/sqlencryption-review/examples/](skills/sqlencryption-review/examples/) | Multi-database encryption audit DMV output: TDE off on HRPayroll/ArchiveDB, expired TDE cert, RC4/3DES CLE keys, unencrypted backups, plaintext remote sessions, no SMK/DMK backup, self-signed TLS + analysis |
+| [skills/sqldbconfig-review/examples/](skills/sqldbconfig-review/examples/) | sp_configure + sys.databases + sys.master_files + VLF count output: MAXDOP=0 on 4-NUMA, Max Server Memory unset, auto-shrink on SalesDB, ReportDB at compat 100 with auto-close + percent growth + analysis |
 
 ### Scripts
 
@@ -143,7 +146,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Option 3: Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 19 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 20 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -217,6 +220,7 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `O` | `sqlmemory-review` |
 | `Z` | `sqldiskio-review` |
 | `A` | `sqlencryption-review` |
+| `B` | `sqldbconfig-review` |
 | (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
 New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.
