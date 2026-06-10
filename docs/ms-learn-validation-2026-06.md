@@ -182,8 +182,21 @@ Validated clean: tsql-review deprecated-syntax claims, ANSI_NULLS/QUOTED_IDENTIF
 
 ## Batch 5 — sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqldeadlock-review, sqltrace-review
 
-_Pending._
+Validated 2026-06-10 via targeted verification of high-risk claim classes: `sys.dm_hadr_*` columns (`secondary_lag_seconds` SQL 2016+ gate confirmed), ERRORLOG error numbers (823/824/825, 802 vs 701, 1105), deadlock error 1205 / system_health XE, trace column units, setspn switches (-L/-Q/-X) and AD delegation attributes (`TrustedForDelegation`, `msDS-AllowedToDelegateTo`, `msDS-AllowedToActOnBehalfOfOtherIdentity`), `Get-ClusterLog` syntax, Contained AG (2022+) and `sp_server_diagnostics` (2012+) gates.
+
+**Corrections (1, applied with the sqlwait commit):** sqlhadr-review's parallel-redo fix text referenced trace flag 3468 and a worker-pool setting — corrected to the documented model (automatic thread allocation, TF 3459 to disable; see Batch 2 sqlwait-review entry).
+
+Notably validated clean: sqltrace-review's unusual claim that `RPC:Completed` CPU is in **microseconds** from SQL 2012+ while `SQL:BatchCompleted` CPU remains milliseconds — exactly matches [RPC:Completed event class](https://learn.microsoft.com/sql/relational-databases/event-classes/rpc-completed-event-class).
 
 ## Batch 6 — mssql-performance-review, sqlplan-batch, VERSION_COMPATIBILITY.md
 
-_Pending._
+Validated 2026-06-10. Both dispatcher skills contain no DMV, version, or trace-flag claims (pure routing/methodology) — nothing to validate. `skills/VERSION_COMPATIBILITY.md` was corrected incrementally throughout the pass: added missing `sqlmemory-review`/`sqldiskio-review` matrix rows and notes, fixed the universal-check total (460 of 697), removed the false "BPE removed in SQL 2022" gating, corrected the V41/V43 wait-type catalog rows, and updated the Quick Reference to 20 skills with matrix-aligned Azure SQL DB membership.
+
+---
+
+## Summary
+
+- **Total corrections: 57** across 13 skills + shared docs (Phase A metadata: 10 fixes; Batch 1: 14; Batch 2: 21; Batch 3: 14; Batch 4: 5; Batch 5: 1 ripple; plus VERSION_COMPATIBILITY/manifest fixes).
+- **[Unverified] markers added: 7** (V5 log-write limit, SE_REPL_* version scope, QUERY_OPTIMIZER_PSP_WAIT, DOP_FEEDBACK_WAIT, RowCountAssignment, ContainsCEFeedback, DegreeOfParallelismFeedback) — each paired with a documented cross-check.
+- **No checks added or removed** — totals remain 697 across 20 skills; `scripts/verify-docs.sh` green (43 checks, including 2 new manifest guards added by this pass).
+- Most impactful finds: BPE falsely declared removed in SQL 2022; sqldiskio Z5 stall formula mathematically degenerate; auto-grow trace Duration units wrong; memory-grant semaphore IDs swapped; nonexistent DBSC option and DMV column; wrong feature's disable hints; Enterprise-only online index operations attributed to Standard edition.

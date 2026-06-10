@@ -1,6 +1,6 @@
 # Backlog: Repo Improvement + Microsoft Learn Validation Pass
 
-> Status: **in progress** — started 2026-06-10 on branch `claude/repo-improvements-validation-f1z3ks`.
+> Status: **complete** — 2026-06-10 on branch `claude/repo-improvements-validation-f1z3ks`.
 > This document is the durable plan + progress tracker for the repo-wide Microsoft Learn
 > validation pass. Update the Progress tracker table in the same commit as each batch's fixes.
 
@@ -76,8 +76,8 @@ Statuses: `pending` → `in progress` → `validated` → `committed`
 | B2 — high claim density | sqlwait-review (44), sqlquerystore-review (32), sqlprocstats-review (25) | committed |
 | B3 — largest | sqlplan-review (108), sqlencryption-review (112, spot-check vs prior audit) | committed |
 | B4 — T-SQL/plan | tsql-review (85), sqlplan-compare (20), sqlindex-advisor (10), sqlstats-review (27) | committed |
-| B5 — infra/HA | sqlhadr-review (27), sqlclusterlog-review (30), sqlerrorlog-review (33), sqlspn-review (40), sqldeadlock-review (16), sqltrace-review (25) | pending |
-| B6 — dispatchers + cross-file | mssql-performance-review, sqlplan-batch (methodology only), VERSION_COMPATIBILITY.md version-gate rows | pending |
+| B5 — infra/HA | sqlhadr-review (27), sqlclusterlog-review (30), sqlerrorlog-review (33), sqlspn-review (40), sqldeadlock-review (16), sqltrace-review (25) | committed |
+| B6 — dispatchers + cross-file | mssql-performance-review, sqlplan-batch (methodology only), VERSION_COMPATIBILITY.md version-gate rows | committed |
 
 ### Validation report
 
