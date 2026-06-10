@@ -1,4 +1,5 @@
-backlog/
+# Local scratch backlog at repo root (committed backlog lives in docs/backlog/)
+/backlog/
 
 # Claude Code local settings (contains machine-specific paths)
 .claude/settings.local.json
