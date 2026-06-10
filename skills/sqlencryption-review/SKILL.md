@@ -248,7 +248,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 | CMK rotation age | — | > 730 days | — |
 | RSA asymmetric key length | — | RSA_1024 | RSA_512 |
 | Unencrypted remote connections | 0 | > 0 | — |
-| TDE DEK algorithm | AES_128 / AES_192 | — | TRIPLE_DES_3KEY / RC4 |
+| TDE DEK algorithm | AES_128 / AES_192 | — | TRIPLE_DES_3KEY (the only non-AES DEK algorithm; RC4 is not valid for a DEK) |
 | Symmetric key algorithm (CLE) | AES_128 / AES_192 | DES / DESX / TRIPLE_DES | RC4 / RC2 |
 | Backup encryption algorithm | AES_128 | TRIPLE_DES_3KEY | None (unencrypted) |
 | Non-FIPS algorithm anywhere | — | SHA1 / DES / 3DES | RC4 / MD5 |
@@ -349,7 +349,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 
 ### A17 — Symmetric key using deprecated or broken algorithm
 - **Trigger:** `sys.symmetric_keys` WHERE `algorithm_desc IN ('DES', 'Triple_DES', 'RC2', 'RC4', 'DESX', 'TRIPLE_DES_3KEY')` AND `name NOT LIKE '##%'`
-- **Severity:** Critical for RC4 and RC2 (cryptographically broken; trivially decryptable); Warning for DES/DESX (56-bit key, brute-forceable); Warning for Triple_DES / TRIPLE_DES_3KEY (deprecated post-2023 per NIST SP 800-131A)
+- **Severity:** Critical for RC4 and RC2 (cryptographically broken; trivially decryptable); Warning for DES (56-bit key, brute-forceable) and DESX (misnamed — actually Triple DES with a 192-bit key, deprecated); Warning for Triple_DES / TRIPLE_DES_3KEY (deprecated post-2023 per NIST SP 800-131A)
 - **Fix:** `CREATE SYMMETRIC KEY [key_new] WITH ALGORITHM = AES_256, KEY_SOURCE = '...', IDENTITY_VALUE = '...', ENCRYPTION BY CERTIFICATE [cert]`; re-encrypt all data with `ENCRYPTBYKEY(KEY_GUID('[key_new]'), plaintext)`; close and `DROP SYMMETRIC KEY [key_old]`
 
 ### A18 — OPEN SYMMETRIC KEY without matching CLOSE in the same scope

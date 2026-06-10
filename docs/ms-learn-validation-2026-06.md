@@ -153,9 +153,18 @@ Claims checked: showplan XML elements/attributes across all 108 checks, USE HINT
 
 Validated clean: NonParallelPlanReason values, MemoryGrantInfo attributes (GrantedMemory/MaxUsedMemory/GrantWaitTime/RequestedMemory/SerialRequiredMemory), StatementOptmEarlyAbortReason values, PlanAffectingConvert ConvertIssue="Seek Plan"/"Cardinality", SpillToTempDb/SpillLevel, NoJoinPredicate, ColumnsWithNoStatistics, UnmatchedIndexes, EstimateRowsWithoutRowGoal, AdaptiveThresholdRows/IsAdaptive, RunTimeCountersPerThread (ActualElapsedms/ActualRows/ActualRowsRead), ParameterCompiledValue/ParameterRuntimeValue, `DISABLE_OPTIMIZER_ROWGOAL` (=TF 4138), `DISABLE_PARAMETER_SNIFFING` (=TF 4136), STRING_SPLIT 50-row estimate + enable_ordinal (2022+), MSTVF 100/1-row fixed estimates, StatisticsInfo/@SamplingPercent, batch mode on rowstore (2019+, BATCH_MODE_ON_ROWSTORE DBSC).
 
-### sqlencryption-review
+### sqlencryption-review (A1–A112) — spot-check validated 2026-06-10
 
-_Pending._
+This skill's entire current content shipped in a single commit that included a dedicated MS Learn accuracy audit (~25 corrections, recorded in `.claude/docs/ms-learn-validation.md`), and it has not changed since. This pass therefore performed a verification spot-check of high-risk claim classes instead of a full re-audit: TDE DEK algorithms and `encryption_state` semantics, CLE algorithm deprecation (SQL 2016+ compat-120 gate), RC4 deprecation behavior (error 33128), NIST SP 800-131A 3DES claims, TLS 1.3 (SQL 2022+ / Windows Server 2022+) gating.
+
+**Corrections (2):**
+
+| Location | Before | After | Source |
+|----------|--------|-------|--------|
+| Thresholds table | TDE DEK critical algorithms "TRIPLE_DES_3KEY / RC4" | RC4 is not a valid DEK algorithm (DEK supports AES_128/192/256/TRIPLE_DES_3KEY only) | [CREATE DATABASE ENCRYPTION KEY](https://learn.microsoft.com/sql/t-sql/statements/create-database-encryption-key-transact-sql) |
+| A14 (+refs) | "DESX (56-bit key, brute-forceable)" | DESX is misnamed — keys created with ALGORITHM = DESX actually use Triple DES with a 192-bit key (deprecated) | [Choose an encryption algorithm](https://learn.microsoft.com/sql/relational-databases/security/encryption/choose-an-encryption-algorithm) |
+
+Spot-checked clean: `sys.dm_database_encryption_keys.encryption_state` in-progress states (2/4/5/6) with `percent_complete`, SQL 2016+ deprecation of all non-AES algorithms (compat ≤ 120 required for legacy), RC4/RC4_128 encryption failures at compat 110+ (error 33128), TDE cert private key limited to 3072 bits.
 
 ## Batch 4 — tsql-review, sqlplan-compare, sqlindex-advisor, sqlstats-review
 
