@@ -168,7 +168,17 @@ Spot-checked clean: `sys.dm_database_encryption_keys.encryption_state` in-progre
 
 ## Batch 4 — tsql-review, sqlplan-compare, sqlindex-advisor, sqlstats-review
 
-_Pending._
+Validated 2026-06-10. Verified T-SQL feature/version gates (scalar UDF inlining 2019+/compat 150, IS [NOT] DISTINCT FROM 2022+, STRING_AGG 2017+, APPROX_COUNT_DISTINCT 2019+, old-style `*=` joins removed in 2012, Ledger 2022+), missing-index DMV names/columns, STATISTICS IO output tokens (lob/segment/page server reads), plan-compare version gates (adaptive join 2017+, BMoR 2019+, PSP 2022+).
+
+**Corrections (5):**
+
+| Skill/Check | Before | After | Source |
+|-------------|--------|-------|--------|
+| tsql T81 (+refs) | JSON_OBJECT/JSON_ARRAY "compat level 160 only" | gated by the SQL Server 2022 engine, not compat level (unlike OPENJSON's compat-130 gate) | [JSON_OBJECT](https://learn.microsoft.com/sql/t-sql/functions/json-object-transact-sql), [JSON data](https://learn.microsoft.com/sql/relational-databases/json/json-data-sql-server) |
+| tsql T83 | `TRIM(chars FROM col)` "SQL 2022+" | SQL 2017+; only LEADING/TRAILING/BOTH need 2022 + compat 160 | [TRIM](https://learn.microsoft.com/sql/t-sql/functions/trim-transact-sql) |
+| sqlindex-advisor (DDL template + guidance, 3 spots) | "SQL 2019+ Standard supports online rebuild"; "RESUMABLE SQL 2017+" for CREATE INDEX | online index create/rebuild is Enterprise-only in every version through SQL 2022; resumable CREATE INDEX is 2019+ (rebuild 2017+), both require ONLINE | [Editions and supported features of SQL Server 2019/2022](https://learn.microsoft.com/sql/sql-server/editions-and-components-of-sql-server-2022), [CREATE INDEX](https://learn.microsoft.com/sql/t-sql/statements/create-index-transact-sql) |
+
+Validated clean: tsql-review deprecated-syntax claims, ANSI_NULLS/QUOTED_IDENTIFIER requirements for indexed views/filtered indexes, GETDATE/SYSDATETIME precision, sqlstats-review STATISTICS IO token formats, sqlindex-advisor missing-index DMV columns, sqlplan-compare C-check version gates.
 
 ## Batch 5 — sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqldeadlock-review, sqltrace-review
 

@@ -2869,7 +2869,7 @@ INSERT, UPDATE, or DELETE targeting a table identified as a ledger table, or a r
 ### T81 — JSON_OBJECT or JSON_ARRAY Below SQL 2022 Compat Level
 
 **What it means**
-`JSON_OBJECT(...)` and `JSON_ARRAY(...)` are ISO SQL 2023 standard functions introduced in SQL Server 2022 (compat level 160). They do not exist in compat level 150 or below — the function calls will fail at runtime with a function-not-found error on older compat levels. SQL 2022+ only.
+`JSON_OBJECT(...)` and `JSON_ARRAY(...)` are ISO SQL standard functions introduced in SQL Server 2022. They require the SQL Server 2022 engine — on older servers the calls fail with a function-not-found error (unlike `OPENJSON`, they are not gated on database compatibility level). SQL 2022+ only.
 
 **How to spot it**
 `JSON_OBJECT(key:value, ...)` or `JSON_ARRAY(val, ...)` syntax in the code.

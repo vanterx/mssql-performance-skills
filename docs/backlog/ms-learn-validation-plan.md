@@ -75,7 +75,7 @@ Statuses: `pending` → `in progress` → `validated` → `committed`
 | B1 — newest/least-audited | sqldbconfig-review (28), sqlmemory-review (20), sqldiskio-review (15) | committed |
 | B2 — high claim density | sqlwait-review (44), sqlquerystore-review (32), sqlprocstats-review (25) | committed |
 | B3 — largest | sqlplan-review (108), sqlencryption-review (112, spot-check vs prior audit) | committed |
-| B4 — T-SQL/plan | tsql-review (85), sqlplan-compare (20), sqlindex-advisor (10), sqlstats-review (27) | pending |
+| B4 — T-SQL/plan | tsql-review (85), sqlplan-compare (20), sqlindex-advisor (10), sqlstats-review (27) | committed |
 | B5 — infra/HA | sqlhadr-review (27), sqlclusterlog-review (30), sqlerrorlog-review (33), sqlspn-review (40), sqldeadlock-review (16), sqltrace-review (25) | pending |
 | B6 — dispatchers + cross-file | mssql-performance-review, sqlplan-batch (methodology only), VERSION_COMPATIBILITY.md version-gate rows | pending |
 

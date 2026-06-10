@@ -406,9 +406,9 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 - **Severity:** Warning
 - **Fix:** Ledger append-only tables reject `UPDATE` and `DELETE` by design — only `INSERT` is permitted. For updatable ledger tables, do not explicitly reference the hidden ledger columns (`ledger_start_transaction_id`, `ledger_end_transaction_id`, `ledger_start_sequence_number`) in DML — they are system-managed. Attempts to write to them raise an error.
 ### T81 — JSON_OBJECT or JSON_ARRAY Used Below SQL 2022 Compat Level
-- **Trigger:** `JSON_OBJECT(...)` or `JSON_ARRAY(...)` function call detected — SQL 2022+ (compat level 160) only; these functions do not exist in compat level 150 or below
+- **Trigger:** `JSON_OBJECT(...)` or `JSON_ARRAY(...)` function call detected — SQL 2022+ only; these functions require the SQL Server 2022 engine (unlike `OPENJSON`, they are not gated on database compatibility level)
 - **Severity:** Warning
-- **Fix:** Verify the target database compat level: `SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()`. If below 160, replace `JSON_OBJECT(key: value)` with `(SELECT key = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)` pattern. For JSON_ARRAY, use `(SELECT val FROM ... FOR JSON PATH)`.
+- **Fix:** Verify the target database compat level: `SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()`. If the server is below SQL Server 2022, replace `JSON_OBJECT(key: value)` with `(SELECT key = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)` pattern. For JSON_ARRAY, use `(SELECT val FROM ... FOR JSON PATH)`.
 ### T82 — STRING_AGG Without Deterministic Ordering
 - **Trigger:** `STRING_AGG(col, separator)` without a `WITHIN GROUP (ORDER BY ...)` clause where the query context implies a sorted result is expected — SQL 2017+
 - **Severity:** Info
@@ -416,7 +416,7 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 ### T83 — TRIM Misses Non-Space Whitespace
 - **Trigger:** `TRIM(col)` or `TRIM(' ' FROM col)` where the column may contain tab (`CHAR(9)`), carriage return (`CHAR(13)`), or newline (`CHAR(10)`) characters — SQL 2017+
 - **Severity:** Info
-- **Fix:** Bare `TRIM()` removes only ASCII space (CHAR(32)). To remove all whitespace characters: `LTRIM(RTRIM(REPLACE(REPLACE(REPLACE(col, CHAR(9), ''), CHAR(13), ''), CHAR(10), '')))`. In SQL 2022+, `TRIM(CHAR(9) + CHAR(13) + CHAR(10) + ' ' FROM col)` removes all four in one call.
+- **Fix:** Bare `TRIM()` removes only ASCII space (CHAR(32)). To remove all whitespace characters: `LTRIM(RTRIM(REPLACE(REPLACE(REPLACE(col, CHAR(9), ''), CHAR(13), ''), CHAR(10), '')))`. In SQL 2017+, `TRIM(CHAR(9) + CHAR(13) + CHAR(10) + ' ' FROM col)` removes all four in one call (the LEADING/TRAILING/BOTH keywords additionally require SQL 2022+ at compat level 160).
 ### T84 — APPROX_COUNT_DISTINCT Used for Exact Counting
 - **Trigger:** `APPROX_COUNT_DISTINCT(col)` in a context that implies exact counts are required: financial calculations, audit queries, referential integrity checks, or output labeled as exact — SQL 2019+
 - **Severity:** Warning
