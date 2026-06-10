@@ -645,7 +645,7 @@ regression of 600% indicates something changed in the memory-optimized table or 
    the native DLL.
 2. Check for schema changes to the underlying memory-optimized table: added/removed columns,
    index changes, or hash bucket count misconfiguration.
-3. Verify the SCHEMA_AND_DATA binding is intact:
+3. Verify the underlying table's durability setting is intact (DURABILITY = SCHEMA_AND_DATA):
    ```sql
    SELECT durability_desc, memory_optimized
    FROM sys.tables WHERE name = 'YourTable';
@@ -666,7 +666,7 @@ be optimized by the query processor. High CLR ratios indicate the procedure is d
 work that may be expressible more efficiently in native T-SQL.
 
 **How to spot it**
-Calculate the CLR ratio from proc_stats output:
+CLR time is not exposed in `sys.dm_exec_procedure_stats` — identify CLR procedures via `type = 'PC'` (CLR_STORED_PROCEDURE), and compute the CLR ratio from statement-level stats (`sys.dm_exec_query_stats.total_clr_time`, reported in microseconds) collected into the snapshot:
 ```sql
 SELECT object_name,
        total_clr_time_ms,

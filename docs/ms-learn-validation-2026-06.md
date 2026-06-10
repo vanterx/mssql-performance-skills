@@ -99,9 +99,34 @@ Claims checked: ~60 wait-type names and version gates, DMV columns (`sys.dm_os_w
 
 Validated clean: PAGEIOLATCH/LCK_M/CXPACKET/CXSYNC/THREADPOOL/WRITELOG/LOGBUFFER/LOGMGR_RESERVE_APPEND/SOS_SCHEDULER_YIELD/HADR_SYNC_COMMIT wait definitions, OPTIMIZE_FOR_SEQUENTIAL_KEY (2019+), Delayed Durability (2014+), Query Store DATA_FLUSH_INTERVAL_SECONDS default 900, MEMORY_OPTIMIZED TEMPDB_METADATA (2019+), MIN/MAX_GRANT_PERCENT (2012 SP3+), TempDB file guidance, sp_configure option names.
 
-### sqlquerystore-review, sqlprocstats-review
+### sqlquerystore-review (Q1–Q32) — validated 2026-06-10
 
-_Pending._
+Claims checked: Query Store DMV columns and units (runtime stats in microseconds, memory/tempdb in 8-KB pages), `execution_type` values, plan forcing procedures, IQP feedback catalog views and hints, PSP plan types, QS-for-secondaries availability, automatic tuning options.
+
+**Corrections (5):**
+
+| Check | Before | After | Source |
+|-------|--------|-------|--------|
+| Q26 (+refs) | `plan_type_desc IN ('Dispatcher', 'Custom')` | `('Dispatcher Plan', 'Query Variant Plan')` | [sys.query_store_plan](https://learn.microsoft.com/sql/relational-databases/system-catalog-views/sys-query-store-plan-transact-sql) |
+| Q26–Q29 (+refs) | `sp_query_store_set_hints @query_id = N'<id>'` | `@query_id = <id>` (parameter is bigint) | [sys.sp_query_store_set_hints] |
+| Q29 (+refs) | disable MGF via `DISABLE_BATCH_MODE_ADAPTIVE_JOINS`/`DISABLE_INTERLEAVED_EXECUTION_TVF` | `DISABLE_BATCH_MODE_MEMORY_GRANT_FEEDBACK`/`DISABLE_ROW_MODE_MEMORY_GRANT_FEEDBACK` | [Memory grant feedback](https://learn.microsoft.com/sql/relational-databases/performance/intelligent-query-processing-memory-grant-feedback) |
+| Q30 (+refs) | `SET QUERY_STORE = ON (READ_WRITE_DATABASES_ONLY = OFF)` | `SET QUERY_STORE FOR SECONDARY = ON` (SQL 2025+/Azure SQL DB; SQL 2022 = TF 12606 preview only) | [Query Store for readable secondaries](https://learn.microsoft.com/sql/relational-databases/performance/query-store-for-secondary-replicas) |
+| refs Q30 | "Requires SQL Server 2022+ and compat 160" | GA in SQL 2025/Azure SQL DB; 2022 is unsupported preview | same |
+
+Validated clean: execution_type 0/3/4 semantics, `avg_query_max_used_memory`/`avg_tempdb_space_used` in 8-KB pages, `avg_tempdb_space_used` absent on SQL 2016, wait stats SQL 2017+, `feature_desc` values (CE/Memory Grant/DOP/LAQ Feedback), `DISABLE_CE_FEEDBACK`/`DISABLE_DOP_FEEDBACK` hints, `PARAMETER_SENSITIVE_PLAN_OPTIMIZATION` DBSC, `sys.query_store_query_hints` columns, `sys.dm_db_tuning_recommendations`/`AUTOMATIC_TUNING (FORCE_LAST_GOOD_PLAN = ON)` (2017+), sp_query_store_* procedure names.
+
+### sqlprocstats-review (R1–R25) — validated 2026-06-10
+
+Claims checked: `sys.dm_exec_procedure_stats`/`sys.dm_exec_query_stats`/`sys.dm_exec_trigger_stats` columns, natively compiled proc identification and stats collection, CLR time exposure, Query Store cross-references.
+
+**Corrections (3):**
+
+| Check | Before | After | Source |
+|-------|--------|-------|--------|
+| R21 (+refs) | identify native procs via "EXECUTE AS + memory-optimized filegroup"; "SCHEMA_AND_DATA binding" | `sys.sql_modules.uses_native_compilation = 1`; stats require `sys.sp_xtp_control_proc_exec_stats`; tables' `DURABILITY = SCHEMA_AND_DATA`; STATISTICS IO reports 0 for memory-optimized tables | [Monitoring natively compiled procs](https://learn.microsoft.com/sql/relational-databases/in-memory-oltp/monitoring-performance-of-natively-compiled-stored-procedures) |
+| R22 (+refs) | `total_clr_time_ms` from proc stats | CLR time is not in `sys.dm_exec_procedure_stats`; use `type = 'PC'` and statement-level `sys.dm_exec_query_stats.total_clr_time` (µs) | [sys.dm_exec_procedure_stats](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-exec-procedure-stats-transact-sql), [sys.dm_exec_query_stats](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-exec-query-stats-transact-sql) |
+
+Validated clean: all delta/avg column derivations (worker/elapsed time in microseconds), `total_spills` (SQL 2017 CU3+ / 2016 SP2+), trigger/function stats DMVs, plan_handle semantics, sp_recompile, sp_query_store_force_plan.
 
 ## Batch 3 — sqlplan-review, sqlencryption-review
 
