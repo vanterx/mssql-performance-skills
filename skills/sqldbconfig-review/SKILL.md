@@ -91,7 +91,7 @@ SELECT
     numa_node_count,            -- SQL Server 2016 SP2+
     socket_count,               -- SQL Server 2016 SP2+
     cores_per_socket,           -- SQL Server 2016 SP2+
-    sql_memory_model_desc       -- SQL Server 2012 SP4+
+    sql_memory_model_desc       -- SQL Server 2012 SP4 / 2016 SP1+
 FROM sys.dm_os_sys_info;
 
 -- 5. VLF count per database (SQL Server 2016 SP2+)
@@ -179,7 +179,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 ### B8 — Lock Pages in Memory Active
 
-- **Trigger:** `sys.dm_os_sys_info.sql_memory_model_desc = 'LOCK_PAGES'` (applies SQL Server 2012 SP4+)
+- **Trigger:** `sys.dm_os_sys_info.sql_memory_model_desc = 'LOCK_PAGES'` (applies SQL Server 2012 SP4 / 2016 SP1+)
 - **Severity:** Info
 - **Fix:** LPIM prevents the OS from paging the buffer pool but can cause OS memory starvation on busy servers. Verify this is intentional and that Max Server Memory (B6) is correctly set. If LPIM is unintentional, remove the `SE_LOCK_MEMORY` privilege from the SQL Server service account and restart.
 
