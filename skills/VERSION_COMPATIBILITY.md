@@ -153,7 +153,7 @@ These checks require features introduced in SQL Server 2012.
 | N51 | `sqlplan-review` | Batch Mode on Rowstore | Batch Mode on Rowstore (SQL 2019+, compat level 150) |
 | N69 | `sqlplan-review` | IQP Approximate Count Distinct Active | `APPROX_COUNT_DISTINCT` IQP (SQL 2019+) |
 | V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2016+; primarily observable in Azure SQL/MI where log rate is tier-enforced) |
-| V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVSVERSIONSTORE_WAIT` / `ADR_CLEANUP_WAIT` (SQL 2019+) |
+| V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVS_CLEANUP_LOCK` (SQL 2019+) |
 | T79 | `tsql-review` | Scalar UDF Inlining Blocked — Blocking Construct | Scalar UDF inlining (SQL 2019+) |
 | T84 | `tsql-review` | APPROX_COUNT_DISTINCT Used for Exact Counting | `APPROX_COUNT_DISTINCT` (SQL 2019+) |
 | E29 | `sqlerrorlog-review` | ADR PVS Cleanup Stall | Accelerated Database Recovery (SQL 2019+) |

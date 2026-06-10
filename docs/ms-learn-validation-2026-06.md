@@ -77,6 +77,30 @@ Validated clean: DMV signature `(database_id|NULL, file_id|NULL)`, all columns, 
 
 ## Batch 2 — sqlwait-review, sqlquerystore-review, sqlprocstats-review
 
+### sqlwait-review (V1–V44) — validated 2026-06-10
+
+Claims checked: ~60 wait-type names and version gates, DMV columns (`sys.dm_os_wait_stats`, `sys.dm_exec_query_resource_semaphores`, `sys.dm_exec_query_memory_grants`), trace flags, IQP/feedback catalog views, full-text procedures, parallel redo architecture.
+
+**Corrections (13):**
+
+| Check | Before | After | Source |
+|-------|--------|-------|--------|
+| V3 (+refs) | CXCONSUMER "SQL 2016 SP2 CU3+" | SQL 2016 SP2 / SQL 2017 CU3+ | [sys.dm_os_wait_stats](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-os-wait-stats-transact-sql) |
+| V9 | "set Mixed Extent Allocations = 0 (SQL 2016+)" | SQL 2016+ TempDB always uses uniform extents; user DBs use `MIXED_PAGE_ALLOCATION` | [ALTER DATABASE SET options] |
+| V18 | log-rate governor waits gated "SQL 2019+" | `LOG_RATE_GOVERNOR`/`POOL_`/`INSTANCE_`/`IO_QUEUE_LIMIT`/`HADR_THROTTLE_LOG_RATE_GOVERNOR` are SQL 2016+, primarily Azure-observable; SE_REPL_* re-labelled Azure SQL DB [Unverified] | [sys.dm_os_wait_stats], [Azure SQL resource governance](https://learn.microsoft.com/azure/azure-sql/database/resource-limits-logical-server) |
+| V35 (+refs) | `sp_fulltext_service 'resource_usage', 1` to throttle crawl | `resource_usage` has no function in SQL 2008+; use `master_merge_dop` / off-peak scheduling | [sp_fulltext_service](https://learn.microsoft.com/sql/relational-databases/system-stored-procedures/sp-fulltext-service-transact-sql) |
+| V36 (+refs, +H-check in sqlhadr) | "PARALLEL_REDO_WORKER_POOL_SIZE" DBSC; "TF 3468 = extended parallel redo" | No such DBSC option; TF 3468 disables indirect checkpoints on tempdb. Parallel redo is automatic (≤100 threads instance-wide 2016–2019); TF 3459 disables it | [DBCC TRACEON trace flags](https://learn.microsoft.com/sql/t-sql/database-console-commands/dbcc-traceon-trace-flags-transact-sql), [Troubleshoot redo queuing](https://learn.microsoft.com/troubleshoot/sql/database-engine/availability-groups/troubleshooting-recovery-queuing-in-alwayson-availability-group) |
+| V37 (+capture query) | `total_reduced_memory_grant_count` column | column does not exist in `sys.dm_exec_query_resource_semaphores`; use `forced_grant_count` growth | [sys.dm_exec_query_resource_semaphores](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-exec-query-resource-semaphores-transact-sql) |
+| V38 | "ID 0 = regular (small) query pool, ID 1 = large query pool" | 0 = regular semaphore, 1 = small-query semaphore (< 5 MB grant, cost < 3) | same |
+| V41 (+refs, version matrix) | `feedback_type = 'PSP'` in sys.query_store_plan_feedback | PSP variants live in `sys.query_store_query_variant`; wait name `QUERY_OPTIMIZER_PSP_WAIT` marked [Unverified] | [sys.query_store_plan_feedback](https://learn.microsoft.com/sql/relational-databases/system-catalog-views/sys-query-store-plan-feedback) |
+| V42 (+refs) | unqualified "DOP-type entries" | `feature_desc = 'DOP Feedback'`; `DISABLE_DOP_FEEDBACK` hint / `DOP_FEEDBACK` DBSC; wait name marked [Unverified] | same + [DOP feedback](https://learn.microsoft.com/sql/relational-databases/performance/intelligent-query-processing-degree-parallelism-feedback) |
+| V43 (+refs, version matrix) | waits `PVSVERSIONSTORE_WAIT` / `ADR_CLEANUP_WAIT` | documented wait is `PVS_CLEANUP_LOCK`; added `sys.sp_persistent_version_cleanup` + `ADR Cleaner Thread Count` (SQL 2022+) | [Monitor and troubleshoot ADR](https://learn.microsoft.com/sql/relational-databases/accelerated-database-recovery-troubleshoot) |
+| V5 | "SQL 2012+ increased max outstanding log writes from 32 to 112" | marked [Unverified] (not found in MS Learn) | — |
+
+Validated clean: PAGEIOLATCH/LCK_M/CXPACKET/CXSYNC/THREADPOOL/WRITELOG/LOGBUFFER/LOGMGR_RESERVE_APPEND/SOS_SCHEDULER_YIELD/HADR_SYNC_COMMIT wait definitions, OPTIMIZE_FOR_SEQUENTIAL_KEY (2019+), Delayed Durability (2014+), Query Store DATA_FLUSH_INTERVAL_SECONDS default 900, MEMORY_OPTIMIZED TEMPDB_METADATA (2019+), MIN/MAX_GRANT_PERCENT (2012 SP3+), TempDB file guidance, sp_configure option names.
+
+### sqlquerystore-review, sqlprocstats-review
+
 _Pending._
 
 ## Batch 3 — sqlplan-review, sqlencryption-review
