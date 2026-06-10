@@ -22,7 +22,7 @@ Analyze SQL Server memory state and identify the root cause of memory pressure. 
 
 Accept any of:
 - Output from `sys.dm_os_memory_clerks` capture query below (paste the result grid)
-- Output from `sys.dm_os_ring_buffers` WHERE `ring_buffer_type = N'RING_BUFFER_OOM'` — OS memory pressure events
+- Output from `sys.dm_os_ring_buffers` WHERE `ring_buffer_type = N'RING_BUFFER_RESOURCE_MONITOR'` — memory pressure notifications (also accept `RING_BUFFER_OOM` records for out-of-memory events)
 - Output from `sys.dm_exec_query_memory_grants` for current grant queue state
 - PLE counter values from `sys.dm_os_performance_counters` or SSMS Activity Monitor
 - Output from `sys.dm_os_sys_memory` for OS-level memory state
@@ -158,12 +158,12 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 - **Fix:** Large plans typically come from queries with many joins, OR-heavy predicates, or dynamic SQL generating enormous statement trees. A 50 MB plan indicates a query that is too complex to compile efficiently. Review the query for: missing indexes that force large merge trees, OR predicates that could be rewritten as UNION, or dynamically constructed WHERE clauses that generate cartesian predicate combinations.
 
 ### O9 — Lock Memory Excessive
-- **Trigger:** `LOCK` clerk in `sys.dm_os_memory_clerks` has `pages_kb` > 100,000 KB (100 MB)
+- **Trigger:** `OBJECTSTORE_LOCK_MANAGER` clerk in `sys.dm_os_memory_clerks` has `pages_kb` > 100,000 KB (100 MB)
 - **Severity:** Warning if 100–499 MB; Critical if ≥ 500 MB
 - **Fix:** SQL Server allocates a lock structure per row/page/object lock held. Excessive lock memory means: (1) row-level locking on very large result sets — review transactions holding locks and add appropriate WHERE clauses; (2) lock escalation is disabled or failing — check `sys.dm_tran_locks` for escalation events; (3) long-running transactions holding many locks — pair with `/sqlwait-review` for LCK_ wait analysis.
 
 ### O10 — Plan Cache Churn (Low Hit Rate)
-- **Trigger:** Plan cache hit rate (= `Cache Hit Ratio` counter from `Exec Statistics`) < 90% over a sustained period
+- **Trigger:** Plan cache hit rate (= `Cache Hit Ratio` counter from the `Plan Cache` performance object) < 90% over a sustained period
 - **Severity:** Warning if 80–89%; Critical if < 80%
 - **Fix:** A cache hit rate below 90% means SQL Server is recompiling more than 10% of queries. Pair with O6 (single-use bloat) and O7 (compile rate) to determine whether the cause is ad-hoc queries or forced recompiles. Enabling `optimize for ad hoc workloads` is the first mitigation; review for parameterization improvements next.
 
@@ -177,7 +177,7 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 - **Fix:** Queries are queuing for memory grants, meaning the server has insufficient memory for parallel sort, hash join, and hash aggregate operations. Immediate: identify the queries holding large grants (column `granted_memory_kb`) and consider `OPTION (MAXDOP 1)` or `OPTION (MAX_GRANT_PERCENT = 10)` as emergency mitigations. Long-term: add indexes to eliminate hash operations; increase Max Server Memory if available physical memory allows (O20).
 
 ### O12 — Memory Grant Timeout
-- **Trigger:** Any row in `sys.dm_exec_query_memory_grants` has `timeout_sec` value indicating the query timed out waiting, OR error 701 ("There is insufficient system memory in resource pool 'default' to run this query") in the error log
+- **Trigger:** Error 8645 ("A timeout occurred while waiting for memory resources to execute the query in the resource pool") OR error 701 ("There is insufficient system memory in resource pool 'default' to run this query") in the error log. Note: `timeout_sec` in `sys.dm_exec_query_memory_grants` is the configured time-out before the query gives up its grant request, not an indicator that a timeout occurred
 - **Severity:** Critical
 - **Fix:** Queries are failing due to memory exhaustion. Immediate actions: (1) kill the sessions holding the largest grants; (2) set Resource Governor minimum memory grant percent lower; (3) add `OPTION (MIN_GRANT_PERCENT = 1)` to the offending query. Root cause: the query's estimated row count is drastically wrong, causing an oversized grant estimate — run `/sqlplan-review` to check N21 (cardinality estimate accuracy) and `/sqlstats-review` for stale statistics.
 
@@ -192,27 +192,27 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 - **Fix:** Resource Governor is configured but workload pools are not memory-bounded. Set `min_memory_percent` and `max_memory_percent` on high-priority pools (OLTP) to protect them from being crowded out by reporting workloads. Use `ALTER RESOURCE POOL` + `ALTER RESOURCE GOVERNOR RECONFIGURE`.
 
 ### O15 — Buffer Pool Extension (BPE) Active on SSDs
-- **Trigger:** `sys.dm_os_buffer_pool_extension_configuration` shows `state = 2` (Enabled)
+- **Trigger:** `sys.dm_os_buffer_pool_extension_configuration` shows `state = 5` (BUFFER POOL EXTENSION ENABLED)
 - **Severity:** Info
-- **Fix:** Buffer Pool Extension is enabled. Verify the BPE file is on a fast NVMe/SSD — placing it on a spinner negates any benefit and can worsen latency. Note: BPE was deprecated in SQL Server 2019 and removed in SQL Server 2022 — plan migration away from BPE to additional physical RAM.
+- **Fix:** Buffer Pool Extension is enabled. Verify the BPE file is on a fast NVMe/SSD — placing it on a spinner negates any benefit and can worsen latency. Note: BPE is available in Enterprise and Standard editions only (introduced SQL Server 2014); if the workload outgrows it, additional physical RAM outperforms BPE.
 
 ---
 
 ## Memory Clerk, OS Pressure, and Configuration Checks (O16–O20)
 
 ### O16 — ColumnStore Buffer Pool Pressure
-- **Trigger:** `COLUMNSTORE_OBJECT_POOL` clerk in `sys.dm_os_memory_clerks` has `pages_kb` > 25% of `committed_target_kb`
+- **Trigger:** `CACHESTORE_COLUMNSTOREOBJECTPOOL` clerk in `sys.dm_os_memory_clerks` has `pages_kb` > 25% of `committed_target_kb`
 - **Severity:** Warning if 25–49%; Critical if ≥ 50%
-- **Fix:** Columnstore query operations (delta store rowgroup memory, batch mode hash tables, segment dictionaries) are consuming a large share of SQL Server memory. This is expected on a ColumnStore-heavy workload but reduces buffer pool space. Mitigations: increase total RAM; if the server runs both OLTP and ColumnStore workloads, separate them with Resource Governor; ensure ColumnStore indexes only exist on tables that benefit from them — run `/tsql-review` to check for unnecessary column store usage (T-series checks for ColumnStore on low-cardinality tables).
+- **Fix:** Columnstore index structures (column segments and dictionaries cached for query execution) are consuming a large share of SQL Server memory. This is expected on a ColumnStore-heavy workload but reduces buffer pool space. Mitigations: increase total RAM; if the server runs both OLTP and ColumnStore workloads, separate them with Resource Governor; ensure ColumnStore indexes only exist on tables that benefit from them — run `/tsql-review` to check for unnecessary column store usage (T-series checks for ColumnStore on low-cardinality tables).
 
 ### O17 — In-Memory OLTP (XTP) Memory Pressure
-- **Trigger:** Any XTP clerk (`XTP_DEFAULT`, `XTP_PROCEDURE_CACHE`, `XDES`, `XTP_TRANSACTION_CONTEXT`) has combined `pages_kb` > 25% of `committed_target_kb`
+- **Trigger:** The `MEMORYCLERK_XTP` clerk has `pages_kb` > 25% of `committed_target_kb`
 - **Severity:** Warning if 25–49%; Critical if ≥ 50%
-- **Fix:** In-Memory OLTP tables have a fixed memory allocation per database (`ALTER DATABASE ... SET MEMORY_OPTIMIZED_ELEVATE_TO_SNAPSHOT OFF`). If XTP memory is unbounded and growing, check: `sys.dm_db_xtp_memory_consumers` for the largest consumers; whether durable in-memory tables have an appropriate checkpoint file footprint; whether non-durable in-memory tables are accumulating rows that are never flushed.
+- **Fix:** In-Memory OLTP memory is unbounded by default — bind the database to a Resource Governor resource pool with `MIN_MEMORY_PERCENT`/`MAX_MEMORY_PERCENT` set, using `sp_xtp_bind_db_resource_pool` (database must go offline/online for the binding to take effect). If XTP memory is growing, check: `sys.dm_db_xtp_memory_consumers` for the largest consumers; whether durable in-memory tables have an appropriate checkpoint file footprint; whether non-durable (`SCHEMA_ONLY`) in-memory tables are accumulating rows that are never cleaned up.
 
 ### O18 — OS Memory Pressure Notifications
-- **Trigger:** `sys.dm_os_ring_buffers WHERE ring_buffer_type = N'RING_BUFFER_OOM'` contains any records with `PROCESS_PHYSICAL_MEMORY_HIGH` or `VIRTUAL_MEMORY_HIGH` in the last 24 hours
-- **Severity:** Warning for PROCESS_PHYSICAL_MEMORY_HIGH; Critical for VIRTUAL_MEMORY_HIGH
+- **Trigger:** `sys.dm_os_ring_buffers WHERE ring_buffer_type = N'RING_BUFFER_RESOURCE_MONITOR'` contains records with `RESOURCE_MEMPHYSICAL_LOW` or `RESOURCE_MEMVIRTUAL_LOW` notifications in the last 24 hours
+- **Severity:** Warning for RESOURCE_MEMPHYSICAL_LOW; Critical for RESOURCE_MEMVIRTUAL_LOW
 - **Fix:** Windows is signaling SQL Server that physical or virtual memory is critically low. SQL Server will shrink its buffer pool in response, causing PLE drops (O1). Root causes: (1) Max Server Memory set too high — another process on the server needs memory; (2) physical RAM is genuinely insufficient for the workload; (3) memory leak in a third-party component. Review `sys.dm_os_memory_clerks` for unexpected non-buffer growth. Set Max Server Memory to leave at least 4–10% or 4 GB (whichever is larger) for the OS.
 
 ### O19 — Lock Pages in Memory (LPIM) Misconfiguration
@@ -275,7 +275,7 @@ See [skills/VERSION_COMPATIBILITY.md](../VERSION_COMPATIBILITY.md) for the full 
 | O12 Grant timeout | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | O13 Oversized grant | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | O14 RG pool | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| O15 BPE | — | — | ✓ | ✓ | ✓ | Deprecated | Removed | — |
+| O15 BPE | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | — |
 | O16 ColumnStore | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | O17 XTP/In-Memory | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | O18 OS pressure | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |

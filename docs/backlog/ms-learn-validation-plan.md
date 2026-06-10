@@ -72,7 +72,7 @@ Statuses: `pending` → `in progress` → `validated` → `committed`
 | Batch | Skills (check count) | Status |
 |-------|----------------------|--------|
 | Phase A | metadata count fixes + verify-docs.sh manifest checks | committed |
-| B1 — newest/least-audited | sqldbconfig-review (28), sqlmemory-review (20), sqldiskio-review (15) | pending |
+| B1 — newest/least-audited | sqldbconfig-review (28), sqlmemory-review (20), sqldiskio-review (15) | committed |
 | B2 — high claim density | sqlwait-review (44), sqlquerystore-review (32), sqlprocstats-review (25) | pending |
 | B3 — largest | sqlplan-review (108), sqlencryption-review (112, incl. howto/scripts spot-check) | pending |
 | B4 — T-SQL/plan | tsql-review (85), sqlplan-compare (20), sqlindex-advisor (10), sqlstats-review (27) | pending |
