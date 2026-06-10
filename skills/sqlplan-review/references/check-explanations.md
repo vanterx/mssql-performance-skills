@@ -547,7 +547,7 @@ ALTER DATABASE YourDB SET COMPATIBILITY_LEVEL = 150  -- SQL Server 2019
 
 2. **Use a hint to enable the new CE without changing compat level**:
 ```sql
-SELECT ... OPTION (USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'))
+SELECT ... OPTION (USE HINT('FORCE_DEFAULT_CARDINALITY_ESTIMATION'))
 ```
 
 3. **Test for regressions** — some queries genuinely run better on the old CE. Use Query Store to compare before/after.
@@ -982,7 +982,7 @@ The plan was compiled while `SET ROWCOUNT N` was active in the session. This dep
 
 **XML attribute**
 ```xml
-<StmtSimple RowCountAssignment="10" ... />
+<StmtSimple RowCountAssignment="10" ... />  <!-- [Unverified] attribute; also detect SET ROWCOUNT in the batch text -->
 ```
 
 **Fix**
@@ -2720,7 +2720,7 @@ Each columnstore segment stores the minimum and maximum value for its column. Be
 
 **XML indicators** *(requires actual plan)*
 ```xml
-<ColumnStoreIndexScan SegmentsPurged="0" SegmentsTotal="48" ... />
+<RunTimeCountersPerThread SegmentReads="48" SegmentSkips="0" ... />
 <!-- 0 out of 48 segments eliminated = full scan -->
 ```
 
@@ -2760,7 +2760,7 @@ If delta stores persist for hours or days with large row counts, the tuple mover
 
 **How to check** *(requires actual plan)*
 ```xml
-<ColumnStoreIndexScan DeltaStoreRows="150000" SegmentsPurged="12" ... />
+<RunTimeCountersPerThread DeltaStoreRows="150000" SegmentSkips="12" ... />
 ```
 
 **Fix**
@@ -3310,13 +3310,13 @@ Identify the application connection string or driver setting that sets non-stand
 ### N61 — High Estimated Average Row Size
 
 **What it means**  
-`EstimatedAvgRowSize` is the optimizer's estimate of how wide (in bytes) each row is as it passes through this operator. When rows are very wide, every sort and hash operator must allocate one or more 8-KB buffer pages *per row* — dramatically multiplying memory grant requirements. A 10,000-byte row in a sort of 1 million rows requires ~10 GB of sort memory.
+`AvgRowSize` is the optimizer's estimate of how wide (in bytes) each row is as it passes through this operator. When rows are very wide, every sort and hash operator must allocate one or more 8-KB buffer pages *per row* — dramatically multiplying memory grant requirements. A 10,000-byte row in a sort of 1 million rows requires ~10 GB of sort memory.
 
 **How to spot it**  
-`EstimatedAvgRowSize` attribute on `<RelOp>` elements.
+`AvgRowSize` attribute on `<RelOp>` elements (SSMS displays it as "Estimated Row Size").
 
 ```xml
-<RelOp PhysicalOp="Sort" EstimatedAvgRowSize="12480" ...>
+<RelOp PhysicalOp="Sort" AvgRowSize="12480" ...>
 ```
 12,480 bytes = 1.5 pages per row. Every sort row requires at least 2 buffer pages.
 
@@ -3506,7 +3506,7 @@ INNER HASH JOIN dbo.OrderLines ol ON ol.OrderId = o.OrderId
 SQL Server 2022 PSP (Parameter Sensitive Plan) optimization detected significant data skew on a parameterized predicate and compiled a dispatcher plan with multiple variants — one per distinct parameter range. Each variant is a full execution plan optimized for a specific row count range (e.g., low-selectivity vs high-selectivity parameter values). SQL 2022+ with compat level 160 only.
 
 **How to spot it**
-`ParameterSensitivePredicate` element on `StmtSimple`, or `StatementType="ParameterSensitivity"` in the plan XML.
+`ParameterSensitivePredicate` element, or a `<Dispatcher>` element, in the plan XML.
 
 **Fix**
 Check `sys.query_store_query_variant` to verify variants and their boundaries. If a boundary is poorly calibrated, use `sys.sp_query_store_set_hints` to pin a specific plan for a parameter range. Related: N68.
@@ -3533,10 +3533,10 @@ FROM sys.dm_tran_persistent_version_store_stats;
 ### S36 — Cardinality Estimation Feedback Applied
 
 **What it means**
-CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardinality estimates across executions when the CE model consistently underestimates or overestimates row counts. When `ContainsCEFeedback="true"` appears on a plan, the estimates reflect the engine's learned corrections rather than the base CE model. SQL 2022+ only.
+CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardinality estimates across executions when the CE model consistently underestimates or overestimates row counts. When `ContainsCEFeedback="true"` [Unverified attribute — confirm via sys.query_store_plan_feedback feature_desc = 'CE Feedback'] appears on a plan, the estimates reflect the engine's learned corrections rather than the base CE model. SQL 2022+ only.
 
 **How to spot it**
-`ContainsCEFeedback="true"` attribute on `StmtSimple` in the plan XML.
+`ContainsCEFeedback="true"` attribute on `StmtSimple` in the plan XML [Unverified — cross-check `sys.query_store_plan_feedback`].
 
 **Fix**
 CE Feedback is generally beneficial. Monitor query stability using Query Store: if the plan shape or performance oscillates after feedback applies, the workload characteristics are changing too frequently for the feedback model to converge. Related: Q27 in sqlquerystore-review.
@@ -3549,7 +3549,7 @@ CE Feedback is generally beneficial. Monitor query stability using Query Store: 
 SQL Server 2022 supports ordered clustered columnstore indexes (`CREATE CLUSTERED COLUMNSTORE INDEX ... ORDER (col)`). When a query's WHERE predicate matches the ORDER column, the engine can skip entire row groups without decompressing them — segment elimination. This check fires as a positive signal when at least half the segments were pruned. SQL 2022+ only.
 
 **How to spot it**
-Columnstore Index Scan with `Ordered="true"` and `SegmentsPurged >= SegmentsTotal * 0.5` in the actual plan.
+Columnstore Index Scan with `Ordered="true"` and `SegmentSkips >= (SegmentReads + SegmentSkips) * 0.5` in the actual plan.
 
 **Fix**
 No fix needed when this fires — it is confirmatory. If pruning is lower than expected, verify the filter predicate matches the column in the `ORDER (...)` clause exactly (including data type). Related: N7 (segment read count for unordered CS), N50 (delta store read).
@@ -3575,7 +3575,7 @@ Use `sys.query_store_query_variant` to inspect variant boundaries. Use Query Sto
 `APPROX_COUNT_DISTINCT` (SQL 2019+ IQP) computes distinct counts using HyperLogLog — much faster than `COUNT(DISTINCT)` for large datasets, with approximately 2% error. When this check fires, it confirms IQP is using HLL approximation rather than exact distinct counting. SQL 2019+ only.
 
 **How to spot it**
-`ApproxCountDistinctHll` reference or `COUNT(DISTINCT)` with `InternalInfo` showing HLL usage in the plan XML.
+An aggregate operator whose defined values or statement text reference `APPROX_COUNT_DISTINCT`.
 
 **Fix**
 If approximate results are acceptable (dashboards, analytics), this is a positive optimization — no action needed. If exact count semantics are required (financial reconciliation, integrity validation), replace `APPROX_COUNT_DISTINCT` with `COUNT(DISTINCT col)`. Related: T84 in tsql-review.
@@ -3585,10 +3585,10 @@ If approximate results are acceptable (dashboards, analytics), this is a positiv
 ### N70 — DOP Feedback Adjusted Plan
 
 **What it means**
-IQP DOP Feedback (SQL 2022) monitors parallel query thread utilization across executions. When a query consistently underutilizes its parallel threads, DOP Feedback reduces the degree of parallelism at compile time to free resources for other queries. The `DegreeOfParallelismFeedback` element in the plan confirms the adjustment. SQL 2022+ only.
+IQP DOP Feedback (SQL 2022) monitors parallel query thread utilization across executions. When a query consistently underutilizes its parallel threads, DOP Feedback reduces the degree of parallelism at compile time to free resources for other queries. The `DegreeOfParallelismFeedback` element in the plan confirms the adjustment [Unverified — cross-check `sys.query_store_plan_feedback` with feature_desc = 'DOP Feedback']. SQL 2022+ only.
 
 **How to spot it**
-`DegreeOfParallelismFeedback` element present in the plan XML.
+`DegreeOfParallelismFeedback` element present in the plan XML [Unverified].
 
 **Fix**
 DOP Feedback is generally beneficial. Verify the adjusted DOP is improving elapsed time and reducing CXPACKET waits. If performance worsened after adjustment, disable feedback for the specific query using `OPTION (USE HINT ('DISABLE_DOP_FEEDBACK'))`. Related: S8 (DOP forcing), S9 (DOP threshold).

@@ -130,6 +130,31 @@ Validated clean: all delta/avg column derivations (worker/elapsed time in micros
 
 ## Batch 3 — sqlplan-review, sqlencryption-review
 
+### sqlplan-review (S1–S36, N1–N72) — validated 2026-06-10
+
+Claims checked: showplan XML elements/attributes across all 108 checks, USE HINT names, IQP feature gates, columnstore runtime counters, statistics metadata.
+
+**Corrections (12):**
+
+| Check | Before | After | Source |
+|-------|--------|-------|--------|
+| S10 (+refs) | fix via `ENABLE_QUERY_OPTIMIZER_HOTFIXES` | that hint = TF 4199 (QO hotfixes); correct hints are `FORCE_DEFAULT_CARDINALITY_ESTIMATION` / `QUERY_OPTIMIZER_COMPATIBILITY_LEVEL_n` (2017 CU10+) | [Query hints USE HINT list](https://learn.microsoft.com/sql/t-sql/queries/hints-transact-sql-query), [Cardinality Estimation](https://learn.microsoft.com/sql/relational-databases/performance/cardinality-estimation-sql-server) |
+| S25 | `ContainsInterleavedExecutionCandidates` on StmtSimple | attribute is on the `QueryPlan` node; `IsInterleavedExecuted` on `RuntimeInformation` | [IQP details](https://learn.microsoft.com/sql/relational-databases/performance/intelligent-query-processing-details) |
+| S34 (+refs) | `StatementType="ParameterSensitivity"` | `<Dispatcher>` element (documented PSP showplan element) | [PSP optimization](https://learn.microsoft.com/sql/relational-databases/performance/parameter-sensitive-plan-optimization) |
+| N13 | "SQL 2019+ compat 150 interleaved execution" | SQL 2017+ compat 140+ | [IQP details] |
+| N47 | window frame attributes `FrameType`/`StartBound`/`EndBound` | detect via Window Spool operator + `RANGE UNBOUNDED PRECEDING` in statement text | — |
+| N49/N67 (+refs) | `SegmentsPurged`/`SegmentsTotal` | runtime counters are `SegmentReads`/`SegmentSkips` ("segment reads N, segment skipped M") | [Columnstore query performance](https://learn.microsoft.com/sql/relational-databases/indexes/columnstore-indexes-query-performance) |
+| N69 (+refs) | `ApproxCountDistinctHll`/`InternalInfo` trigger; `DISABLE_APPROXIMATE_QUERY` hint | detect `APPROX_COUNT_DISTINCT` in defined values/statement text; no such USE HINT exists — fix is replacing the function | [USE HINT list] |
+| N61 + thresholds (+refs) | `EstimatedAvgRowSize` attribute | showplan attribute is `AvgRowSize` (SSMS label "Estimated Row Size") | showplan references |
+| N72 | `PERSIST_SAMPLE_PERCENT` "SQL 2016 SP1+" | SQL 2016 SP1 CU4+ | [UPDATE STATISTICS] |
+| S22 (+refs) | `RowCountAssignment` attribute | marked [Unverified] (not in documented showplan references); also detect SET ROWCOUNT in batch text | — |
+| S36 (+refs) | `ContainsCEFeedback` attribute | marked [Unverified]; reliable signal is `sys.query_store_plan_feedback` feature_desc = 'CE Feedback' | — |
+| N70 (+refs) | `DegreeOfParallelismFeedback` element | marked [Unverified]; reliable signal is plan_feedback feature_desc = 'DOP Feedback' | — |
+
+Validated clean: NonParallelPlanReason values, MemoryGrantInfo attributes (GrantedMemory/MaxUsedMemory/GrantWaitTime/RequestedMemory/SerialRequiredMemory), StatementOptmEarlyAbortReason values, PlanAffectingConvert ConvertIssue="Seek Plan"/"Cardinality", SpillToTempDb/SpillLevel, NoJoinPredicate, ColumnsWithNoStatistics, UnmatchedIndexes, EstimateRowsWithoutRowGoal, AdaptiveThresholdRows/IsAdaptive, RunTimeCountersPerThread (ActualElapsedms/ActualRows/ActualRowsRead), ParameterCompiledValue/ParameterRuntimeValue, `DISABLE_OPTIMIZER_ROWGOAL` (=TF 4138), `DISABLE_PARAMETER_SNIFFING` (=TF 4136), STRING_SPLIT 50-row estimate + enable_ordinal (2022+), MSTVF 100/1-row fixed estimates, StatisticsInfo/@SamplingPercent, batch mode on rowstore (2019+, BATCH_MODE_ON_ROWSTORE DBSC).
+
+### sqlencryption-review
+
 _Pending._
 
 ## Batch 4 — tsql-review, sqlplan-compare, sqlindex-advisor, sqlstats-review
