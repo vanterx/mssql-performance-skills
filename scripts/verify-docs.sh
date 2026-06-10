@@ -841,6 +841,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Check 42: Plugin manifest skill count matches actual skill directories
+# ---------------------------------------------------------------------------
+echo ""
+echo "[42 ] Plugin manifest skill counts match actual"
+check42_ok=1
+for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$skill_dirs" ]; then
+            fail "42: $manifest description says '$stated SQL Server performance tuning skills' but there are $skill_dirs skill directories"
+            check42_ok=0
+        fi
+    done < <(grep -o '[0-9]\+ SQL Server performance tuning skills' "$manifest" 2>/dev/null | grep -o '^[0-9]*')
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$skill_dirs" ]; then
+            fail "42: $manifest description says 'across $stated skills' but there are $skill_dirs skill directories"
+            check42_ok=0
+        fi
+    done < <(grep -o 'across [0-9]\+ skills' "$manifest" 2>/dev/null | grep -o '[0-9]*')
+done
+[ "$check42_ok" -eq 1 ] && pass "Plugin manifest skill counts match $skill_dirs skill directories"
+
+# ---------------------------------------------------------------------------
+# Check 43: Plugin manifest check count matches actual total
+# ---------------------------------------------------------------------------
+echo ""
+echo "[43 ] Plugin manifest check counts match actual"
+check43_ok=1
+for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$total_checks" ]; then
+            fail "43: $manifest says '$stated checks across' but actual total is $total_checks"
+            check43_ok=0
+        fi
+    done < <(grep -o '[0-9]\+ checks across' "$manifest" 2>/dev/null | grep -o '^[0-9]*')
+done
+[ "$check43_ok" -eq 1 ] && pass "Plugin manifest check counts match $total_checks total checks"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

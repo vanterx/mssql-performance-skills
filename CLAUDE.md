@@ -18,7 +18,7 @@ Provides twenty slash-command skills — nineteen specialised review skills plus
 
 | File | Purpose |
 |------|---------|
-| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 15 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 19 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 85 checks (T1–T85) — structural, correctness, security, deprecated syntax, performance smells, SQL 2017–2022 modern syntax |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
@@ -80,12 +80,12 @@ Provides twenty slash-command skills — nineteen specialised review skills plus
 | File | Purpose |
 |------|---------|
 | [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 20 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 613-check ID reference |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 697-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 669 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 697 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
-| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 18 SKILL.md files are discovered by the plugin system |
+| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 20 SKILL.md files are discovered by the plugin system |
 | [mcp-server/src/index.ts](mcp-server/src/index.ts) | MCP server entry point — CORS preflight, `GET /health`, error handling, then Cloudflare Workers fetch handler using `WebStandardStreamableHTTPServerTransport` (stateless, one server per request) |
 | [mcp-server/src/skill-loader.ts](mcp-server/src/skill-loader.ts) | `SkillMeta` interface — no fs access; all skill data pre-bundled into `skills-data.ts` at deploy time |
 | [mcp-server/src/skills-data.ts](mcp-server/src/skills-data.ts) | Generated file — run `npm run bundle` to regenerate from `skills/*/SKILL.md`. Do not edit manually |
