@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "PLE is 87 seconds and falling. Memory clerks show LOCK at 420 MB and COLUMNSTORE_OBJECT_POOL at 38% of committed memory. Max Server Memory is not set. What is happening and how do I fix it?",
+      "prompt": "PLE is 87 seconds and falling. Memory clerks show OBJECTSTORE_LOCK_MANAGER at 420 MB and CACHESTORE_COLUMNSTOREOBJECTPOOL at 38% of committed memory. Max Server Memory is not set. What is happening and how do I fix it?",
       "expected_output": "O1 Critical (PLE 87 s), O9 Warning (LOCK clerk 420 MB), O16 Critical (ColumnStore 38%), O20 Critical (Max Server Memory default). Root cause hypothesis: unbounded Max Server Memory allowing ColumnStore and lock clerk to starve the buffer pool. Fix priority: O20 first (set Max Server Memory), O16 second (review ColumnStore index usage), O9 third (investigate long-running transactions).",
       "files": []
     },

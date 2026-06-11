@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 697 checks in this library apply to your SQL Server version.
+Which of the 721 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -36,6 +36,9 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 | `sqlquerystore-review` | ✗ | ✗ | ✗ | ◑ | ◑ | ◑ | ✓ | ✓ | ✓ |
 | `sqlencryption-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ◑ | ◑ |
 | `sqldbconfig-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ✓ | ◑ | ◑ |
+| `sqlmemory-review` | ◑ | ◑ | ✓ | ✓ | ✓ | ✓ | ✓ | ◑ | ◑ |
+| `sqldiskio-review` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ◑ | ◑ |
+| `sqlbootstraplog-review` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
 | `mssql-performance-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ◑ | ◑ |
 
 **Legend:**
@@ -51,22 +54,25 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Azure AD–only auth; K32–K33 are Azure-specific.
 - `sqlencryption-review` on SQL 2008 R2: A9–A16 (AE, SQL 2016+), A22–A25 (backup enc, SQL 2014+), A82 (SSISDB, SQL 2012+), A87/A88 (DDM, SQL 2016+) not applicable. On SQL 2012: A82 applicable, A87/A88 still skipped. On SQL 2016: A9–A16, A87/A88 applicable; A10/A12 (enclave), A63–A67 (AE Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76, A94 (TLS 1.3, Ledger, GDPR append-only, SQL 2022+) skipped. Azure SQL DB/MI: A50, A51, A77–A80, A101, A112 are Azure-specific; A53 (`sys.sensitivity_classifications`) available SQL 2019+/Azure.
 - `sqldbconfig-review` on SQL 2008 R2–SQL 2016 (pre-SP2): B8 (`sql_memory_model_desc` — SQL 2012 SP4+), B22 (`sys.dm_server_services.instant_file_initialization_enabled` — SQL 2012 SP4+), and B19 via `sys.dm_db_log_info` (SQL 2016 SP2+) fall back to ERRORLOG or `DBCC LOGINFO` — mark as [Unverified] if those sources are not included in the input. B1/B3 `numa_node_count` in `sys.dm_os_sys_info` requires SQL 2016 SP2+; use `cpu_count` as a proxy on older versions. All B10–B18 checks (sys.databases columns) are available SQL 2005+. Azure SQL DB: most instance-level sp_configure checks (B1–B9, B24–B28) are not user-configurable and should be skipped; B10–B18 database-level checks apply.
+- `sqlmemory-review`: O3 (per-NUMA-node PLE) requires SQL 2012+. O15 (Buffer Pool Extension) applies SQL 2014+ (Enterprise/Standard editions only). O16 (ColumnStore clerk) and O17 (XTP clerk) require SQL 2014+. On Azure SQL DB: O3, O15, O18 (OS-level pressure) do not apply, and O19 (LPIM)/O20 (Max Server Memory) are platform-managed.
+- `sqlbootstraplog-review`: analyzes the Windows Setup Bootstrap log layout — applies to SQL Server on Windows only. U20 (`SQLSVCINSTANTFILEINIT`) and U21 (setup-time TempDB parameters) require SQL 2016+ setup; U1–U19/U22–U24 apply to all on-premises versions. Azure SQL DB/MI have no user-visible setup: ✗.
+- `sqldiskio-review`: all Z checks rely on `sys.dm_io_virtual_file_stats`, available on every supported version. On Azure SQL DB: file placement checks (Z6–Z8, Z10) are platform-managed and skipped; Z11/Z14 (auto-growth event trace) are partial because the default trace is not exposed.
 
 ---
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 697 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 721 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **625** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **595** | −30 SQL 2022-only checks unavailable (includes A59, A73–A76, A94) |
-| SQL Server 2017 | **573** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **560** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **526** | −34 more: all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+) unavailable |
-| SQL Server 2012 | **520** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **460** | −60 more: all 57 Always On AG/WSFC checks unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
+| SQL Server 2022 | **649** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **619** | −30 SQL 2022-only checks unavailable (includes A59, A73–A76, A94) |
+| SQL Server 2017 | **597** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **584** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **548** | −36 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+) unavailable |
+| SQL Server 2012 | **542** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **482** | −60 more: all 57 Always On AG/WSFC checks unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -108,6 +114,8 @@ These checks require features introduced in SQL Server 2012.
 | Check | Skill | Name | Feature |
 |-------|-------|------|---------|
 | S10 | `sqlplan-review` | Downlevel Cardinality Estimator | Compat level 130 CE baseline (SQL 2016+) |
+| U20 | `sqlbootstraplog-review` | IFI Not Granted at Setup | `SQLSVCINSTANTFILEINIT` setup parameter (SQL 2016+) |
+| U21 | `sqlbootstraplog-review` | TempDB Setup Parameters Undersized | Setup-time TempDB parameters `SQLTEMPDB*` (SQL 2016+) |
 | H25 | `sqlhadr-review` | Parallel Redo Worker Saturation | Parallel redo for AG secondaries (SQL 2016+) |
 | K36 | `sqlspn-review` | Distributed AG Forwarder Listener SPN Missing | Distributed Availability Groups (SQL 2016+) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock | Temporal tables only (SQL 2016+); see SQL 2022+ for Ledger aspect |
@@ -149,7 +157,7 @@ These checks require features introduced in SQL Server 2012.
 | N51 | `sqlplan-review` | Batch Mode on Rowstore | Batch Mode on Rowstore (SQL 2019+, compat level 150) |
 | N69 | `sqlplan-review` | IQP Approximate Count Distinct Active | `APPROX_COUNT_DISTINCT` IQP (SQL 2019+) |
 | V18 | `sqlwait-review` | Poison / Throttle Waits — LOG_RATE_GOVERNOR | `LOG_RATE_GOVERNOR` / `INSTANCE_LOG_RATE_GOVERNOR` (SQL 2016+; primarily observable in Azure SQL/MI where log rate is tier-enforced) |
-| V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVSVERSIONSTORE_WAIT` / `ADR_CLEANUP_WAIT` (SQL 2019+) |
+| V43 | `sqlwait-review` | ADR PVS Cleanup Worker Wait | `PVS_CLEANUP_LOCK` (SQL 2019+) |
 | T79 | `tsql-review` | Scalar UDF Inlining Blocked — Blocking Construct | Scalar UDF inlining (SQL 2019+) |
 | T84 | `tsql-review` | APPROX_COUNT_DISTINCT Used for Exact Counting | `APPROX_COUNT_DISTINCT` (SQL 2019+) |
 | E29 | `sqlerrorlog-review` | ADR PVS Cleanup Stall | Accelerated Database Recovery (SQL 2019+) |
@@ -257,7 +265,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**460 of 669 checks (68.8%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**482 of 721 checks (66.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
@@ -281,12 +289,12 @@ These checks analyze behaviors present since SQL Server 2008 R2:
 
 | "I'm on SQL…" | Run these skills without restrictions | Skip or expect partial results |
 |---|---|---|
-| **2022** | All 16 skills | 10 Azure-specific checks silently skip on-premises |
-| **2019** | All 16 skills | 29 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback, TLS 1.3) skip |
-| **2017** | All 16 skills | Above + 22 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata, Always Encrypted Advanced) skip |
-| **2016** | All 16 skills | Above + 13 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
-| **2014** | 15 skills (no `sqlquerystore-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
-| **2012** | 15 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available); A22–A25, A72 (Backup Encryption, SQL 2014+) unavailable |
-| **2008 R2** | 13 skills (no `sqlhadr-review`, `sqlclusterlog-review`, `sqlquerystore-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23) |
-| **Azure SQL DB** | `tsql-review`, `sqlstats-review`, `sqlplan-review`, `sqlindex-advisor`, `sqldeadlock-review`, `sqlplan-batch`, `sqlplan-compare`, `sqlquerystore-review`, `sqlprocstats-review`, `sqltrace-review`, `sqlwait-review` | `sqlhadr-review`, `sqlclusterlog-review` not applicable; `sqlspn-review` partial (K1–K31 not relevant for Entra-only auth) |
-| **Azure SQL MI** | All 16 skills | `sqlhadr-review`/`sqlclusterlog-review` partial (MI uses managed HA, not all WSFC constructs apply) |
+| **2022** | All 21 skills | Azure-specific checks silently skip on-premises |
+| **2019** | All 21 skills | 29 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback, TLS 1.3) skip |
+| **2017** | All 21 skills | Above + 22 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata, Always Encrypted Advanced) skip |
+| **2016** | All 21 skills | Above + 13 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
+| **2014** | 20 skills (no `sqlquerystore-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
+| **2012** | 20 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available); A22–A25, A72 (Backup Encryption, SQL 2014+); O15–O17 (BPE/ColumnStore/XTP clerks, SQL 2014+) unavailable |
+| **2008 R2** | 18 skills (no `sqlhadr-review`, `sqlclusterlog-review`, `sqlquerystore-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23); O3 (per-NUMA PLE, SQL 2012+) |
+| **Azure SQL DB** | `tsql-review`, `sqlstats-review`, `sqlplan-review`, `sqlindex-advisor`, `sqldeadlock-review`, `sqlplan-batch`, `sqlplan-compare`, `sqlquerystore-review`, `sqlprocstats-review` | `sqlhadr-review`, `sqlclusterlog-review` not applicable; `sqltrace-review`/`sqlwait-review` partial (wait types and XE event classes differ); `sqlspn-review` partial (K1–K31 not relevant for Entra-only auth); `sqlerrorlog-review`, `sqlencryption-review`, `sqldbconfig-review`, `sqlmemory-review`, `sqldiskio-review`, `mssql-performance-review` partial (instance-level settings are platform-managed); `sqlbootstraplog-review` not applicable (no user-visible setup) |
+| **Azure SQL MI** | 20 skills (no `sqlbootstraplog-review` — no user-visible setup) | `sqlhadr-review`/`sqlclusterlog-review` partial (MI uses managed HA, not all WSFC constructs apply) |

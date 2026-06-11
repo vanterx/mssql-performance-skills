@@ -234,7 +234,7 @@ ORDER BY size_in_bytes DESC;
 
 ### O9 — Lock Memory Excessive
 
-**What it means:** SQL Server's lock manager allocates a structure per lock held (row, page, object, database). Heavy transactional workloads or long-running transactions holding many locks inflate the LOCK clerk.
+**What it means:** SQL Server's lock manager allocates a structure per lock held (row, page, object, database). Heavy transactional workloads or long-running transactions holding many locks inflate the OBJECTSTORE_LOCK_MANAGER clerk.
 
 **How to spot it:**
 ```sql
@@ -297,7 +297,7 @@ queued_grants
 
 ### O12 — Memory Grant Timeout
 
-**What it means:** A query waited longer than its timeout for a memory grant and failed. This is the most severe memory grant condition — queries are not completing.
+**What it means:** A query waited longer than its timeout for a memory grant and failed with error 8645 ("A timeout occurred while waiting for memory resources to execute the query"). This is the most severe memory grant condition — queries are not completing.
 
 **Fix options (all urgent):**
 1. **Kill the sessions holding the largest grants** using `KILL <session_id>`.
@@ -346,7 +346,7 @@ ORDER BY granted_memory_kb DESC;
 
 ### O15 — Buffer Pool Extension Active
 
-**What it means:** Buffer Pool Extension (BPE) extends the buffer pool onto an SSD-backed file. While it can improve read performance when RAM is insufficient, it was deprecated in SQL 2019 and removed in SQL 2022. If it's active on a spinner, performance will be worse than without it.
+**What it means:** Buffer Pool Extension (BPE) extends the buffer pool onto an SSD-backed file. While it can improve read performance when RAM is insufficient, it is available in Enterprise and Standard editions only and adding physical RAM generally outperforms it. If it's active on a spinner, performance will be worse than without it.
 
 **Fix options:**
 1. **Verify the BPE file is on NVMe/fast SSD**: check `sys.dm_os_buffer_pool_extension_configuration`.
@@ -396,14 +396,14 @@ ORDER BY mb DESC;
 
 ### O18 — OS Memory Pressure Notifications
 
-**What it means:** Windows sends SQL Server a low-memory notification via the `RING_BUFFER_OOM` ring buffer. SQL Server responds by shrinking the buffer pool, which can cause a PLE crash to near-zero within seconds.
+**What it means:** Windows sends SQL Server a low-memory notification, which the Resource Monitor task records in the `RING_BUFFER_RESOURCE_MONITOR` ring buffer (`RESOURCE_MEMPHYSICAL_LOW` / `RESOURCE_MEMVIRTUAL_LOW`). SQL Server responds by shrinking the buffer pool, which can cause a PLE crash to near-zero within seconds.
 
 **How to spot it:**
 ```sql
 SELECT CAST(record AS XML).value('(/Record/ResourceMonitor/Notification)[1]', 'varchar(30)') AS notification,
        DATEADD(ms, -1 * (SELECT cpu_ticks / (cpu_ticks/ms_ticks) FROM sys.dm_os_sys_info) + timestamp, GETDATE()) AS event_time
 FROM sys.dm_os_ring_buffers
-WHERE ring_buffer_type = N'RING_BUFFER_OOM';
+WHERE ring_buffer_type = N'RING_BUFFER_RESOURCE_MONITOR';
 ```
 
 **Fix options:**
@@ -463,15 +463,15 @@ sp_configure 'max server memory (MB)', 220160; RECONFIGURE;
 | O6 | Plan Cache | Single-use plans ≥ 30% of cache | Warn; ≥ 60% = Critical |
 | O7 | Plan Cache | Compilations/sec > 500 | Warn; > 1,000 = Critical |
 | O8 | Plan Cache | Single plan > 10 MB | Warn; > 50 MB = Critical |
-| O9 | Clerk | LOCK clerk > 100 MB | Warn; > 500 MB = Critical |
+| O9 | Clerk | OBJECTSTORE_LOCK_MANAGER > 100 MB | Warn; > 500 MB = Critical |
 | O10 | Plan Cache | Cache hit rate < 90% | Warn; < 80% = Critical |
 | O11 | Grants | Any session waiting for grant | Warn (1–5); Critical (> 5) |
-| O12 | Grants | Grant timeout / error 701 | Critical |
+| O12 | Grants | Grant timeout (error 8645) / error 701 | Critical |
 | O13 | Grants | Used/granted ratio < 25% | Warning |
 | O14 | Resource Gov | Pool max = 100% with RG enabled | Warning |
 | O15 | BPE | BPE active | Info |
 | O16 | Clerk | ColumnStore > 25% of target | Warn; > 50% = Critical |
 | O17 | Clerk | XTP > 25% of target | Warn; > 50% = Critical |
-| O18 | OS | RING_BUFFER_OOM events < 24h | Warn / Critical |
+| O18 | OS | RING_BUFFER_RESOURCE_MONITOR low-memory events < 24h | Warn / Critical |
 | O19 | Config | LPIM off on > 32 GB server | Warning |
 | O20 | Config | Max Server Memory = default | Critical |

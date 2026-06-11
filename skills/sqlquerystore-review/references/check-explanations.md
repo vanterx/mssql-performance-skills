@@ -749,7 +749,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP';
 **Fix options:**
 1. Check variant plan stability: if the active variant switches frequently, the distribution may be too fluid for PSP to converge
 2. Apply `OPTION (OPTIMIZE FOR UNKNOWN)` or `OPTION (OPTIMIZE FOR (@param = <value>))` to lock in a single plan for the common case
-3. Add a Query Store hint to pin one plan: `EXEC sys.sp_query_store_set_hints @query_id = N'<id>', @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'`
+3. Add a Query Store hint to pin one plan: `EXEC sys.sp_query_store_set_hints @query_id = <id>, @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'`
 4. Run `/sqlplan-review` check S34 to evaluate the variant plans directly
 5. If PSP is causing regressions, disable at database scope: `ALTER DATABASE SCOPED CONFIGURATION SET PARAMETER_SENSITIVE_PLAN_OPTIMIZATION = OFF`
 
@@ -774,7 +774,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'CE';
 3. If a regression occurred after a CE Feedback adjustment, disable for the specific query:
    ```sql
    EXEC sys.sp_query_store_set_hints
-       @query_id = N'<id>',
+       @query_id = <id>,
        @query_hints = N'OPTION(USE HINT(''DISABLE_CE_FEEDBACK''))';
    ```
 4. Investigate the underlying cause: refresh statistics (`UPDATE STATISTICS`) and check histogram accuracy with `DBCC SHOW_STATISTICS`
@@ -801,7 +801,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'DOP';
 3. If elapsed time regressed after DOP reduction, disable for the specific query:
    ```sql
    EXEC sys.sp_query_store_set_hints
-       @query_id = N'<id>',
+       @query_id = <id>,
        @query_hints = N'OPTION(USE HINT(''DISABLE_DOP_FEEDBACK''))';
    ```
 4. If DOP was reduced inappropriately, set an explicit DOP hint: `OPTION (MAXDOP 8)`
@@ -830,7 +830,7 @@ HAVING COUNT(*) >= 3;
 1. Pin a specific grant percent to stop the oscillation:
    ```sql
    EXEC sys.sp_query_store_set_hints
-       @query_id = N'<id>',
+       @query_id = <id>,
        @query_hints = N'OPTION(MIN_GRANT_PERCENT=<n>)';
    ```
    Start with a value midway between the min and max observed grants
@@ -861,12 +861,12 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 **Fix options:**
 1. Enable Query Store on secondary replicas:
    ```sql
-   ALTER DATABASE [YourDatabase] SET QUERY_STORE = ON
-   (READ_WRITE_DATABASES_ONLY = OFF);
+   ALTER DATABASE [YourDatabase] SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);
+   ALTER DATABASE [YourDatabase] SET QUERY_STORE FOR SECONDARY = ON;
    ```
 2. After enabling, verify all replicas appear: `SELECT * FROM sys.query_store_replicas` — each replica should have a row
 3. Note that secondary replica Query Store data is read-only on the secondary and replicated to the primary's Query Store store — review it via the primary connection
-4. Requires SQL Server 2022 (16.x) or later and database compatibility level 160
+4. Generally available starting with SQL Server 2025 (17.x) and in Azure SQL Database; on SQL Server 2022 the feature is limited preview behind trace flag 12606 and not supported for production
 5. After enabling, allow one full statistics collection interval (default 60 minutes) before expecting data in `sys.query_store_replicas`
 
 **Related checks:** Q23 (QS near size limit), H26 (sqlhadr-review RCSI)

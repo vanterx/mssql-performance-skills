@@ -38,7 +38,7 @@ fi
 echo ""
 echo "[ 2 ] Skill count"
 skill_dirs=$(ls -d skills/*/ 2>/dev/null | wc -l | tr -d ' ')
-claude_word=$(grep -o '[a-z]* slash-command skills' CLAUDE.md 2>/dev/null | grep -o '^[a-z]*' | head -1)
+claude_word=$(grep -o '[a-z-]* slash-command skills' CLAUDE.md 2>/dev/null | sed 's/ slash-command skills//' | head -1)
 case "$claude_word" in
     one)   claude_num=1 ;; two)   claude_num=2 ;; three) claude_num=3 ;;
     four)  claude_num=4 ;; five)  claude_num=5 ;; six)   claude_num=6 ;;
@@ -46,7 +46,8 @@ case "$claude_word" in
     ten)      claude_num=10 ;; eleven)   claude_num=11 ;; twelve)   claude_num=12 ;;
     thirteen) claude_num=13 ;; fourteen) claude_num=14 ;; fifteen)  claude_num=15 ;;
     sixteen)  claude_num=16 ;; seventeen) claude_num=17 ;; eighteen) claude_num=18 ;;
-    nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; *)         claude_num=0 ;;
+    nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; twenty-one) claude_num=21 ;;
+    twenty-two) claude_num=22 ;; *)         claude_num=0 ;;
 esac
 if [ "$claude_num" -eq 0 ]; then
     warn "Could not parse skill count word from CLAUDE.md (found: '$claude_word')"
@@ -707,7 +708,8 @@ declare -A P2S=(
     [K]="sqlspn-review"      [C]="sqlplan-compare"
     [P]="sqldeadlock-review" [D]="sqlindex-advisor"
     [O]="sqlmemory-review"   [Z]="sqldiskio-review"
-    [A]="sqlencryption-review"
+    [A]="sqlencryption-review" [B]="sqldbconfig-review"
+    [U]="sqlbootstraplog-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
@@ -839,6 +841,44 @@ if grep -qE 'Runs [0-9]+ documentation consistency checks' AGENTS.md 2>/dev/null
 else
     pass "AGENTS.md uses generic wording for verify-docs count"
 fi
+
+# ---------------------------------------------------------------------------
+# Check 42: Plugin manifest skill count matches actual skill directories
+# ---------------------------------------------------------------------------
+echo ""
+echo "[42 ] Plugin manifest skill counts match actual"
+check42_ok=1
+for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$skill_dirs" ]; then
+            fail "42: $manifest description says '$stated SQL Server performance tuning skills' but there are $skill_dirs skill directories"
+            check42_ok=0
+        fi
+    done < <(grep -o '[0-9]\+ SQL Server performance tuning skills' "$manifest" 2>/dev/null | grep -o '^[0-9]*')
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$skill_dirs" ]; then
+            fail "42: $manifest description says 'across $stated skills' but there are $skill_dirs skill directories"
+            check42_ok=0
+        fi
+    done < <(grep -o 'across [0-9]\+ skills' "$manifest" 2>/dev/null | grep -o '[0-9]*')
+done
+[ "$check42_ok" -eq 1 ] && pass "Plugin manifest skill counts match $skill_dirs skill directories"
+
+# ---------------------------------------------------------------------------
+# Check 43: Plugin manifest check count matches actual total
+# ---------------------------------------------------------------------------
+echo ""
+echo "[43 ] Plugin manifest check counts match actual"
+check43_ok=1
+for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+    while read -r stated; do
+        if [ -n "$stated" ] && [ "$stated" != "$total_checks" ]; then
+            fail "43: $manifest says '$stated checks across' but actual total is $total_checks"
+            check43_ok=0
+        fi
+    done < <(grep -o '[0-9]\+ checks across' "$manifest" 2>/dev/null | grep -o '^[0-9]*')
+done
+[ "$check43_ok" -eq 1 ] && pass "Plugin manifest check counts match $total_checks total checks"
 
 # ---------------------------------------------------------------------------
 # Summary

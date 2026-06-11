@@ -47,8 +47,8 @@ SELECT
     CASE WHEN vfs.num_of_writes > 0
          THEN vfs.io_stall_write_ms / vfs.num_of_writes ELSE 0 END AS avg_write_ms,
     CASE WHEN (vfs.num_of_reads + vfs.num_of_writes) > 0
-         THEN 100.0 * vfs.io_stall / (vfs.io_stall_read_ms + vfs.io_stall_write_ms + 1)
-         ELSE 0 END AS stall_pct
+         THEN vfs.io_stall / (vfs.num_of_reads + vfs.num_of_writes)
+         ELSE 0 END AS avg_stall_per_io_ms
 FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS vfs
 JOIN sys.master_files AS mf
   ON vfs.database_id = mf.database_id
@@ -82,7 +82,7 @@ SELECT
     FileName,
     CASE EventClass WHEN 92 THEN 'Data Auto-Grow'
                     WHEN 93 THEN 'Log Auto-Grow' END AS event_type,
-    Duration / 1000                 AS duration_ms,
+    Duration                        AS duration_ms,  -- Duration is reported in milliseconds for event classes 92/93
     IntegerData * 8 / 1024          AS growth_mb,
     StartTime
 FROM fn_trace_gettable(@tracefile, DEFAULT)
@@ -100,7 +100,7 @@ ORDER BY StartTime DESC;
 | Data file avg read latency | < 10 ms | 10–20 ms | > 20 ms |
 | Data file avg write latency | < 10 ms | 10–20 ms | > 20 ms |
 | Log file avg write latency | < 5 ms | 5–10 ms | > 10 ms |
-| Stall ratio (stall / (reads+writes)) | < 5% | 5–15% | > 15% |
+| Stall ratio (avg stall ms per I/O operation) | < 5 ms | 5–15 ms | > 15 ms |
 | Hot file: single file share of total I/O | < 60% | 60–80% | > 80% |
 | Auto-growth events in last 24 h | 0 | 1–3 | > 3 |
 | Auto-growth fixed-size increment | ≥ 256 MB | 64–255 MB | < 64 MB |
@@ -132,9 +132,9 @@ Run these first — latency is the direct measure of disk I/O quality.
 - **Fix:** One file is serving the majority of I/O, indicating the database's working set is concentrated in that file's extent ranges. Solutions: (1) add secondary data files to distribute I/O — SQL Server distributes new allocations proportionally across equally-sized files; (2) check that existing data files are the same size — unequal sizes cause disproportionate fill (the larger file fills first). This is the most common TempDB issue — also check Z7 for TempDB-specific guidance.
 
 ### Z5 — High Stall Ratio
-- **Trigger:** `stall_pct` for any file > 15% (more than 15% of I/O operations are stalled waiting for the disk)
-- **Severity:** Warning if 5–15%; Critical if > 15%
-- **Fix:** Stall ratio measures the fraction of I/O that had to wait. A high stall ratio independent of latency can indicate: storage QoS throttling, LUN queue depth saturation, or iSCSI/FC network congestion. If latency is normal but stall ratio is high, investigate the storage path (HBA driver, multipath I/O configuration, SAN QoS policy).
+- **Trigger:** `avg_stall_per_io_ms` for any file > 15 ms (combined `io_stall / (num_of_reads + num_of_writes)` — average time each I/O operation spent stalled)
+- **Severity:** Warning if 5–15 ms; Critical if > 15 ms
+- **Fix:** The stall ratio measures average wait per I/O operation across reads and writes combined. A high stall ratio independent of latency can indicate: storage QoS throttling, LUN queue depth saturation, or iSCSI/FC network congestion. If latency is normal but stall ratio is high, investigate the storage path (HBA driver, multipath I/O configuration, SAN QoS policy).
 
 ---
 
@@ -158,7 +158,7 @@ Run these first — latency is the direct measure of disk I/O quality.
 ### Z9 — File Count Imbalance (Single File Handles Most I/O)
 - **Trigger:** When a database (especially TempDB) has multiple data files, one file handles > 70% of total data file I/O
 - **Severity:** Warning
-- **Fix:** Files must be the same size for SQL Server's proportional fill algorithm to distribute I/O evenly. Shrink and resize files to equal sizes, then grow them together. For TempDB specifically, a common misconfiguration is having the primary file larger because it was created at setup before secondary files were added. Use `DBCC SHRINKFILE` + `ALTER DATABASE ... MODIFY FILE` to equalize sizes.
+- **Fix:** Files must be the same size for SQL Server's proportional fill algorithm to distribute I/O evenly. Shrink and resize files to equal sizes, then grow them together. For TempDB specifically, a common misconfiguration is having the primary file larger because it was created at setup before secondary files were added. Use `DBCC SHRINKFILE` + `ALTER DATABASE ... MODIFY FILE` to equalize sizes. Note: for TempDB, `sys.master_files` shows the configured startup size, not the current size — query `tempdb.sys.database_files` for current file sizes.
 
 ### Z10 — Database File on System Drive
 - **Trigger:** Any database file (data or log) has `physical_name` starting with the system drive letter (typically `C:\`)

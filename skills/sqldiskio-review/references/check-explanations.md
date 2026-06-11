@@ -114,9 +114,9 @@ ALTER DATABASE tempdb MODIFY FILE (NAME = 'tempdev2', SIZE = 8192MB);
 
 ### Z5 — High Stall Ratio
 
-**What it means:** The stall ratio measures what fraction of I/O operations had to wait. A high stall ratio independent of high average latency can indicate: QoS throttling by the storage array, iSCSI/FC network congestion, or HBA queue depth saturation.
+**What it means:** The stall ratio measures the average time each I/O operation spent stalled, across reads and writes combined. A high stall ratio independent of high average latency can indicate: QoS throttling by the storage array, iSCSI/FC network congestion, or HBA queue depth saturation. (`io_stall` is the total time users waited for I/O on the file — the sum of read and write stall time — so it must be divided by the operation count, not by the read/write stall components.)
 
-**How to spot it:** `stall_pct = 100.0 * io_stall / NULLIF(io_stall_read_ms + io_stall_write_ms, 0)` — values > 15% are Critical.
+**How to spot it:** `avg_stall_per_io_ms = io_stall / NULLIF(num_of_reads + num_of_writes, 0)` — values > 15 ms are Critical.
 
 **Fix options:**
 1. **Check storage QoS policies** — the LUN or volume may be QoS-throttled by the SAN/NAS.
@@ -181,7 +181,7 @@ Both on `C:\SQLData\` — same volume.
 
 **What it means:** SQL Server's proportional fill algorithm allocates new extents in proportion to file sizes. If one file is larger, it receives more allocations, becoming the hot file (Z4). This is especially important for TempDB, where the recommended configuration is equal-sized files.
 
-**How to spot it:** Compare `size * 8 / 1024` (MB) across files in the same database from `sys.master_files`.
+**How to spot it:** Compare `size * 8 / 1024` (MB) across files in the same database from `sys.master_files`. For TempDB, `sys.master_files` shows the configured startup size, not the current size — use `tempdb.sys.database_files` for current sizes.
 
 **Example:**
 ```
@@ -218,7 +218,7 @@ Primary file is 5× larger than secondaries — 80% of allocations go to the pri
 
 **What it means:** An auto-growth event pauses the writing session while the OS allocates new disk space and optionally initializes it. For data files without instant file initialization (IFI) enabled, initialization zeros out the new space, which can take minutes for large increments on HDDs.
 
-**How to spot it:** Query the default trace for EventClass 92 (Data Auto-Grow) and 93 (Log Auto-Grow). Duration is in microseconds.
+**How to spot it:** Query the default trace for EventClass 92 (Data Auto-Grow) and 93 (Log Auto-Grow). For these two event classes, Duration is reported in milliseconds (unlike most trace events, which report microseconds), and IntegerData is the number of 8-KB pages by which the file grew.
 
 **Example:**
 ```
@@ -231,7 +231,7 @@ Log Auto-Grow     Orders     Orders_log.ldf          4,190         64          2
 
 **Fix options:**
 1. **Pre-size the database**: estimate monthly growth rate from trace history, pre-grow by 3–6 months.
-2. **Enable Instant File Initialization**: grant the SQL Server service account the `Perform Volume Maintenance Tasks` right — eliminates data file initialization time (log files always zero-initialize for safety).
+2. **Enable Instant File Initialization**: grant the SQL Server service account the `Perform Volume Maintenance Tasks` right — eliminates data file initialization time. Log files zero-initialize on growth, except that starting with SQL Server 2022, log autogrowth events up to 64 MB can use instant file initialization.
 3. **Increase growth increment** (see Z12) to reduce frequency.
 4. **Alert on auto-growth** using a SQL Agent alert on Event 1105/1121 or a custom XE session.
 
@@ -260,7 +260,7 @@ Avoid percentage growth on large databases — 10% of 1 TB = 100 GB per growth e
 
 ### Z13 — Log File Auto-Growth Too Small
 
-**What it means:** Log file growth events are synchronous and block committing transactions. Unlike data file IFI, log initialization always zeroes new space. A 64 MB log increment on a high-transaction database means frequent growth events, each adding 1–5 seconds of latency to all concurrent transactions.
+**What it means:** Log file growth events are synchronous and block committing transactions. Unlike data files, log growth generally zeroes new space — although starting with SQL Server 2022, log autogrowth events up to 64 MB can use instant file initialization. A small log increment on a high-transaction database means frequent growth events, each adding latency to all concurrent transactions.
 
 **Fix options:**
 ```sql
@@ -326,7 +326,7 @@ Latency more than 4× in 45 minutes — Critical trend.
 | Z2 | Latency | Data write > 20 ms | Warn (10–20); Critical (> 20) |
 | Z3 | Latency | Log write > 10 ms | Warn (5–10); Critical (> 10) |
 | Z4 | Latency | Hot file ≥ 60% of DB I/O | Warn (60–79); Critical (≥ 80) |
-| Z5 | Latency | Stall ratio > 15% | Warn (5–15); Critical (> 15) |
+| Z5 | Latency | Avg stall per I/O > 15 ms | Warn (5–15); Critical (> 15) |
 | Z6 | Placement | Data + log same volume | Warning |
 | Z7 | Placement | TempDB + user DB same volume | Warning |
 | Z8 | Latency | TempDB log write > 10 ms | Warn (5–10); Critical (> 10) |

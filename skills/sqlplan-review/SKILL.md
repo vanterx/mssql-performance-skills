@@ -73,8 +73,8 @@ Report every triggered finding — do not stop at the first match per statement.
 | Memory request denied (warning) | RequestedMemory > GrantedMemory × 1.1 |
 | Serial required memory (info) | SerialRequiredMemory ≥ 524,288 KB (512 MB) |
 | Compile wait (info) | CompileTime > CompileCPU × 2 AND CompileTime > 1,000 ms |
-| Wide row (warning) | EstimatedAvgRowSize > 8,192 bytes |
-| Wide row (critical) | EstimatedAvgRowSize > 32,768 bytes |
+| Wide row (warning) | AvgRowSize > 8,192 bytes |
+| Wide row (critical) | AvgRowSize > 32,768 bytes |
 | Wide output list (info) | OutputList ColumnReference count > 20 |
 | Elapsed time hotspot | ActualElapsedms sum for operator > 1,000 ms AND > 50% of statement elapsed |
 | Thread starvation | any RunTimeCountersPerThread ActualRows = 0 while total > 0 |
@@ -127,7 +127,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 ### S10 — Downlevel Cardinality Estimator
 - **Trigger:** `CardinalityEstimationModelVersion` > 0 AND < 130
 - **Severity:** Warning
-- **Fix:** Update database compatibility level to 130+ (SQL 2016+), or use `OPTION (USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'))`. Test first — some queries perform better on the old CE.
+- **Fix:** Update database compatibility level to 130+ (SQL 2016+), or use `OPTION (USE HINT('FORCE_DEFAULT_CARDINALITY_ESTIMATION'))` to use the current compat level's CE, or `QUERY_OPTIMIZER_COMPATIBILITY_LEVEL_n` (SQL 2017 CU10+) at query level. Test first — some queries perform better on the old CE.
 ### S11 — Plan-Level Warnings
 - **Trigger:** `<Warnings>` element exists under `<QueryPlan>`
 - **Severity:** Warning
@@ -173,7 +173,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** Add `OPTION (MAXRECURSION N)` to avoid runaway recursion on bad data. The default limit is 100; an explicit limit documents intent and prevents accidental infinite loops when hierarchy data has cycles.
 ### S22 — SET ROWCOUNT Active
-- **Trigger:** `RowCountAssignment` attribute > 0 on `StmtSimple`
+- **Trigger:** `RowCountAssignment` attribute > 0 on `StmtSimple` [Unverified — attribute not found in documented showplan references; also detect `SET ROWCOUNT` in the batch text]
 - **Severity:** Warning
 - **Fix:** `SET ROWCOUNT` is deprecated, silently changes plan shapes, and can truncate results without warning. The optimizer builds the plan assuming the full result set will be returned; `SET ROWCOUNT` truncates silently at execution. Sort operators are sized for all rows, indexes are chosen for full-scan patterns, and row goals are not applied. Replace with `TOP (N)` — `TOP` is a compile-time directive the optimizer can see, enabling row goals, seek strategies, and right-sized memory grants for N rows rather than all rows.
 ### S23 — Excessive Parameter Count
@@ -185,7 +185,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** A Query Store forced plan is overriding normal optimization. QDS-forced plans bypass the optimizer and become stale as data changes. Validate the forced plan is still beneficial and that the underlying regression (bad statistics, missing index) has been resolved. If fixed, unforce via `sys.sp_query_store_unforce_plan`.
 ### S25 — Interleaved Execution (MSTVF) Active
-- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on `StmtSimple` — SQL 2017+
+- **Trigger:** `ContainsInterleavedExecutionCandidates = true` on the `QueryPlan` node (per-operator `IsInterleavedExecuted` appears on `RuntimeInformation`) — SQL 2017+
 - **Severity:** Info
 - **Fix:** SQL Server is using interleaved execution to feed actual row counts from multi-statement TVFs back into optimization. This is beneficial. Verify it has not been suppressed via `OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))`, which would revert to the static 1-row estimate.
 ### S26 — Batch Mode Adaptive Join Active
@@ -221,7 +221,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Info
 - **Fix:** The plan was compiled with non-standard SET options — usually because the application sets `SET ANSI_NULLS OFF` or `SET QUOTED_IDENTIFIER OFF`. This creates a separate plan cache entry from SSMS-compiled plans (SSMS always uses standard options), causing plan cache bloat. It also affects query semantics: `SET ANSI_NULLS OFF` changes how NULL comparisons work, and `SET QUOTED_IDENTIFIER OFF` allows double-quoted strings. Align application connection options with SQL Server defaults.
 ### S34 — Parameter Sensitive Plan Dispatcher Detected
-- **Trigger:** `ParameterSensitivePredicate` element or `StatementType="ParameterSensitivity"` present on `StmtSimple` — SQL 2022+ (compat level 160) only
+- **Trigger:** `ParameterSensitivePredicate` element or a `<Dispatcher>` element present in the plan XML — SQL 2022+ (compat level 160) only
 - **Severity:** Info
 - **Fix:** SQL Server 2022 PSP optimization created a dispatcher plan with multiple sub-plans for different parameter value ranges. Verify each variant is healthy by checking `sys.query_store_query_variant`. If a specific parameter range selects the wrong variant, use Query Store hints (`sys.sp_query_store_set_hints`) to override variant selection for that range. Related: N68.
 ### S35 — ADR Long-Transaction Version Store Accumulation
@@ -229,7 +229,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** ADR moves the persistent version store (PVS) to TempDB. Long-running transactions under ADR cause PVS to grow continuously until the transaction commits or rolls back. Keep transactions short and monitor PVS size with `sys.dm_tran_persistent_version_store_stats`. Cross-reference E29 in sqlerrorlog-review.
 ### S36 — Cardinality Estimation Feedback Applied
-- **Trigger:** `ContainsCEFeedback="true"` attribute on `StmtSimple` — SQL 2022+ only
+- **Trigger:** `ContainsCEFeedback="true"` attribute on `StmtSimple` [Unverified — attribute not found in documented showplan references; CE feedback state is reliably visible in `sys.query_store_plan_feedback` with `feature_desc = 'CE Feedback'`] — SQL 2022+ only
 - **Severity:** Info
 - **Fix:** The CE model was automatically adjusted by feedback across prior executions. This is generally beneficial but means the plan's cardinality estimates no longer reflect the base CE model. Monitor stability: if query performance fluctuates across executions after CE feedback applies, the feedback model may be oscillating. Use Query Store to track plan history. Related: Q27 in sqlquerystore-review.
 
@@ -292,7 +292,7 @@ Apply these to every operator node in the plan tree.
 ### N13 — MSTVF Bad Row Estimate
 - **Trigger:** `logicalOp` = "Table-valued function" AND `estimateRows` = 1 or 100
 - **Severity:** Warning
-- **Fix:** SQL Server cannot estimate multi-statement TVF output. Rewrite as an inline TVF (single SELECT statement) so the optimizer can see through it. In SQL 2019+ with compatibility level 150, Interleaved Execution may help.
+- **Fix:** SQL Server cannot estimate multi-statement TVF output. Rewrite as an inline TVF (single SELECT statement) so the optimizer can see through it. In SQL 2017+ with compatibility level 140+, Interleaved Execution revises MSTVF estimates automatically.
 ### N14 — TVF Inside Join
 - **Trigger:** `logicalOp` = "Table-valued function" AND parent operator is any join type
 - **Severity:** Warning
@@ -430,7 +430,7 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Warning
 - **Fix:** A window function with no PARTITION BY runs over the entire result set as a single partition. If this is intentional (e.g., `ROW_NUMBER() OVER (ORDER BY col)` for a global rank), no fix is needed. If a partition key was omitted accidentally, add `PARTITION BY` to scope the window — this also allows parallelism across partitions.
 ### N47 — Window Aggregate RANGE Frame (Spool Risk)
-- **Trigger:** `physicalOp` = "Window Aggregate" AND `FrameType` = RANGE AND `StartBound` = "UnboundedPreceding" AND `EndBound` = "CurrentRow" AND actual stats present AND `actualRows` > 100,000
+- **Trigger:** A Window Spool / Window Aggregate operator is present AND the statement text uses a `RANGE UNBOUNDED PRECEDING` frame (explicitly or as the default frame of an ORDER BY-only OVER clause) AND actual stats present AND `actualRows` > 100,000
 - **Severity:** Warning
 - **Fix:** `RANGE UNBOUNDED PRECEDING` uses an internal spool that writes one row per pass. `ROWS UNBOUNDED PRECEDING` does not. If there are no duplicate ORDER BY values in the window (or duplicates don't affect correctness), change `RANGE` to `ROWS` in the OVER clause — this eliminates the spool and is 2–10× faster on large datasets.
 ### N48 — In-Memory OLTP Cross-Container Join
@@ -438,7 +438,7 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Warning
 - **Fix:** Mixing memory-optimized and disk-based tables in a single join forces a cross-container execution context. This prevents natively compiled execution and limits DOP. Separate the workloads: read the memory-optimized table into a `#temp` table, then join against disk-based tables in a separate step.
 ### N49 — Columnstore Segment Elimination Not Occurring
-- **Trigger:** `physicalOp` contains "Columnstore" AND runtime stats present AND `SegmentsPurged` = 0 AND `SegmentsTotal` > 10
+- **Trigger:** `physicalOp` contains "Columnstore" AND runtime stats present AND `SegmentSkips` = 0 AND `SegmentReads` > 10 (runtime counters; STATISTICS IO reports them as "segment reads N, segment skipped M")
 - **Severity:** Warning
 - **Fix:** Zero segments were eliminated by the predicate — the filter column has no natural sort order within rowgroups. On SQL 2022+, rebuild the columnstore index with `ORDER (col)` to sort rowgroups. On earlier versions, restructure data loads so rows arrive pre-sorted on the filter column. Without elimination, every query does a full columnstore scan.
 ### N50 — Columnstore Delta Store Read
@@ -486,9 +486,9 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Warning
 - **Fix:** JSON path functions evaluated in WHERE clauses are computed per row and cannot use index seeks. Options: (1) Add a computed column `AS JSON_VALUE(col, '$.path') PERSISTED` and create an index on it — seeks will use the computed column index. (2) On SQL 2022+, use the native JSON index: `CREATE INDEX ... ON table (col) INCLUDE (json_col) WHERE JSON_VALUE(json_col, '$.path') IS NOT NULL`. (3) Filter JSON parsing to the application layer when the result set is small enough.
 ### N61 — High Estimated Average Row Size
-- **Trigger:** Any operator node has `EstimatedAvgRowSize` > 8,192 bytes; Critical if > 32,768 bytes
+- **Trigger:** Any operator node has `AvgRowSize` > 8,192 bytes; Critical if > 32,768 bytes (the showplan attribute is `AvgRowSize`; SSMS displays it as "Estimated Row Size")
 - **Severity:** Info if > 8,192 bytes; Warning if > 32,768 bytes
-- **Fix:** `EstimatedAvgRowSize` is the width (in bytes) of a single row passing through this operator. When rows exceed one 8-KB page, sort and hash operators must allocate at least one buffer page per row — multiplying memory grant requirements dramatically. This is the hidden root cause of unexpectedly large memory grants. Fix: stop projecting columns that are not needed downstream. Replace `SELECT *` with explicit column lists. A 4,000-byte row in a sort of 1 million rows requires ~4 GB of sort memory — check `RequestedMemory` (S29) alongside this check.
+- **Fix:** `AvgRowSize` is the width (in bytes) of a single row passing through this operator. When rows exceed one 8-KB page, sort and hash operators must allocate at least one buffer page per row — multiplying memory grant requirements dramatically. This is the hidden root cause of unexpectedly large memory grants. Fix: stop projecting columns that are not needed downstream. Replace `SELECT *` with explicit column lists. A 4,000-byte row in a sort of 1 million rows requires ~4 GB of sort memory — check `RequestedMemory` (S29) alongside this check.
 ### N62 — Actual Elapsed Time Hotspot
 - **Trigger:** An operator's total `ActualElapsedms` across all threads (sum of `RunTimeCountersPerThread/@ActualElapsedms`) > 1,000 ms AND represents > 50% of total statement elapsed time (requires actual execution plan)
 - **Severity:** Warning
@@ -510,19 +510,19 @@ Apply these to every operator node in the plan tree.
 - **Severity:** Warning
 - **Fix:** The Nested Loops operator executed far more inner-side iterations than the optimizer estimated at compile time. `EstimateRebinds` comes from the outer side cardinality estimate; when the actual outer side is much larger, every under-estimated join drives N66. This is a complement to N16 (Busy Loop based on estimates alone) that fires on actual execution evidence. Fix: correct the cardinality error on the outer side of the join (statistics update, parameter sniffing fix), or force a Hash Match join that is less sensitive to outer cardinality: `INNER HASH JOIN`.
 ### N67 — Ordered Columnstore Scan Segment Pruning Confirmed
-- **Trigger:** Operator contains `physicalOp` = Columnstore Index Scan AND `Ordered="true"` AND `SegmentsPurged` ≥ `SegmentsTotal` × 0.5 — SQL 2022+ (ordered columnstore index, `CREATE INDEX ... ORDER (col)`)
+- **Trigger:** Operator contains `physicalOp` = Columnstore Index Scan AND `Ordered="true"` AND `SegmentSkips` ≥ (`SegmentReads` + `SegmentSkips`) × 0.5 — SQL 2022+ (ordered columnstore index, `CREATE INDEX ... ORDER (col)`)
 - **Severity:** Info
-- **Fix:** The ordered columnstore index is working as intended — at least 50% of segments were eliminated. Report the pruning ratio (`SegmentsPurged / SegmentsTotal`) as a positive signal. If pruning is lower than expected, verify the ORDER column in the index matches the query's filter predicate column.
+- **Fix:** The ordered columnstore index is working as intended — at least 50% of segments were eliminated. Report the pruning ratio (`SegmentSkips / (SegmentReads + SegmentSkips)`) as a positive signal. If pruning is lower than expected, verify the ORDER column in the index matches the query's filter predicate column.
 ### N68 — PSP Variant Cardinality Error
 - **Trigger:** Inside a PSP dispatcher plan, an individual variant node has `actualRows / estimateRows` > 100 AND `actualRows` > 1,000 — SQL 2022+ only; requires actual plan
 - **Severity:** Warning
 - **Fix:** A PSP variant has a severe cardinality error despite being specialized for a parameter range. The variant's threshold boundary does not match the actual data skew. Use `sys.query_store_query_variant` to inspect variant boundaries and adjust using Query Store hints or by disabling PSP for this query with `DISABLE_PARAMETER_SNIFFING` hint.
 ### N69 — IQP Approximate Count Distinct Active
-- **Trigger:** Operator references `ApproxCountDistinctHll` or `COUNT(DISTINCT)` with `InternalInfo` indicating HyperLogLog usage — SQL 2019+ IQP feature
+- **Trigger:** An aggregate operator's defined values or the statement text reference `APPROX_COUNT_DISTINCT` — SQL 2019+ IQP feature
 - **Severity:** Info
-- **Fix:** IQP Approximate Count Distinct is in use, producing an estimate within approximately 2% of the true distinct count. Confirm with the query author that approximate results are acceptable. If exact count semantics are required (financial reconciliation, constraint validation), remove `APPROX_COUNT_DISTINCT` or add `OPTION (USE HINT('DISABLE_APPROXIMATE_QUERY'))`.
+- **Fix:** IQP Approximate Count Distinct is in use, producing an estimate within approximately 2% of the true distinct count. Confirm with the query author that approximate results are acceptable. If exact count semantics are required (financial reconciliation, constraint validation), replace `APPROX_COUNT_DISTINCT(col)` with `COUNT(DISTINCT col)` — the function choice is explicit in the query text, so the fix is a query change.
 ### N70 — DOP Feedback Adjusted Plan
-- **Trigger:** `DegreeOfParallelismFeedback` element present in the plan — SQL 2022+ IQP DOP Feedback feature
+- **Trigger:** `DegreeOfParallelismFeedback` element present in the plan [Unverified — element not found in documented showplan references; DOP feedback state is reliably visible in `sys.query_store_plan_feedback` with `feature_desc = 'DOP Feedback'`] — SQL 2022+ IQP DOP Feedback feature
 - **Severity:** Info
 - **Fix:** IQP DOP Feedback automatically reduced this query's degree of parallelism based on observed thread utilization. The adjusted DOP should improve CPU efficiency and reduce CXPACKET waits. Monitor for stability: if DOP feedback oscillates between values across executions, the workload arrival pattern is irregular and the feedback model may not stabilize.
 ### N71 — Adaptive Join Threshold Evaluation
@@ -533,7 +533,7 @@ Apply these to every operator node in the plan tree.
 ### N72 — Low Statistics Sampling Percent on Hot Statistics
 - **Trigger:** `StatisticsInfo/@SamplingPercent` < 10 for any statistic whose associated table has `actualRows` > 100,000 — actual plan only; skip entirely if `StatisticsInfo` elements are absent from the plan XML
 - **Severity:** Warning — the optimizer compiled this plan using a statistic built from a very small sample; the histogram has fewer steps and reduced resolution, increasing the risk of poor cardinality estimates under data skew even when the statistic was recently updated
-- **Fix:** Rebuild the flagged statistic with a higher sample: `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN`. To prevent future auto-updates from reverting to the low rate, add `PERSIST_SAMPLE_PERCENT = ON` (SQL 2016 SP1+, Azure SQL): `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN, PERSIST_SAMPLE_PERCENT = ON`. Identify the statistic name and table from `StatisticsInfo/@Statistics` and `@Table` in the plan XML. If the table is large and FULLSCAN is too slow, use `WITH SAMPLE 30 PERCENT, PERSIST_SAMPLE_PERCENT = ON` as a compromise. Cross-reference N21 — if `actualRows` already diverges from `estimateRows`, the low sample rate is the likely root cause.
+- **Fix:** Rebuild the flagged statistic with a higher sample: `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN`. To prevent future auto-updates from reverting to the low rate, add `PERSIST_SAMPLE_PERCENT = ON` (SQL 2016 SP1 CU4+, Azure SQL): `UPDATE STATISTICS <table> (<stat_name>) WITH FULLSCAN, PERSIST_SAMPLE_PERCENT = ON`. Identify the statistic name and table from `StatisticsInfo/@Statistics` and `@Table` in the plan XML. If the table is large and FULLSCAN is too slow, use `WITH SAMPLE 30 PERCENT, PERSIST_SAMPLE_PERCENT = ON` as a compromise. Cross-reference N21 — if `actualRows` already diverges from `estimateRows`, the low sample rate is the likely root cause.
 - **Related checks:** N21 (bad row estimate — the downstream effect of low-quality stats), N11 (no statistics at all), N35 (CE default selectivity guess — also caused by absent or low-quality stats)
 
 ---

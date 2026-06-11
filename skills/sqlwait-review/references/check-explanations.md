@@ -120,12 +120,12 @@ UPDATE dbo.Orders SET Status = 'Processing' WHERE CustomerId = 42;
 ### V3 — Parallelism (CXPACKET / CXCONSUMER / HT*)
 
 **What it means**
-`CXPACKET` records the control thread waiting for parallel worker threads to finish their portion of a parallel query. `CXCONSUMER` (SQL Server 2016 SP2 CU3+) records consumer threads waiting for data from producer threads — this is the more benign component of parallelism waits. `HTBUILD`, `HTDELETE`, `HTMEMO`, `HTREINIT`, and `HTREPARTITION` are **batch-mode hash build/repartition waits** — they appear on queries using batch mode execution (columnstore indexes, batch mode on rowstore SQL 2019+) and represent threads synchronizing at hash build or repartition phases. Treat HT* the same as CXPACKET: investigate skew before adjusting MAXDOP.
+`CXPACKET` records the control thread waiting for parallel worker threads to finish their portion of a parallel query. `CXCONSUMER` (SQL Server 2016 SP2 / 2017 CU3+) records consumer threads waiting for data from producer threads — this is the more benign component of parallelism waits. `HTBUILD`, `HTDELETE`, `HTMEMO`, `HTREINIT`, and `HTREPARTITION` are **batch-mode hash build/repartition waits** — they appear on queries using batch mode execution (columnstore indexes, batch mode on rowstore SQL 2019+) and represent threads synchronizing at hash build or repartition phases. Treat HT* the same as CXPACKET: investigate skew before adjusting MAXDOP.
 
 **Critical misconception to avoid**
 The most common mistake DBA teams make with CXPACKET is reducing MAXDOP reflexively. The SQL Server team and the broader community explicitly warn against this. CXPACKET is *expected* for parallel queries — it does not indicate a problem by itself. The question to ask is: **is the work evenly distributed across threads?** If yes, CXPACKET is fine. If one thread does 90% of the work while others wait, *that* is the problem.
 
-**CXCONSUMER (SQL 2016 SP2 CU3+)**
+**CXCONSUMER (SQL 2016 SP2 / 2017 CU3+)**
 CXCONSUMER was introduced to separate the benign consumer-side wait from CXPACKET. After this split, CXPACKET became more actionable — it now specifically represents producer thread waits. CXCONSUMER is generally ignorable.
 
 **Why it matters**
@@ -1110,7 +1110,7 @@ FT_IFTS_SCHEDULER_IDLE_WAIT                       82,000   0.8%
 
 **Fix options**
 1. **Check crawl status** — `SELECT * FROM sys.dm_fts_index_population` to see whether a full population or incremental crawl is running.
-2. **Throttle crawl resource usage** — `EXEC sp_fulltext_service 'resource_usage', 1` (scale 1–5; 1 = minimum resource usage).
+2. **Reduce master merge parallelism** — `EXEC sp_fulltext_service 'master_merge_dop', 1` (the older `resource_usage` action has no function in SQL Server 2008 and later, and is ignored).
 3. **Schedule crawls off-peak** — stop and restart the FT crawl during low-activity windows.
 4. **Reduce crawl scope** — use incremental or change tracking populations instead of full populations where possible.
 5. **Offload full-text search** — for very high search volumes, consider Elasticsearch, Azure Cognitive Search, or SQL Server 2022's full-text integration with external search engines.
@@ -1150,7 +1150,7 @@ ORDER BY redo_queue_size DESC;
 2. **Improve secondary I/O** — the redo thread is write-bound on the secondary's data and log files. Move them to faster storage (NVMe).
 3. **Increase parallel redo workers**:
    - SQL Server 2022+: `ALTER DATABASE SCOPED CONFIGURATION SET PARALLEL_REDO_WORKER_POOL_SIZE = N` (default 0 = automatic)
-   - SQL Server 2016–2019: trace flag 3468 enables extended parallel redo (`DBCC TRACEON(3468, -1)`)
+   - SQL Server 2016–2019: parallel redo is automatic, up to 100 threads instance-wide; trace flag 3459 disables it if serial redo proves faster under contention
 4. **Consider async commit** for replicas that are not required for synchronous quorum — this removes the back-pressure on the primary.
 5. **Reduce primary write workload** — if the primary is generating more log than the secondary can apply, addressing the primary's write volume (batch inserts, reduced index maintenance) reduces the redo backlog.
 
@@ -1282,7 +1282,7 @@ From the File I/O latency query: `avg_read_latency_ms` or `avg_write_latency_ms`
 ### V41 — PSP Optimization Selector Wait (SQL 2022+)
 
 **What it means**
-`QUERY_OPTIMIZER_PSP_WAIT` appears in wait stats with cumulative wait > 1,000 ms. The Parameter Sensitive Plan (PSP) optimizer is spending significant time selecting the correct variant plan for incoming parameters — indicating either an excessive variant plan count or high plan-switching frequency across executions.
+`QUERY_OPTIMIZER_PSP_WAIT` [Unverified — not in the documented wait-type list] appears in wait stats with cumulative wait > 1,000 ms. The Parameter Sensitive Plan (PSP) optimizer is spending significant time selecting the correct variant plan for incoming parameters — indicating either an excessive variant plan count or high plan-switching frequency across executions.
 
 **Why it matters**
 PSP optimization generates multiple variant plans (dispatcher + variants) for queries with significant parameter-driven cardinality differences. When many variants exist or switching is very frequent, the selector logic runs on every execution before the plan is dispatched. This overhead accumulates and can become measurable on high-throughput workloads calling affected queries thousands of times per second.
@@ -1309,7 +1309,7 @@ WHERE wait_type = 'QUERY_OPTIMIZER_PSP_WAIT'
 ### V42 — IQP DOP Feedback Adjustment Wait (SQL 2022+)
 
 **What it means**
-`DOP_FEEDBACK_WAIT` appears in wait stats with cumulative wait > 500 ms. Intelligent Query Processing (IQP) DOP Feedback is actively evaluating and adjusting the degree of parallelism for one or more queries. The wait itself is brief per occurrence, but recurring instances indicate feedback is frequently applying new DOP settings across executions.
+`DOP_FEEDBACK_WAIT` [Unverified — not in the documented wait-type list] appears in wait stats with cumulative wait > 500 ms. Intelligent Query Processing (IQP) DOP Feedback is actively evaluating and adjusting the degree of parallelism for one or more queries. The wait itself is brief per occurrence, but recurring instances indicate feedback is frequently applying new DOP settings across executions.
 
 **Why it matters**
 DOP Feedback evaluation adds a brief wait before each adjusted execution while the feedback mechanism verifies whether the proposed DOP change improves elapsed time. When many queries are simultaneously receiving DOP adjustments, these waits accumulate. If DOP adjustments result in worse elapsed times (e.g., by eliminating parallelism on a genuinely parallel-friendly query), the feedback loop may repeatedly re-adjust, adding unnecessary overhead.
@@ -1343,7 +1343,7 @@ WHERE feedback_type = 'DOP';
 ### V43 — ADR PVS Cleanup Worker Wait (SQL 2019+)
 
 **What it means**
-`PVSVERSIONSTORE_WAIT` or `ADR_CLEANUP_WAIT` appears in wait stats with cumulative wait > 5,000 ms. The Accelerated Database Recovery (ADR) Persistent Version Store (PVS) cleanup worker is blocked or stalled, preventing version store space reclamation. When the cleanup worker cannot advance, the PVS grows unboundedly until either the database's PVS filegroup or tempdb (the default PVS location prior to a dedicated filegroup) is exhausted.
+`PVS_CLEANUP_LOCK` appears in wait stats with cumulative wait > 5,000 ms. The Accelerated Database Recovery (ADR) Persistent Version Store (PVS) cleanup worker is blocked or stalled, preventing version store space reclamation. When the cleanup worker cannot advance, the PVS grows unboundedly until either the database's PVS filegroup or tempdb (the default PVS location prior to a dedicated filegroup) is exhausted.
 
 **Why it matters**
 ADR uses a persistent version store to enable instant rollback and faster log truncation. Unlike classic version store (in tempdb), the ADR PVS persists across restarts. If PVS cleanup stalls — typically because a long-running or idle open transaction holds a snapshot that cleanup cannot advance past — the PVS grows continuously. On write-heavy systems this growth can exhaust available space within hours, causing all further DML to fail.
@@ -1353,7 +1353,7 @@ ADR uses a persistent version store to enable instant rollback and faster log tr
 SELECT wait_type, waiting_tasks_count, wait_time_ms,
        wait_time_ms / NULLIF(waiting_tasks_count, 0) AS avg_wait_ms
 FROM sys.dm_os_wait_stats
-WHERE wait_type IN ('PVSVERSIONSTORE_WAIT', 'ADR_CLEANUP_WAIT')
+WHERE wait_type = 'PVS_CLEANUP_LOCK'
   AND wait_time_ms > 5000;
 ```
 

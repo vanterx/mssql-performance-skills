@@ -10,7 +10,7 @@ SQLServer:SQL Statistics          SQL Re-Compilations/sec                   312
 type                              name                      pages_kb
 --------------------------------- ------------------------- ----------
 MEMORYCLERK_SQLBUFFERPOOL         Default                   62,914,560
-COLUMNSTORE_OBJECT_POOL           Default                   25,165,824
+CACHESTORE_COLUMNSTOREOBJECTPOOL       Default                   25,165,824
 LOCK                              Default                   437,248
 CACHESTORE_SQLCP                  SQL Plans                 3,276,800
 MEMORYCLERK_XTP                   Default                   8,388,608

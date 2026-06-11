@@ -1,12 +1,12 @@
 -- sys.dm_io_virtual_file_stats joined to sys.master_files
-database_name   physical_name                       type_desc   avg_read_ms   avg_write_ms   num_of_reads   num_of_writes   io_stall_read_ms   io_stall_write_ms   stall_pct
------------     -----------------------------------  ---------   -----------   ------------   ------------   -------------   ----------------   -----------------   ---------
-Orders          D:\Data\Orders.mdf                  ROWS        47            22             1,284,032      312,108         60,349,504         6,866,376           8.3
-Orders          D:\Data\Orders_log.ldf              LOG         2             31             48,211         2,840,103       96,422             88,043,193          11.2
-tempdb          D:\Data\tempdb.mdf                  ROWS        18            14             4,820,103      892,441         86,761,854         12,494,174          6.7
-tempdb          D:\Data\tempdev1.ndf                ROWS        17            13             1,203,022      215,841         20,451,374         2,805,933           6.4
-tempdb          D:\Data\tempdev2.ndf                ROWS        18            14             428,311        87,933          7,709,598          1,231,062           6.8
-Warehouse       E:\Archive\Warehouse.mdf            ROWS        12            8              384,021        88,102          4,608,252          704,816             4.1
+database_name   physical_name                       type_desc   avg_read_ms   avg_write_ms   num_of_reads   num_of_writes   io_stall_read_ms   io_stall_write_ms   avg_stall_per_io_ms
+-----------     -----------------------------------  ---------   -----------   ------------   ------------   -------------   ----------------   -----------------   -------------------
+Orders          D:\Data\Orders.mdf                  ROWS        47            22             1,284,032      312,108         60,349,504         6,866,376           42.1
+Orders          D:\Data\Orders_log.ldf              LOG         2             31             48,211         2,840,103       96,422             88,043,193          30.5
+tempdb          D:\Data\tempdb.mdf                  ROWS        18            14             4,820,103      892,441         86,761,854         12,494,174          17.4
+tempdb          D:\Data\tempdev1.ndf                ROWS        17            13             1,203,022      215,841         20,451,374         2,805,933           16.4
+tempdb          D:\Data\tempdev2.ndf                ROWS        18            14             428,311        87,933          7,709,598          1,231,062           17.3
+Warehouse       E:\Archive\Warehouse.mdf            ROWS        12            8              384,021        88,102          4,608,252          704,816             11.3
 
 -- sys.master_files — file configuration
 database_name   logical_name     physical_name                       type_desc   size_mb   growth_setting   max_size

@@ -194,12 +194,12 @@ the input does not contain multiple rows per object across different `collection
 ## Advanced Runtime Pattern Checks (R21–R25)
 
 ### R21 — Natively Compiled Proc Regression
-- **Trigger:** A procedure with `object_name` that exists in `sys.sql_modules` with `EXECUTE AS` and is stored in a memory-optimized filegroup shows `avg_cpu_ms` increasing by ≥ 100% across snapshots — SQL 2014+ (In-Memory OLTP)
+- **Trigger:** A natively compiled procedure (`sys.sql_modules.uses_native_compilation = 1`) shows `avg_cpu_ms` increasing by ≥ 100% across snapshots — SQL 2014+ (In-Memory OLTP). Note: per-execution stats for natively compiled procedures appear in `sys.dm_exec_procedure_stats` only when statistics collection is enabled (`sys.sp_xtp_control_proc_exec_stats`)
 - **Severity:** Warning — natively compiled procedures are expected to be extremely fast (sub-millisecond); CPU increase signals schema change, statistics shift, or lock contention on memory-optimized tables
-- **Fix:** Recompile the procedure: `EXEC sp_recompile N'schema.proc'`. Check for schema changes to underlying memory-optimized tables. Verify that `SCHEMA_AND_DATA` binding is intact and no new row-version contention has emerged. Compare STATISTICS IO output for the proc before and after the regression.
+- **Fix:** Recompile the procedure: `EXEC sp_recompile N'schema.proc'`. Check for schema changes to underlying memory-optimized tables. Verify the underlying tables' `DURABILITY = SCHEMA_AND_DATA` setting is intact and no new row-version contention has emerged. Note that STATISTICS IO reports 0 logical reads for memory-optimized tables — compare worker time instead.
 
 ### R22 — High CLR Assembly Execution Ratio
-- **Trigger:** A procedure's `total_clr_time_ms / total_elapsed_ms ≥ 40%` — indicates CLR assembly code dominates execution time
+- **Trigger:** A CLR procedure (`sys.dm_exec_procedure_stats.type = 'PC'`) or a statement with `total_clr_time / total_elapsed_time ≥ 40%` from statement-level stats (`sys.dm_exec_query_stats.total_clr_time` — CLR time is not exposed in `sys.dm_exec_procedure_stats`) — indicates CLR assembly code dominates execution time
 - **Severity:** Warning — CLR integration is not always slower than T-SQL, but a ratio ≥ 40% of elapsed time warrants review; CLR assemblies bypass the query optimizer and can mask inefficient .NET code paths
 - **Fix:** Profile the CLR assembly itself (if source is available) using Visual Studio or dotnet-trace. If the CLR assembly performs I/O, consider moving that logic to T-SQL with indexed access. Evaluate whether the CLR function can be replaced by a built-in SQL Server function introduced in a later version (e.g., STRING_SPLIT, OPENJSON, STRING_AGG).
 
