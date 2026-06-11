@@ -1,6 +1,8 @@
 # Backlog: New Skill — sqlsetup-review (SQL Server Setup Log Analysis)
 
-> Status: **planned** — not yet implemented. Created 2026-06-11.
+> Status: **implemented** 2026-06-11 as `sqlbootstraplog-review` (renamed from the planned
+> `sqlsetup-review` to match the Setup Bootstrap\Log folder and the repo's `*log-review` naming).
+> Created 2026-06-11.
 > Source of truth: [View and read SQL Server Setup log files](https://learn.microsoft.com/sql/database-engine/install-windows/view-and-read-sql-server-setup-log-files)
 > plus related MS Learn pages (configuration file install, setup error troubleshooting).
 
@@ -17,10 +19,10 @@ verifiable against MS Learn (mandatory per `.claude/docs/ms-learn-validation.md`
 
 | Property | Value |
 |----------|-------|
-| Name | `sqlsetup-review` |
+| Name | `sqlbootstraplog-review` (planned as `sqlsetup-review`) |
 | Check prefix | **U** (setUp/Upgrade — unused; taken: S,N,C,D,P,T,I,W,X,V,Q,R,H,L,E,K,O,Z,A,B) |
 | Check count | 24 (U1–U24) |
-| Triggers | `/sqlsetup-review`, `/setup-log`, `/setup-failure` |
+| Triggers | `/sqlbootstraplog-review`, `/bootstrap-log`, `/setup-log` |
 | Companion skills | `sqlerrorlog-review` (post-install ERRORLOG), `sqldbconfig-review` (post-install config drift), `sqlclusterlog-review` (cluster setup failures) |
 
 ## Input (polymorphic, per repo convention)

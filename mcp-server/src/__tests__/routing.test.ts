@@ -4,6 +4,7 @@ import type { SkillMeta } from "../skill-loader.js";
 
 const ALL_SKILL_NAMES = [
   "mssql-performance-review",
+  "sqlbootstraplog-review",
   "sqlclusterlog-review",
   "sqldbconfig-review",
   "sqldeadlock-review",

@@ -53,6 +53,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqldiskio-review` | ~4,600 |
 | `sqlencryption-review` | ~30,000 |
 | `sqldbconfig-review` | ~7,200 |
+| `sqlbootstraplog-review` | ~6,500 |
 | `mssql-performance-review` | ~7,900 |
 
 ### Your input artifact

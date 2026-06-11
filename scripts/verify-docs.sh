@@ -38,7 +38,7 @@ fi
 echo ""
 echo "[ 2 ] Skill count"
 skill_dirs=$(ls -d skills/*/ 2>/dev/null | wc -l | tr -d ' ')
-claude_word=$(grep -o '[a-z]* slash-command skills' CLAUDE.md 2>/dev/null | grep -o '^[a-z]*' | head -1)
+claude_word=$(grep -o '[a-z-]* slash-command skills' CLAUDE.md 2>/dev/null | sed 's/ slash-command skills//' | head -1)
 case "$claude_word" in
     one)   claude_num=1 ;; two)   claude_num=2 ;; three) claude_num=3 ;;
     four)  claude_num=4 ;; five)  claude_num=5 ;; six)   claude_num=6 ;;
@@ -46,7 +46,8 @@ case "$claude_word" in
     ten)      claude_num=10 ;; eleven)   claude_num=11 ;; twelve)   claude_num=12 ;;
     thirteen) claude_num=13 ;; fourteen) claude_num=14 ;; fifteen)  claude_num=15 ;;
     sixteen)  claude_num=16 ;; seventeen) claude_num=17 ;; eighteen) claude_num=18 ;;
-    nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; *)         claude_num=0 ;;
+    nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; twenty-one) claude_num=21 ;;
+    twenty-two) claude_num=22 ;; *)         claude_num=0 ;;
 esac
 if [ "$claude_num" -eq 0 ]; then
     warn "Could not parse skill count word from CLAUDE.md (found: '$claude_word')"
@@ -707,7 +708,8 @@ declare -A P2S=(
     [K]="sqlspn-review"      [C]="sqlplan-compare"
     [P]="sqldeadlock-review" [D]="sqlindex-advisor"
     [O]="sqlmemory-review"   [Z]="sqldiskio-review"
-    [A]="sqlencryption-review"
+    [A]="sqlencryption-review" [B]="sqldbconfig-review"
+    [U]="sqlbootstraplog-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"

@@ -1,0 +1,81 @@
+Overall summary:
+  Final result:                  Failed: see details below
+  Exit code (Decimal):           -2061893606
+  Start time:                    2026-06-10 21:42:08
+  End time:                      2026-06-10 21:49:55
+  Requested action:              Install
+
+Setup completed with required actions for features.
+Troubleshooting information for those features:
+  Next step for SQLEngine:       Use the following information to resolve the error, uninstall this feature, and then run the setup process again.
+  Next step for Replication:     Use the following information to resolve the error, uninstall this feature, and then run the setup process again.
+
+Machine Properties:
+  Machine name:                  PRDSQL07
+  Machine processor count:       16
+  OS version:                    Microsoft Windows Server 2022 Standard (10.0.20348)
+  OS architecture:               x64
+  Process architecture:          64 Bit
+  OS clustered:                  No
+
+Package properties:
+  Description:                   Microsoft SQL Server 2022
+  ProductName:                   SQL Server 2022
+  Type:                          RTM
+  Version:                       16
+  Installation location:         D:\media\x64\setup\
+  Installation edition:          Standard
+
+Product Update Status:
+  User selected not to include product updates.
+
+User Input Settings:
+  ACTION:                        Install
+  FEATURES:                      SQLENGINE, REPLICATION, AS, RS
+  INSTANCEDIR:                   C:\Program Files\Microsoft SQL Server\
+  INSTANCENAME:                  MSSQLSERVER
+  SECURITYMODE:                  SQL
+  SQLBACKUPDIR:                  <empty>
+  SQLSVCACCOUNT:                 NT AUTHORITY\SYSTEM
+  SQLSVCINSTANTFILEINIT:         false
+  SQLSVCSTARTUPTYPE:             Automatic
+  SQLSYSADMINACCOUNTS:           CONTOSO\dbateam
+  SQLTEMPDBDIR:                  <empty>
+  SQLTEMPDBFILECOUNT:            1
+  SQLTEMPDBFILEGROWTH:           64
+  SQLTEMPDBFILESIZE:             8
+  SQLUSERDBDIR:                  <empty>
+  SQLUSERDBLOGDIR:               <empty>
+  TCPENABLED:                    1
+  NPENABLED:                     1
+  UpdateEnabled:                 false
+  Configuration file:            C:\Program Files\Microsoft SQL Server\160\Setup Bootstrap\Log\20260610_214208\ConfigurationFile.ini
+
+Detailed results:
+  Feature:                       Database Engine Services
+  Status:                        Failed
+  Reason for failure:            An error occurred during the setup process of the feature.
+  Next Step:                     Use the following information to resolve the error, uninstall this feature, and then run the setup process again.
+  Component name:                SQL Server Database Engine Services Instance Features
+  Component error code:          0x851A001A
+  Error description:             Wait on the Database Engine recovery handle failed. Check the SQL Server error log for potential causes.
+
+  Feature:                       SQL Server Replication
+  Status:                        Failed
+  Reason for failure:            An error occurred for a dependency of the feature causing the setup process for the feature to fail.
+  Next Step:                     Use the following information to resolve the error, uninstall this feature, and then run the setup process again.
+  Component name:                SQL Server Database Engine Services Instance Features
+  Component error code:          0x851A001A
+
+  Feature:                       Analysis Services
+  Status:                        Passed
+
+  Feature:                       Reporting Services - Native
+  Status:                        Passed
+
+Rules with failures or warnings:
+
+Global rules:
+  Warning    IsFirewallEnabled    The Windows Firewall is enabled. Make sure the appropriate ports are open to enable remote access.
+
+Rules report file:               C:\Program Files\Microsoft SQL Server\160\Setup Bootstrap\Log\20260610_214208\SystemConfigurationCheck_Report.htm

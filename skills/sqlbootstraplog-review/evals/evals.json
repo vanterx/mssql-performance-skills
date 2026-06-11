@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlbootstraplog-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Summary.txt shows: Final result Failed, Exit code (Decimal) -2061893606, Requested action Install. Detailed results: Database Engine Services Failed with component error code 0x851A001A 'Wait on the Database Engine recovery handle failed'; SQL Server Replication Failed ('an error occurred for a dependency of the feature'). User Input Settings show SQLSVCACCOUNT: NT AUTHORITY\\SYSTEM, SQLSVCINSTANTFILEINIT: false, SQLTEMPDBFILECOUNT: 1 on a 16-core server.",
+      "expected_output": "U1 Critical (final result Failed), U2 Critical (0x851A001A - engine did not start during configuration; read the new instance ERRORLOG / hand off to /sqlerrorlog-review), U4 Critical (partial install), U17 Info (Replication is cascade - one root cause), U19 Warning (LocalSystem service account), U20 Warning (IFI not granted), U21 Warning (1x8MB TempDB on 16 cores). Recovery order: ERRORLOG root cause first, correct INI, uninstall failed feature, rerun setup.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "A SQL Server 2019 CU patch fails before copying any files. The rules section shows the restart-computer rule Failed. How do I find what is holding the pending reboot and get the patch through?",
+      "expected_output": "U3/U7 Critical (Restart computer rule failed - pending reboot). Run scripts/check-pending-reboot.ps1 with -ShowDetail to identify which of the five signals is set (CBS, Windows Update, PendingFileRenameOperations, pending rename, ConfigMgr) and which files/product caused it. Reboot, rerun the script until exit code 0, then rerun the CU. If the state returns after every reboot, an agent/AV product is re-creating it.",
+      "files": []
+    }
+  ]
+}

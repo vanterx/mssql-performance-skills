@@ -194,6 +194,19 @@ Validated 2026-06-10. Both dispatcher skills contain no DMV, version, or trace-f
 
 ---
 
+## Addendum — sqlbootstraplog-review (new skill, 2026-06-11)
+
+The 21st skill (`sqlbootstraplog-review`, U1–U24) was authored grounded directly in
+Microsoft Learn at build time: log folder layout, file purposes, the three-phase setup
+model, per-instance patch subfolders, and the documented search methods ("error"/"failed"
+in Summary.txt, "error"/"exception" at the end of Detail.txt, "value 3" in MSI logs) from
+[View and read SQL Server Setup log files](https://learn.microsoft.com/sql/database-engine/install-windows/view-and-read-sql-server-setup-log-files);
+ConfigurationFile.ini parameter names (SQLSVCINSTANTFILEINIT, SQLTEMPDB*, SECURITYMODE,
+TCPENABLED/NPENABLED, FEATURES, directory parameters) cross-checked against a real
+Summary.txt User Input Settings block and the configuration-file install doc; pending-reboot
+registry signals in the companion script verified against Windows servicing documentation.
+Totals are now **721 checks across 21 skills**.
+
 ## Summary
 
 - **Total corrections: 57** across 13 skills + shared docs (Phase A metadata: 10 fixes; Batch 1: 14; Batch 2: 21; Batch 3: 14; Batch 4: 5; Batch 5: 1 ripple; plus VERSION_COMPATIBILITY/manifest fixes).
