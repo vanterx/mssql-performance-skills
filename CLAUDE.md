@@ -129,6 +129,7 @@ Provides twenty slash-command skills — nineteen specialised review skills plus
 | [skills/sqlencryption-review/scripts/capture-all-encryption.ps1](skills/sqlencryption-review/scripts/capture-all-encryption.ps1) | PowerShell: captures all encryption DMVs to timestamped output files |
 | [skills/sqlencryption-review/scripts/test-tls.ps1](skills/sqlencryption-review/scripts/test-tls.ps1) | PowerShell: verifies TLS configuration via SChannel registry + connection test |
 | [skills/sqlencryption-review/scripts/README.md](skills/sqlencryption-review/scripts/README.md) | Script usage guide with prerequisites and examples |
+| [scripts/check-pending-reboot.ps1](scripts/check-pending-reboot.ps1) | PowerShell: detects pending-reboot conditions (CBS, Windows Update, PendingFileRenameOperations, pending rename, SCCM) that fail SQL Server Setup's "Restart computer" rule — staged for the planned `sqlsetup-review` skill (U7) |
 
 ## Installing Skills
 

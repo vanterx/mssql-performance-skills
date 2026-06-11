@@ -49,7 +49,7 @@ subfolders when patching; `Log*.cab` archive; `Datastore\` XML state snapshots.
 - U6 — Component update phase failure (phase 2: media update download blocked — offline/proxy)
 
 **Rule-failure patterns (U7–U13)**
-- U7 — Reboot required pending (RebootRequiredCheck / PendingFileRenameOperations)
+- U7 — Reboot required pending (RebootRequiredCheck / PendingFileRenameOperations) — companion script already exists: `scripts/check-pending-reboot.ps1`
 - U8 — Insufficient disk space / drive rule failures
 - U9 — Account or permission rule failures (service account validation, sysadmin check on add-node)
 - U10 — Prerequisite failures (.NET, PowerShell, OS version rules)
@@ -89,25 +89,28 @@ names) gets validated against MS Learn before the skill is marked complete.
    description ≥ 30 words with trigger phrases + `triggers:` field
 2. `skills/sqlsetup-review/references/check-explanations.md` (five-part structure per
    check + Quick Reference table) + `references/README.md`
-3. Examples: synthetic failed-install `Summary.txt` (failed rule + 0x84B40000-style code,
+3. Move `scripts/check-pending-reboot.ps1` to `skills/sqlsetup-review/scripts/` (with a
+   scripts/README.md, following the sqlencryption-review scripts pattern) and update the
+   CLAUDE.md Scripts table row
+4. Examples: synthetic failed-install `Summary.txt` (failed rule + 0x84B40000-style code,
    MSI value-3 excerpt) + expected `setup-analysis.md`
-4. CLAUDE.md: Key Files tables (skill + reference rows), prefix table (add U), Purpose
+5. CLAUDE.md: Key Files tables (skill + reference rows), prefix table (add U), Purpose
    ("twenty" → "twenty-one"; orchestrator routes to 20 specialised skills)
-5. README.md: install line + Skills table + full `## sqlsetup-review` section
-6. PERFORMANCE_TUNING_GUIDE.md: Skills at a Glance, Skill Scope Comparison, scenario
+6. README.md: install line + Skills table + full `## sqlsetup-review` section
+7. PERFORMANCE_TUNING_GUIDE.md: Skills at a Glance, Skill Scope Comparison, scenario
    routing ("setup failed", "patch failed"), Check ID Reference (+24 → **Total: 721**)
-7. LLM_COST_ESTIMATION.md: file-size row
-8. skills/VERSION_COMPATIBILITY.md: matrix row, notes, totals (697 → 721; universal
+8. LLM_COST_ESTIMATION.md: file-size row
+9. skills/VERSION_COMPATIBILITY.md: matrix row, notes, totals (697 → 721; universal
    count +22, U20/U21 gated SQL 2016+), Quick Reference rows (21 skills)
-9. `.claude-plugin/plugin.json` + `marketplace.json` descriptions: 21 skills / 721 checks
+10. `.claude-plugin/plugin.json` + `marketplace.json` descriptions: 21 skills / 721 checks
    (verify-docs Checks 42–43 enforce this)
-10. mcp-server: add `setuplog` artifact type to `ARTIFACT_SKILL_MAP` in `tools.ts`,
+11. mcp-server: add `setuplog` artifact type to `ARTIFACT_SKILL_MAP` in `tools.ts`,
     add skill to `routing.test.ts` ALL_SKILL_NAMES, `npm run bundle`, `npm test`
-11. Orchestrator (`mssql-performance-review/SKILL.md`): add artifact classification row
+12. Orchestrator (`mssql-performance-review/SKILL.md`): add artifact classification row
     for setup logs + dispatch heuristic
-12. MS Learn validation pass on the finished skill (mandatory policy) + record in
+13. MS Learn validation pass on the finished skill (mandatory policy) + record in
     `docs/ms-learn-validation-2026-06.md` (or successor report)
-13. `bash scripts/verify-docs.sh` green; commit per repo conventions
+14. `bash scripts/verify-docs.sh` green; commit per repo conventions
 
 ## Effort estimate
 
