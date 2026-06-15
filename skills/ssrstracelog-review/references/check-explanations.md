@@ -28,20 +28,27 @@ and the [rskeymgmt utility](https://learn.microsoft.com/sql/reporting-services/t
 
 **What it means:** `DefaultTraceSwitch` in `ReportingServicesService.exe.config`
 controls how much detail the report server writes to its trace log. Level `3`
-(`all:3` — exceptions, restarts, warnings, status messages) is the documented default and
+(exceptions, restarts, warnings, status messages) is the documented default and
 is appropriate for normal operation. Level `4` (verbose) adds SOAP envelopes, HTTP
 headers, and debug trace — useful while reproducing a specific issue but noisy and
-disk-hungry long-term. Level `0` disables the trace log entirely.
+disk-hungry long-term. Level `0` disables the trace log entirely. Verbose tracing can
+also be turned on through the `<RStrace>` `Components` setting (raising `all` to `all:4`),
+so check both places.
 
 **How to spot it:**
 ```xml
+<system.diagnostics>
+  <switches>
+    <add name="DefaultTraceSwitch" value="4" />
+  </switches>
+</system.diagnostics>
 <RStrace>
-  <add name="DefaultTraceSwitch" value="4" />
+  <add name="Components" value="all:4" />   <!-- or all components at verbose here -->
   ...
 </RStrace>
 ```
 combined with a series of large daily trace log files and no open investigation, or
-`value="0"` with no `ReportServerService_*.log` files being produced at all.
+`DefaultTraceSwitch value="0"` with no `ReportServerService_*.log` files being produced at all.
 
 **Example:** A trace level of `4` was set six months ago to debug a one-time rendering
 issue and never reverted — the report server now writes multi-hundred-MB trace logs
@@ -119,14 +126,16 @@ every 10 minutes.
 
 ### G4 — Stale Component-Level Trace Override
 
-**What it means:** `RStrace` supports per-component trace levels using
-`<component>:<level>` syntax (the documented default is `all:3`). A component left at a
-higher level than `DefaultTraceSwitch` keeps that one subsystem verbose indefinitely.
+**What it means:** the `<RStrace>` `Components` setting supports per-component trace
+levels using `<component>:<level>` syntax (the documented default is `all`, which means
+every component uses `DefaultTraceSwitch`). A component pinned to a higher level keeps
+that one subsystem verbose indefinitely. Valid component categories include `all`,
+`RunningJobs`, `SemanticQueryEngine`, `SemanticModelGenerator`, and `http`.
 
 **How to spot it:**
 ```xml
-<add name="TraceFileMode" value="Unified"/>
-<add name="ComponentTraceSwitch" value="all:3,RunningJobs:4,SemanticQueryEngine:4" />
+<add name="TraceFileMode" value="Unique"/>
+<add name="Components" value="all:3,RunningJobs:4,SemanticQueryEngine:4" />
 ```
 where `DefaultTraceSwitch` itself is `3` but specific components are pinned to `4` with
 no documented reason.
@@ -286,24 +295,29 @@ server database was never created/configured; the service generates thousands of
 
 ### G9 — rsServerConfigurationError
 
-**What it means:** `rsServerConfiguration` is a general-purpose error indicating
+**What it means:** `rsServerConfigurationError` is a general-purpose error indicating
 `RSReportServer.config` or `RSReportDesigner.config` is missing, unreadable, or contains
-an XML element with a missing/invalid value. A second trace log message immediately
-following states the actual cause.
+an XML element with a missing/invalid value that is critical to server operation. The
+report server returns this error only when the invalid setting is critical; for a
+non-critical invalid value it instead falls back to an internal default and logs that to
+the trace log. Malformed XML stops the server from starting at all. A second message
+immediately following the error states the actual cause.
 
 **How to spot it:**
 ```
-rsServerConfiguration: The report server encountered a configuration error.
+rsServerConfigurationError: The report server encountered a configuration error.
 <second message naming the missing/invalid file or element>
 ```
-typically appearing immediately after a manual edit of `RSReportServer.config`.
+typically appearing immediately after a manual edit of `RSReportServer.config`. Errors
+about missing or invalid critical settings are also logged to the Windows application
+event log.
 
 **Example:** A `<MemoryThreshold>` element was added with a non-numeric value while
 hand-editing the config file; the service fails to start and logs
-`rsServerConfiguration` followed by a message naming the invalid element.
+`rsServerConfigurationError` followed by a message naming the invalid element.
 
 **Fix options:**
-1. Read the line(s) immediately after the `rsServerConfiguration` entry — that's where
+1. Read the line(s) immediately after the `rsServerConfigurationError` entry — that's where
    the specific cause is named.
 2. If this began after a manual edit, revert to the previous version of the file
    (restore from backup) rather than guessing at the correct value.
@@ -343,7 +357,7 @@ entirely.
    `MemorySafetyMargin` while keeping `MemoryThreshold` higher — e.g. `60`/`90` makes the
    medium-pressure zone start earlier without breaking the ordering.
 3. Re-check after any change via G9 (a bad value here is a common
-   `rsServerConfiguration` trigger).
+   `rsServerConfigurationError` trigger).
 
 **Related checks:** G9, G11, G12
 

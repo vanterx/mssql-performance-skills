@@ -4,9 +4,9 @@
   <add name="FileSizeLimitMb" value="32" />
   <add name="KeepFilesForDays" value="14" />
   <add name="Prefix" value="pid tid time" />
-  <add name="TraceFileMode" value="Unified" />
-  <add name="TraceListeners" value="filelog" />
-  <add name="ComponentTraceSwitch" value="all:4" />
+  <add name="TraceFileMode" value="Unique" />
+  <add name="TraceListeners" value="debugwindow, file" />
+  <add name="Components" value="all:4" />
 </RStrace>
 
 === RSReportServer.config (<Service> section) ===

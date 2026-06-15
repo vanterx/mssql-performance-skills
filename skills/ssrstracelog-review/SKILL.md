@@ -46,9 +46,10 @@ Accept any of:
   Lines follow the format
   `<component>!<thread>!<pid>!<MM/DD/YYYY-HH:MM:SS> <severity> <LEVEL>: <message>`
   (e.g. `library!WindowsService_10!4c7c!05/24/2016-01:05:06 e ERROR: ...`)
-- **`ReportingServicesService.exe.config`** excerpts — the `<RStrace>` section
-  (`DefaultTraceSwitch`, `FileName`, `FileSizeLimitMb`, `KeepFilesForDays`, component trace
-  overrides)
+- **`ReportingServicesService.exe.config`** excerpts — the `DefaultTraceSwitch` value
+  (in the `<system.diagnostics><switches>` block) plus the `<RStrace>` section
+  (`FileName`, `FileSizeLimitMb`, `KeepFilesForDays`, `TraceListeners`, `TraceFileMode`,
+  and the `Components` setting that carries per-component trace overrides)
 - **`RSReportServer.config`** excerpts — the `<Service>` section (`MemorySafetyMargin`,
   `MemoryThreshold`, `WorkingSetMaximum`, `WorkingSetMinimum`, `RecycleTime`,
   `MaxAppDomainUnloadTime`, `PollingInterval`, `MaxQueueThreads`, `UrlRoot`)
@@ -62,7 +63,7 @@ Accept any of:
 ### Where the files live
 
 ```
-SQL Server 2016 (named instance MSSQLSERVER):
+SQL Server 2016 (default instance MSSQLSERVER):
   Trace logs:   C:\Program Files\Microsoft SQL Server\MSRS13.MSSQLSERVER\Reporting Services\LogFiles\
   Trace config: C:\Program Files\Microsoft SQL Server\MSRS13.MSSQLSERVER\Reporting Services\ReportServer\bin\ReportingServicesService.exe.config
   Server config: C:\Program Files\Microsoft SQL Server\MSRS13.MSSQLSERVER\Reporting Services\ReportServer\RSReportServer.config
@@ -110,9 +111,11 @@ server database (default name `ReportServer`).
 
 | Setting / Metric | Default | Notes |
 |-------------------|---------|-------|
-| `DefaultTraceSwitch` | `3` (`all:3` — exceptions, restarts, warnings, status messages) | `4` = verbose, `0` = disabled |
-| `FileSizeLimitMb` | 32 | per trace log file |
-| `KeepFilesForDays` | 14 | trace log retention |
+| `DefaultTraceSwitch` | `3` (exceptions, restarts, warnings, status messages) | `4` = verbose, `0` = disabled; lives in `<system.diagnostics><switches>` |
+| `Components` (in `<RStrace>`) | `all` | per-component overrides as `<component>:<level>`, e.g. `all:3,RunningJobs:4`; components with no level use `DefaultTraceSwitch` |
+| `FileSizeLimitMb` | 32 | per trace log file (0 or negative is treated as 1) |
+| `KeepFilesForDays` | 14 | trace log retention (0 or negative is treated as 1) |
+| `TraceFileMode` | `Unique` | one trace log per component per day; do not modify |
 | `MemorySafetyMargin` | 80 (% of `WorkingSetMaximum`) | low/medium pressure boundary |
 | `MemoryThreshold` | 90 (% of `WorkingSetMaximum`) | medium/high pressure boundary; must be > `MemorySafetyMargin` |
 | `WorkingSetMaximum` / `WorkingSetMinimum` | not set (detected at startup) / 60% of max | KB; absent unless added manually |
@@ -125,16 +128,18 @@ server database (default name `ReportServer`).
 
 ## Trace Configuration and Log Health Checks (G1–G4)
 
-### G1 — DefaultTraceSwitch Left at Verbose or Disabled in Production
-- **Trigger:** `ReportingServicesService.exe.config` `<RStrace>` section shows
-  `DefaultTraceSwitch` value `4` (verbose) sustained across multiple trace log files with
-  no active investigation, **or** value `0` (tracing disabled)
+### G1 — Verbose or Disabled Tracing in Production
+- **Trigger:** `ReportingServicesService.exe.config` shows verbose tracing sustained
+  across multiple trace log files with no active investigation — either
+  `DefaultTraceSwitch` value `4` (in `<system.diagnostics><switches>`) **or** the
+  `<RStrace>` `Components` setting raising `all` to level 4 (`all:4`) — **or** tracing
+  disabled (`DefaultTraceSwitch` value `0`)
 - **Severity:** Warning
-- **Fix:** Reset `DefaultTraceSwitch` to the documented default `3` (`all:3` — exceptions,
-  restarts, warnings, status messages). Verbose mode (`4`) generates large trace files and
-  should only be enabled temporarily while reproducing an issue, then reverted. Disabling
-  tracing (`0`) removes the primary diagnostic source for the next incident — Microsoft
-  explicitly recommends against it.
+- **Fix:** Reset `DefaultTraceSwitch` to the documented default `3` (exceptions, restarts,
+  warnings, status messages) and `Components` to `all`. Verbose mode generates large trace
+  files and should only be enabled temporarily while reproducing an issue, then reverted.
+  Disabling tracing (`0`) removes the primary diagnostic source for the next incident —
+  Microsoft explicitly recommends against it.
 
 ### G2 — Trace Log Retention Misconfigured
 - **Trigger:** `FileSizeLimitMb` or `KeepFilesForDays` in `ReportingServicesService.exe.config`
@@ -160,9 +165,9 @@ server database (default name `ReportServer`).
   by default, which do **not** create a new trace log file — only process restarts do).
 
 ### G4 — Stale Component-Level Trace Override
-- **Trigger:** `<RStrace>` contains a component-specific trace level override (e.g.
-  `RunningJobs:4` or `SemanticQueryEngine:4`) that differs from `DefaultTraceSwitch`, with
-  no corresponding open investigation
+- **Trigger:** the `<RStrace>` `Components` setting contains a component-specific trace
+  level override (e.g. `all:3,RunningJobs:4` or `all,SemanticQueryEngine:4`) that raises a
+  single component above `DefaultTraceSwitch`, with no corresponding open investigation
 - **Severity:** Info
 - **Fix:** Component overrides left from a past investigation silently keep one subsystem
   at verbose logging. Remove the override (reverting that component to
@@ -231,13 +236,15 @@ server database (default name `ReportServer`).
   uninstall the service to stop the noise.
 
 ### G9 — rsServerConfigurationError
-- **Trigger:** Trace log contains *"The report server encountered a configuration error.
-  (rsServerConfiguration)"* — typically immediately following a manual edit of
-  `RSReportServer.config` or `RSReportDesigner.config`
+- **Trigger:** Trace log or Windows application log contains *"The report server
+  encountered a configuration error. (rsServerConfigurationError)"* — typically
+  immediately following a manual edit of `RSReportServer.config` or `RSReportDesigner.config`
 - **Severity:** Critical
 - **Fix:** A configuration file is missing, unreadable, or contains an invalid/missing
-  XML element value. The accompanying second message in the trace log states the actual
-  cause — read the lines immediately following the `rsServerConfiguration` entry. If this
+  XML element value that is critical to server operation (malformed XML stops startup
+  entirely; an invalid non-critical value falls back to an internal default and is logged
+  to the trace log instead). The accompanying second message states the actual
+  cause — read the lines immediately following the `rsServerConfigurationError` entry. If this
   began after a manual edit, revert the change (restore from backup if available) per
   Microsoft's guidance for `RSReportServer.config`. Validate any setting changes against
   the [RsReportServer.config configuration file reference](https://learn.microsoft.com/sql/reporting-services/report-server/rsreportserver-config-configuration-file)

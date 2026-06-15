@@ -22,7 +22,7 @@ remote server is failing on every run due to an impersonation error.
 |-------|----------|----------|---------|-----|
 | G5 | Critical | Trace log + Event Log | `rsReportServerDatabaseUnavailable` at 08:14, Event 107 ×2 | Confirm report server DB instance is up and accepting remote TCP/Named Pipe connections; re-validate via Report Server Configuration Manager |
 | G3 | Warning | LogFiles listing | 3 trace log rollovers within 19 minutes (08:14–08:33), outside the daily/size schedule | Correlate with G5 — the connectivity loss is the likely restart trigger |
-| G1 | Warning | ReportingServicesService.exe.config | `ComponentTraceSwitch value="all:4"` — verbose tracing for every component | Revert to `all:3` for normal operation; the 31.8 MB midnight log is near `FileSizeLimitMb` (32) partly because of this |
+| G1 | Warning | ReportingServicesService.exe.config | `Components value="all:4"` — verbose tracing for every component | Revert to `all:3` for normal operation; the 31.8 MB midnight log is near `FileSizeLimitMb` (32) partly because of this |
 | G16 | Critical | ExecutionLog3 | `/Ops/LiveDashboard` `Status=rsProcessingAborted` on 2 consecutive days, `TimeProcessing` ~94–95 s | Reduce processing time before raising timeouts; `TimeProcessing` dominates `TimeDataRetrieval` (~1.1–1.2 s) — investigate report design (grouping/expressions) |
 | G14 | Warning | ExecutionLog3 | `/Finance/DailySales` subscription: `TimeDataRetrieval` ~8.2–8.4 s dominates `TimeProcessing`+`TimeRendering` (~0.5 s) | Capture the dataset query for `/sqlplan-review` or `/sqlquerystore-review` |
 | G18 | Info | ExecutionLog3 | `/Finance/DailySales` subscription runs `Source=Live` daily at the same time/parameters | Configure a snapshot schedule for this report so the daily subscription uses `Source=Snapshot` and skips the 8 s data retrieval |
@@ -51,7 +51,7 @@ remote server is failing on every run due to an impersonation error.
 | 2 | Re-validate the report server database connection via Report Server Configuration Manager once the Database Engine side is confirmed healthy | G5 |
 | 3 | Review `/Ops/LiveDashboard` report design (grouping, expressions, dataset size) to reduce `TimeProcessing` below the timeout | G16 |
 | 4 | Verify the file share subscription's credentials and Kerberos delegation to FILESRV01 via `/sqlspn-review`; test with `runas` + manual file copy | G19 |
-| 5 | Revert `ComponentTraceSwitch` from `all:4` to `all:3` | G1 |
+| 5 | Revert `Components` from `all:4` to `all:3` | G1 |
 | 6 | Remove `WorkingSetMaximum` override on the dedicated host | G11 |
 | 7 | Configure a snapshot schedule for `/Finance/DailySales` | G14, G18 |
 
