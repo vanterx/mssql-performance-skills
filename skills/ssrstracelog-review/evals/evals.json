@@ -1,0 +1,23 @@
+{
+  "skill_name": "ssrstracelog-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "After a Windows Update reboot, the SQL Server Reporting Services trace log shows: 'The report server can't open a connection to the report server database. A connection to the database is required for all requests and processing. (rsReportServerDatabaseUnavailable)' repeated every few seconds, and the Windows Application log has Event ID 107 from 'Report Server Windows Service' saying it can't connect to the report server database. Five new ReportServerService_<timestamp>.log files were created within 20 minutes.",
+      "expected_output": "G5 Critical (rsReportServerDatabaseUnavailable / Event 107 - report server database unreachable). G3 Warning (frequent trace log rollover indicates repeated service restarts, likely a crash loop driven by G5). Recovery: confirm the Database Engine instance hosting the report server database is running and finished recovery (hand off to /sqlerrorlog-review if not), confirm TCP/IP and Named Pipes are enabled for remote connections, then re-validate the connection via Report Server Configuration Manager's Database Setup page rather than editing config files directly.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "RSReportServer.config shows <MemorySafetyMargin>90</MemorySafetyMargin> and <MemoryThreshold>80</MemoryThreshold>, with <WorkingSetMaximum>2000000</WorkingSetMaximum> on a dedicated report server with 32 GB RAM. ExecutionLog3 shows a cluster of 40 subscriptions all starting at 08:00 with high EstimatedMemoryUsageKB, and a new ReportServerService_<timestamp>.log file appears at 08:04 that is not at the scheduled RecycleTime boundary.",
+      "expected_output": "G10 Critical (MemoryThreshold <= MemorySafetyMargin - inverted from the 80/90 defaults, undefined pressure boundary). G11 Warning (WorkingSetMaximum ~2GB artificially caps a 32GB dedicated host). G21 Warning (40 subscriptions clustered at 08:00 causing a concurrency spike). G12 Critical (the 08:04 trace log rollover not aligned to RecycleTime is a hard AppDomain recycle from a memory allocation failure, triggered by the subscription burst under the misconfigured memory thresholds). Recovery: restore MemorySafetyMargin=80/MemoryThreshold=90, remove the WorkingSetMaximum override on the dedicated host, and stagger the 08:00 subscriptions across a wider window.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A file share subscription that has run successfully for months now fails every night. The trace log shows: 'filesys!WindowsService_10!4c7c!05/24/2026-01:05:06 e ERROR: Failure writing file \\\\FILESRV\\Reports\\daily.xlsx : Microsoft.ReportingServices.FileShareDeliveryProvider.FileShareProvider+NetworkErrorException: An impersonation error occurred using the security context of the current user.' The report server and the file share are on different servers.",
+      "expected_output": "G19 Critical (FileShareDeliveryProvider impersonation/write failure - SSRS double-hop between the report server and the remote file share). Recovery: verify the subscription's saved credentials (or the report server service account) still have write permission on \\\\FILESRV\\Reports, then check constrained Kerberos delegation from the report server's service account to FILESRV's CIFS service - hand off to /sqlspn-review to validate the delegation configuration. Test with runas + copy as the configured account to isolate permissions from delegation.",
+      "files": []
+    }
+  ]
+}

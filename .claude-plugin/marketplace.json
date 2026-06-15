@@ -1,7 +1,7 @@
 {
   "$schema": "https://code.claude.com/schemas/marketplace.json",
   "name": "mssql-performance-skills",
-  "description": "SQL Server performance tuning skills for Claude Code — 721 checks across 21 skills covering T-SQL static analysis, execution plan review, wait statistics, deadlock diagnosis, Query Store, Always On AG health, ERRORLOG, Kerberos/SPN, memory, disk I/O, encryption, and configuration drift analysis",
+  "description": "SQL Server performance tuning skills for Claude Code — 745 checks across 22 skills covering T-SQL static analysis, execution plan review, wait statistics, deadlock diagnosis, Query Store, Always On AG health, ERRORLOG, Kerberos/SPN, memory, disk I/O, encryption, configuration drift, and SSRS report server trace log analysis",
   "version": "1.0.0",
   "owner": {
     "name": "vanterx"
@@ -10,7 +10,7 @@
     {
       "name": "mssql-performance-skills",
       "displayName": "MSSQL Performance Skills",
-      "description": "21 SQL Server performance tuning skills — T-SQL static analysis (85 checks), execution plan review (108 checks), encryption review (112 checks), wait statistics, deadlock diagnosis, query store, ERRORLOG, AG health, and more",
+      "description": "22 SQL Server performance tuning skills — T-SQL static analysis (85 checks), execution plan review (108 checks), encryption review (112 checks), wait statistics, deadlock diagnosis, query store, ERRORLOG, AG health, SSRS trace log review, and more",
       "version": "1.0.0",
       "source": "./",
       "license": "MIT",

@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides twenty-one slash-command skills — twenty specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance), instance/database configuration drift (MAXDOP, Max Server Memory, auto-shrink, compatibility level, RCSI, VLF count, IFI, TempDB sizing, surface area), and SQL Server Setup Bootstrap log analysis (failed installs/patches, setup rules, ConfigurationFile.ini review). No application code — content is Markdown only.
+Provides twenty-two slash-command skills — twenty-one specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance), instance/database configuration drift (MAXDOP, Max Server Memory, auto-shrink, compatibility level, RCSI, VLF count, IFI, TempDB sizing, surface area), SQL Server Setup Bootstrap log analysis (failed installs/patches, setup rules, ConfigurationFile.ini review), and SQL Server Reporting Services (SSRS) report server trace log analysis (trace configuration, database connectivity, memory/AppDomain recycling, report processing performance, subscription delivery, scale-out encryption keys). No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -18,7 +18,7 @@ Provides twenty-one slash-command skills — twenty specialised review skills pl
 
 | File | Purpose |
 |------|---------|
-| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 20 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 21 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 85 checks (T1–T85) — structural, correctness, security, deprecated syntax, performance smells, SQL 2017–2022 modern syntax |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
@@ -39,6 +39,7 @@ Provides twenty-one slash-command skills — twenty specialised review skills pl
 | [skills/sqlencryption-review/SKILL.md](skills/sqlencryption-review/SKILL.md) | Full SQL Server encryption infrastructure analysis: `sqlencryption-review`. 112 checks (A1–A112) — TDE, Always Encrypted, CLE symmetric keys, backup encryption, transport/TLS, certificate lifecycle, asymmetric/symmetric key management, DMK/SMK key hierarchy (including sp_control_dbmasterkey_password and SSISDB), EKM/AKV, TLS/network hardening, Always Encrypted advanced (enclave attestation, driver compatibility), operational key lifecycle, SQL Server 2022 Ledger, Azure-specific encryption, dynamic data masking patterns, compliance explicit checks (PCI-DSS v4, HIPAA, GDPR, FedRAMP, CMMC, NY-DFS), operational validation (job step passwords, plan cache exposure, AKV soft-delete), advanced cryptographic patterns (ENCRYPTBYPASSPHRASE, HASHBYTES, Service Broker certs, NTLM) |
 | [skills/sqldbconfig-review/SKILL.md](skills/sqldbconfig-review/SKILL.md) | Instance and database configuration drift analysis: `sqldbconfig-review`. 28 checks (B1–B28) — MAXDOP/NUMA alignment, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads, Max Server Memory, LPIM, auto-shrink, auto-close, compatibility level, RCSI, page verification, auto-statistics, Trustworthy, cross-DB chaining, VLF count, percent auto-growth, Instant File Initialization, TempDB file count, surface area exposure |
 | [skills/sqlbootstraplog-review/SKILL.md](skills/sqlbootstraplog-review/SKILL.md) | SQL Server Setup Bootstrap log analysis: `sqlbootstraplog-review`. 24 checks (U1–U24) — failed install/patch outcome and exit codes, failed setup rules (pending reboot, disk space, accounts, prerequisites, cluster), Detail.txt/MSI forensics, ConfigurationFile.ini review (service accounts, IFI, TempDB, security surface, directories) |
+| [skills/ssrstracelog-review/SKILL.md](skills/ssrstracelog-review/SKILL.md) | SQL Server Reporting Services trace log analysis: `ssrstracelog-review`. 24 checks (G1–G24) — trace configuration drift, report server database connectivity, memory thresholds and AppDomain recycling, report processing/data retrieval/rendering performance, subscription delivery failures, scale-out and encryption key health |
 
 ### Human Reference (references/check-explanations.md — not loaded at runtime by default)
 
@@ -76,18 +77,19 @@ Provides twenty-one slash-command skills — twenty specialised review skills pl
 | [skills/sqlencryption-review/references/error-reference.md](skills/sqlencryption-review/references/error-reference.md) | Common encryption errors reference: Msg 33111, 33104, 15581, 33081, 15318, self-signed cert, audit failures, EKM errors, enclave attestation, TLS handshake errors |
 | [skills/sqldbconfig-review/references/check-explanations.md](skills/sqldbconfig-review/references/check-explanations.md) | Plain-English explanation of all 28 B-checks with T-SQL examples, fix recipes, and Quick Reference table |
 | [skills/sqlbootstraplog-review/references/check-explanations.md](skills/sqlbootstraplog-review/references/check-explanations.md) | Plain-English explanation of all 24 U-checks with Summary.txt/Detail.txt/MSI log excerpts, fix recipes, and Quick Reference table |
+| [skills/ssrstracelog-review/references/check-explanations.md](skills/ssrstracelog-review/references/check-explanations.md) | Plain-English explanation of all 24 G-checks with trace log/config excerpts, fix recipes, and Quick Reference table |
 
 ### Root Documentation
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 20 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 721-check ID reference |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 22 skills |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 745-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 721 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 745 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
-| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 20 SKILL.md files are discovered by the plugin system |
+| [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 22 SKILL.md files are discovered by the plugin system |
 | [mcp-server/src/index.ts](mcp-server/src/index.ts) | MCP server entry point — CORS preflight, `GET /health`, error handling, then Cloudflare Workers fetch handler using `WebStandardStreamableHTTPServerTransport` (stateless, one server per request) |
 | [mcp-server/src/skill-loader.ts](mcp-server/src/skill-loader.ts) | `SkillMeta` interface — no fs access; all skill data pre-bundled into `skills-data.ts` at deploy time |
 | [mcp-server/src/skills-data.ts](mcp-server/src/skills-data.ts) | Generated file — run `npm run bundle` to regenerate from `skills/*/SKILL.md`. Do not edit manually |
@@ -123,6 +125,7 @@ Provides twenty-one slash-command skills — twenty specialised review skills pl
 | [skills/sqldiskio-review/examples/](skills/sqldiskio-review/examples/) | sys.dm_io_virtual_file_stats + auto-growth trace: 47 ms data reads, 31 ms log writes, 3 auto-grow events on same volume + analysis |
 | [skills/sqlencryption-review/examples/](skills/sqlencryption-review/examples/) | Multi-database encryption audit DMV output: TDE off on HRPayroll/ArchiveDB, expired TDE cert, RC4/3DES CLE keys, unencrypted backups, plaintext remote sessions, no SMK/DMK backup, self-signed TLS + analysis |
 | [skills/sqldbconfig-review/examples/](skills/sqldbconfig-review/examples/) | sp_configure + sys.databases + sys.master_files + VLF count output: MAXDOP=0 on 4-NUMA, Max Server Memory unset, auto-shrink on SalesDB, ReportDB at compat 100 with auto-close + percent growth + analysis |
+| [skills/ssrstracelog-review/examples/](skills/ssrstracelog-review/examples/) | SSRS trace config + LogFiles listing + Event Log + ExecutionLog3 output: report server database connectivity outage, verbose trace switch, processing timeout, file share subscription impersonation failure + analysis |
 
 ### Scripts
 
@@ -133,6 +136,8 @@ Provides twenty-one slash-command skills — twenty specialised review skills pl
 | [skills/sqlencryption-review/scripts/README.md](skills/sqlencryption-review/scripts/README.md) | Script usage guide with prerequisites and examples |
 | [skills/sqlbootstraplog-review/scripts/check-pending-reboot.ps1](skills/sqlbootstraplog-review/scripts/check-pending-reboot.ps1) | PowerShell: detects pending-reboot conditions (CBS, Windows Update, PendingFileRenameOperations, pending rename, SCCM) that fail SQL Server Setup's "Restart computer" rule — companion to `sqlbootstraplog-review` U7 |
 | [skills/sqlbootstraplog-review/scripts/README.md](skills/sqlbootstraplog-review/scripts/README.md) | Script usage guide: signals checked, parameters, exit codes, automation pattern |
+| [skills/ssrstracelog-review/scripts/collect-ssrs-diagnostics.ps1](skills/ssrstracelog-review/scripts/collect-ssrs-diagnostics.ps1) | PowerShell: collects RStrace config, Service config, trace log rollover counts, recent ERROR/Exception lines, and Application Event Log entries for the Report Server Windows Service |
+| [skills/ssrstracelog-review/scripts/README.md](skills/ssrstracelog-review/scripts/README.md) | Script usage guide: sections collected, parameters, prerequisites, ExecutionLog3 query handoff |
 
 ## Installing Skills
 
@@ -150,7 +155,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Option 3: Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 21 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 22 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -226,6 +231,7 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `A` | `sqlencryption-review` |
 | `B` | `sqldbconfig-review` |
 | `U` | `sqlbootstraplog-review` |
+| `G` | `ssrstracelog-review` |
 | (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
 New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.

@@ -23,6 +23,7 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   encryption:  ["sqlencryption-review"],
   dbconfig:    ["sqldbconfig-review"],
   setuplog:    ["sqlbootstraplog-review"],
+  ssrslog:     ["ssrstracelog-review"],
   mixed:       ["mssql-performance-review"],
 };
 
@@ -111,14 +112,15 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
           "tsql", "sqlplan", "plancompare", "planbatch",
           "deadlock", "waits", "trace", "stats", "querystore",
           "procstats", "hadr", "clusterlog", "errorlog", "spn",
-          "memory", "diskio", "encryption", "dbconfig", "setuplog", "mixed",
+          "memory", "diskio", "encryption", "dbconfig", "setuplog", "ssrslog", "mixed",
         ])
         .describe(
           "Type of artifact to analyze. " +
           "plancompare = two plans for regression diff; planbatch = folder of many plans; " +
           "memory = sys.dm_os_memory_clerks/PLE output; diskio = sys.dm_io_virtual_file_stats output; " +
           "encryption = TDE/AE/CLE/TLS audit output; dbconfig = sp_configure/sys.databases output; " +
-          "setuplog = Setup Bootstrap logs (Summary.txt, Detail.txt, MSI logs, ConfigurationFile.ini). " +
+          "setuplog = Setup Bootstrap logs (Summary.txt, Detail.txt, MSI logs, ConfigurationFile.ini); " +
+          "ssrslog = SSRS report server trace logs, RSReportServer.config/ReportingServicesService.exe.config excerpts, ExecutionLog3 output, or Report Server Windows Service Event Log entries. " +
           "Use 'mixed' when the artifact combines multiple types or the type is unknown — routes to the mssql-performance-review orchestrator."
         ),
     },
