@@ -1,6 +1,6 @@
 {
   "name": "mssql-performance-skills",
-  "description": "21 SQL Server performance tuning skills for Claude Code — static T-SQL analysis, execution plans, wait stats, deadlock, query store, AG health, ERRORLOG, SPN, memory, disk I/O, encryption, configuration drift, and setup bootstrap log review",
+  "description": "22 SQL Server performance tuning skills for Claude Code — static T-SQL analysis, execution plans, wait stats, deadlock, query store, AG health, ERRORLOG, SPN, memory, disk I/O, encryption, configuration drift, setup bootstrap log, and SSRS trace log review",
   "version": "1.0.0",
   "skills": "./skills"
 }

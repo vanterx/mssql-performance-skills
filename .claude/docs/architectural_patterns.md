@@ -65,7 +65,8 @@ triggers:
 | `skills/sqldiskio-review/` | `/sqldiskio-review` | Z |
 | `skills/sqlencryption-review/` | `/sqlencryption-review` | A |
 | `skills/sqldbconfig-review/` | `/sqldbconfig-review` | B |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 19) |
+| `skills/ssrstracelog-review/` | `/ssrstracelog-review` | G |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 21) |
 
 ---
 
@@ -111,10 +112,11 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
 | `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B28 |
+| `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 19 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to all 21 specialised skills | n/a |
 
-**Available prefixes for new skills:** F, G, J, M, U, Y.
+**Available prefixes for new skills:** F, J, M, Y.
 
 ---
 

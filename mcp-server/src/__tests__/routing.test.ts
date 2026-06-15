@@ -23,6 +23,7 @@ const ALL_SKILL_NAMES = [
   "sqlstats-review",
   "sqltrace-review",
   "sqlwait-review",
+  "ssrstracelog-review",
   "tsql-review",
 ] as const;
 

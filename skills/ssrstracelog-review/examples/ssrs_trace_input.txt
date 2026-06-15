@@ -1,0 +1,56 @@
+=== ReportingServicesService.exe.config (<RStrace> section) ===
+<RStrace>
+  <add name="FileName" value="ReportServerService_" />
+  <add name="FileSizeLimitMb" value="32" />
+  <add name="KeepFilesForDays" value="14" />
+  <add name="Prefix" value="pid tid time" />
+  <add name="TraceFileMode" value="Unified" />
+  <add name="TraceListeners" value="filelog" />
+  <add name="ComponentTraceSwitch" value="all:4" />
+</RStrace>
+
+=== RSReportServer.config (<Service> section) ===
+<Service>
+  <IsSchedulingService>true</IsSchedulingService>
+  <PollingInterval>10</PollingInterval>
+  <WorkingSetMaximum>2000000</WorkingSetMaximum>
+  <MemorySafetyMargin>80</MemorySafetyMargin>
+  <MemoryThreshold>90</MemoryThreshold>
+  <RecycleTime>720</RecycleTime>
+  <MaxAppDomainUnloadTime>30</MaxAppDomainUnloadTime>
+  <MaxQueueThreads>0</MaxQueueThreads>
+  <UrlRoot />
+</Service>
+
+=== LogFiles directory listing (last 24 hours) ===
+2026-06-12 02:00:11   31,802 KB  ReportServerService_06_12_2026_02_00_11.log
+2026-06-12 08:14:03      980 KB  ReportServerService_06_12_2026_08_14_03.log
+2026-06-12 08:21:47      612 KB  ReportServerService_06_12_2026_08_21_47.log
+2026-06-12 08:33:02      745 KB  ReportServerService_06_12_2026_08_33_02.log
+
+=== ReportServerService_06_12_2026_08_14_03.log (tail) ===
+library!WindowsService_4!2a10!06/12/2026-08:13:58:: e ERROR: Throwing Microsoft.ReportingServices.Diagnostics.Utilities.RSException: ,
+  Microsoft.ReportingServices.Diagnostics.Utilities.RSException: The report server can't open
+  a connection to the report server database. A connection to the database is required for
+  all requests and processing. (rsReportServerDatabaseUnavailable)
+library!WindowsService_4!2a10!06/12/2026-08:14:01:: e ERROR: AppDomain unloaded unexpectedly.
+
+=== ReportServerService_06_12_2026_08_33_02.log (tail) ===
+filesys!WindowsService_9!3b54!06/12/2026-08:32:47:: e ERROR: Failure writing file
+  \\FILESRV01\ExecReports\DailySales.xlsx :
+  Microsoft.ReportingServices.FileShareDeliveryProvider.FileShareProvider+NetworkErrorException:
+  An impersonation error occurred using the security context of the current user. --->
+  System.ArgumentException: Value does not fall within the expected range.
+
+=== Application Event Log (Source: Report Server Windows Service) ===
+06/12/2026 08:14:02   Error   107   Report Server Windows Service (MSSQLSERVER) can't connect
+  to the report server database.
+06/12/2026 08:14:02   Error   107   Report Server Windows Service (MSSQLSERVER) can't connect
+  to the report server database.
+
+=== ExecutionLog3 (top rows by TimeStart DESC) ===
+ItemPath               RequestType    Source   Status              TimeStart           TimeDataRetrieval  TimeProcessing  TimeRendering
+/Finance/DailySales    Subscription   Live     rsSuccess           2026-06-12 08:00:03  8420               310             190
+/Finance/DailySales    Subscription   Live     rsSuccess           2026-06-11 08:00:02  8190               295             185
+/Ops/LiveDashboard     Interactive     Live     rsProcessingAborted 2026-06-12 09:14:55  1200                94100           --
+/Ops/LiveDashboard     Interactive     Live     rsProcessingAborted 2026-06-11 09:02:11  1100                95200           --
