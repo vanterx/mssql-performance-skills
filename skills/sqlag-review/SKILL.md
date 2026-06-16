@@ -80,11 +80,19 @@ SELECT
     ar.backup_priority,
     ar.seeding_mode_desc,
     ar.endpoint_url,
-    ar.read_only_routing_url,
-    ar.join_state_desc
+    ar.read_only_routing_url
 FROM sys.availability_groups ag
 JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name;
+```
+
+**Query 2b — Replica join state** (F11 — from DMV, not catalog view)
+```sql
+SELECT
+    replica_server_name,
+    join_state_desc    -- NOT_JOINED | JOINED_STANDALONE | JOINED_FCI
+FROM sys.dm_hadr_availability_replica_cluster_states
+ORDER BY replica_server_name;
 ```
 
 **Query 3 — Listener and IP configuration**
@@ -93,10 +101,10 @@ SELECT
     ag.name                         AS ag_name,
     agl.dns_name,
     agl.port,
+    agl.is_conformant,              -- F35: 0 = mismatch with cluster resource
     aglip.ip_address,
     aglip.ip_subnet_mask,
-    aglip.state_desc                AS ip_state,
-    aglip.is_conformant
+    aglip.state_desc                AS ip_state  -- ONLINE | OFFLINE | ONLINE_PENDING | FAILED
 FROM sys.availability_groups ag
 JOIN sys.availability_group_listeners agl ON ag.group_id = agl.group_id
 JOIN sys.availability_group_listener_ip_addresses aglip ON agl.listener_id = aglip.listener_id;
@@ -200,13 +208,14 @@ Evaluate these first. Missing prerequisites prevent AG operation entirely.
 
 ### F5 — Failure Condition Level at Extremes
 - **Trigger:** `sys.availability_groups.failure_condition_level = 1` (only a complete SQL Server
-  instance failure triggers automatic failover — resource pressure and query processor hangs are
-  ignored) or `= 5` (any qualified health condition, including transient resource spikes, triggers
-  failover)
+  service failure or lease expiry triggers automatic failover — resource pressure, spinlocks, and
+  write-access violations are ignored) or `= 5` (any qualified failure condition, including
+  exhaustion of worker threads and unsolvable deadlocks, triggers failover)
 - **Severity:** Warning
-- **Fix:** Level 2 (default) triggers on instance failure and SQL Server resource failure.
-  Level 3 adds query processor not yielding. Avoid level 1 (misses out-of-memory crashes) and
-  level 5 (transient conditions cause unnecessary failovers):
+- **Fix:** Level 3 is the default — triggers on critical internal errors (orphaned spinlocks,
+  write-access violations, excessive dump generation). Level 1 is too permissive (misses
+  out-of-memory and scheduler hangs); level 5 risks spurious failovers on transient conditions.
+  Most deployments should use level 3:
   `ALTER AVAILABILITY GROUP [ag] SET (FAILURE_CONDITION_LEVEL = 3);`
 
 ### F6 — SQL Server Version Mismatch Across Replicas
@@ -264,8 +273,9 @@ or leave databases unjoinable.
   `WITH (BACKUP_PRIORITY = 70);` — higher value = more preferred (0–100).
 
 ### F11 — Replica Join State Incomplete
-- **Trigger:** Any row in `sys.availability_replicas` has `join_state_desc` not in
-  `('JOINED', 'JOINED_NO_AVAILABILITY_MODE')`
+- **Trigger:** Any row in `sys.dm_hadr_availability_replica_cluster_states` has `join_state_desc
+  = 'NOT_JOINED'` (valid joined values are `JOINED_STANDALONE` for standalone instances and
+  `JOINED_FCI` for failover cluster instances)
 - **Severity:** Warning
 - **Fix:** The replica was added to the AG definition but the secondary has not yet joined.
   On the secondary instance: `ALTER AVAILABILITY GROUP [ag] JOIN;`
@@ -335,12 +345,12 @@ or leave databases unjoinable.
   include the port. Confirm firewalls and load balancers allow the custom port from all
   application server subnets.
 
-### F18 — Multi-Subnet INACTIVE Listener IP Without MultiSubnetFailover Guidance
-- **Trigger:** `sys.availability_group_listener_ip_addresses.state_desc = 'INACTIVE'` on one
-  or more listener IP rows
+### F18 — Multi-Subnet OFFLINE Listener IP Without MultiSubnetFailover Guidance
+- **Trigger:** `sys.availability_group_listener_ip_addresses.state_desc = 'OFFLINE'` on one
+  or more listener IP rows (indicating a standby-subnet IP in a multi-subnet VNN listener)
 - **Severity:** Info
 - **Fix:** In a multi-subnet VNN listener, only the active subnet's IP is ONLINE at any time;
-  IPs on other subnets show INACTIVE. This is normal. Ensure all application connection strings
+  IPs on other subnets show OFFLINE. This is normal. Ensure all application connection strings
   include `MultiSubnetFailover=True` so that the driver attempts all IPs simultaneously during
   failover, reducing failover detection time from minutes to seconds.
 
@@ -484,17 +494,19 @@ or leave databases unjoinable.
   Active Directory dependency that negates the containment benefit. Switch to
   certificate-based endpoint authentication as described in F24.
 
-### F32 — Distributed AG Replication Link Configured as Synchronous
-- **Trigger:** Distributed AG configuration shows `AVAILABILITY_MODE = SYNCHRONOUS_COMMIT`
-  on the inter-AG link — SQL Server 2016+ only; skip if SQL version < 2016
-- **Severity:** Warning
-- **Fix:** SQL Server distributed AGs only support `ASYNCHRONOUS_COMMIT` between the two
-  local AGs (the global and secondary AG). The T-SQL syntax accepts SYNCHRONOUS_COMMIT
-  but it is not enforced — the link always behaves asynchronously. Clarify documentation
-  to avoid confusion:
+### F32 — Distributed AG Left in Synchronous Commit as Permanent Configuration
+- **Trigger:** Distributed AG shows `AVAILABILITY_MODE = SYNCHRONOUS_COMMIT` on the
+  inter-AG link AND no recent failover or migration activity is evident — SQL Server 2016+
+  only; skip if SQL version < 2016
+- **Severity:** Info
+- **Fix:** SYNCHRONOUS_COMMIT on a distributed AG is valid and is used deliberately during
+  planned zero-data-loss failovers (as documented by Microsoft). However, leaving it as the
+  permanent steady-state configuration adds commit latency proportional to the inter-site
+  round-trip time. After a planned failover completes, revert to asynchronous for normal DR:
   `ALTER AVAILABILITY GROUP [DistributedAG]`
   `MODIFY AVAILABILITY GROUP ON 'SecondaryAG'`
   `WITH (AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT);`
+  Use `SYNCHRONOUS_COMMIT` only during the planned failover procedure window.
 
 ### F33 — AG Databases With Cross-Database Dependencies on Non-AG Databases
 - **Trigger:** User description or T-SQL code references databases outside this AG via
@@ -527,8 +539,7 @@ or leave databases unjoinable.
   `ALTER EVENT SESSION [AG_Diagnostics] ON SERVER STATE = START;`
 
 ### F35 — Listener IP Configuration Not Conformant with Windows Cluster
-- **Trigger:** `sys.availability_group_listener_ip_addresses.is_conformant = 0` for any
-  listener IP row
+- **Trigger:** `sys.availability_group_listeners.is_conformant = 0` for any listener row
 - **Severity:** Warning
 - **Fix:** A non-conformant IP indicates a mismatch between the SQL Server AG listener
   metadata and the Windows Server Failover Cluster IP resource. This can prevent automatic

@@ -175,9 +175,9 @@ FROM sys.availability_groups;
 
 | Level | Triggers failover when... |
 |-------|--------------------------|
-| 1 | SQL Server service is offline |
-| 2 (default) | Level 1 + SQL Server resource failure (OOM, scheduler) |
-| 3 | Level 2 + query processor not yielding |
+| 1 | SQL Server service is offline or lease expires |
+| 2 | Level 1 + SQL Server unresponsive / in failed state |
+| 3 (default) | Level 2 + critical internal errors (orphaned spinlocks, write-access violations, excessive dumps) |
 | 4 | Level 3 + moderate SQL Server errors |
 | 5 | Level 4 + any qualified health condition |
 
@@ -326,9 +326,11 @@ in the AG at all.
 
 **How to spot it:**
 ```sql
+-- join_state_desc is in the cluster-states DMV, not sys.availability_replicas
 SELECT replica_server_name, join_state_desc
-FROM sys.availability_replicas
-WHERE join_state_desc NOT IN ('JOINED', 'JOINED_NO_AVAILABILITY_MODE');
+FROM sys.dm_hadr_availability_replica_cluster_states
+WHERE join_state_desc = 'NOT_JOINED';
+-- Valid joined values: JOINED_STANDALONE (standalone SQL), JOINED_FCI (failover cluster instance)
 ```
 
 **Fix options:**
@@ -501,19 +503,20 @@ WHERE port != 1433;
 
 ---
 
-### F18 — Multi-Subnet INACTIVE Listener IP Without MultiSubnetFailover Guidance
+### F18 — Multi-Subnet OFFLINE Listener IP Without MultiSubnetFailover Guidance
 
 **What it means:** In a multi-subnet VNN listener, only the IP for the currently active subnet
-is ONLINE. IPs for the other subnets are INACTIVE. This is correct behavior — but applications
-without `MultiSubnetFailover=True` experience a 20–30 second delay during failover while the
-TCP connection to the inactive IP times out.
+is ONLINE. IPs for the other subnets are OFFLINE (state_desc = 'OFFLINE'). This is correct
+behavior — but applications without `MultiSubnetFailover=True` experience a 20–30 second delay
+during failover while the TCP connection to the offline-subnet IP times out.
 
 **How to spot it:**
 ```sql
 SELECT ip_address, state_desc, ip_subnet_mask
 FROM sys.availability_group_listener_ip_addresses
-WHERE state_desc = 'INACTIVE';
--- One or more rows = multi-subnet VNN listener in use
+WHERE state_desc = 'OFFLINE';
+-- One or more rows = standby-subnet IP; confirm multi-subnet VNN listener is in use
+-- Valid state_desc values: ONLINE | OFFLINE | ONLINE_PENDING | FAILED
 ```
 
 **Fix options:**
@@ -871,12 +874,14 @@ WHERE ag.is_contained = 1
 
 ---
 
-### F32 — Distributed AG Replication Link Configured as Synchronous
+### F32 — Distributed AG Left in Synchronous Commit as Permanent Configuration
 
-**What it means:** Distributed AGs only support asynchronous commit between sites by design.
-Despite T-SQL accepting `SYNCHRONOUS_COMMIT` in the `CREATE AVAILABILITY GROUP WITH (DISTRIBUTED)`
-syntax, the inter-AG link always operates asynchronously. Setting SYNCHRONOUS creates a false
-expectation of zero data loss to the DR site.
+**What it means:** `SYNCHRONOUS_COMMIT` on a distributed AG inter-AG link IS supported and is
+used deliberately during planned zero-data-loss failovers (explicitly documented by Microsoft).
+However, leaving SYNCHRONOUS_COMMIT as the permanent steady-state configuration for a
+WAN-spanning distributed AG adds commit latency proportional to the inter-site round-trip time.
+Microsoft recommends ASYNCHRONOUS_COMMIT for normal DR operations and temporarily switching to
+SYNCHRONOUS_COMMIT only during planned failover windows.
 
 **How to spot it:**
 ```sql
@@ -885,12 +890,16 @@ FROM sys.availability_groups ag
 JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 WHERE ag.is_distributed = 1  -- SQL 2016+
   AND ar.availability_mode_desc = 'SYNCHRONOUS_COMMIT';
+-- Context matters: SYNC is expected during a planned failover window
 ```
 
 **Fix options:**
-1. Update documentation to reflect actual asynchronous behavior
-2. Correct the distributed AG definition: `ALTER AVAILABILITY GROUP [DistributedAG] MODIFY AVAILABILITY GROUP ON 'SecondaryAG' WITH (AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT);`
-3. Zero data loss to a DR site over a distributed AG is architecturally not achievable — evaluate Stretch Cluster or synchronous replication at the storage layer if RPO=0 to DR is required
+1. If outside a planned failover window: revert to async for normal DR operations:
+   `ALTER AVAILABILITY GROUP [DistributedAG] MODIFY AVAILABILITY GROUP ON 'SecondaryAG'`
+   `WITH (AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT);`
+2. During a planned failover: SYNCHRONOUS_COMMIT is the required mode for zero-data-loss
+   failover — revert to async after the failover completes
+3. Document in runbooks which state is expected (failover window = SYNC; normal = ASYNC)
 
 **Related checks:** F28 (listener URL for distributed AG), F6 (SQL version — requires SQL 2016+)
 
@@ -967,8 +976,9 @@ prevent the cluster from bringing the listener IP online on the correct subnet d
 
 **How to spot it:**
 ```sql
-SELECT dns_name, ip_address, is_conformant, state_desc
-FROM sys.availability_group_listener_ip_addresses
+-- is_conformant is on sys.availability_group_listeners, not the IP addresses view
+SELECT dns_name, port, is_conformant
+FROM sys.availability_group_listeners
 WHERE is_conformant = 0;
 ```
 

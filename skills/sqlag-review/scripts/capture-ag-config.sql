@@ -31,21 +31,31 @@ SELECT
     ar.backup_priority,
     ar.seeding_mode_desc,
     ar.endpoint_url,
-    ar.read_only_routing_url,
-    ar.join_state_desc
+    ar.read_only_routing_url
 FROM sys.availability_groups ag
 JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name;
+
+PRINT '--- Query 2b: Replica Join State (F11) ---';
+-- join_state_desc is in the cluster-states DMV, not sys.availability_replicas
+-- Valid values: NOT_JOINED | JOINED_STANDALONE | JOINED_FCI
+SELECT
+    replica_server_name,
+    group_id,
+    join_state,
+    join_state_desc
+FROM sys.dm_hadr_availability_replica_cluster_states
+ORDER BY replica_server_name;
 
 PRINT '--- Query 3: Listener and IP Configuration ---';
 SELECT
     ag.name                                             AS ag_name,
     agl.dns_name,
     agl.port,
+    agl.is_conformant,      -- F35: on sys.availability_group_listeners, not IP addresses view
     aglip.ip_address,
     aglip.ip_subnet_mask,
-    aglip.state_desc                                    AS ip_state,
-    aglip.is_conformant
+    aglip.state_desc        AS ip_state  -- ONLINE | OFFLINE | ONLINE_PENDING | FAILED
 FROM sys.availability_groups ag
 JOIN sys.availability_group_listeners agl
     ON ag.group_id = agl.group_id

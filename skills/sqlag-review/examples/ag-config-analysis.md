@@ -91,9 +91,9 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 
 ### Info
 
-### [I1 — F18] Multi-Subnet Listener Has INACTIVE IP — MultiSubnetFailover=True Required
-- **Observed:** `ip_address = 10.1.1.200` shows `ip_state = 'INACTIVE'` — indicates a multi-subnet VNN listener is configured
-- **Impact:** This is normal for multi-subnet VNN listeners. However, applications without `MultiSubnetFailover=True` in their connection strings will take 20–30 seconds longer to detect failover (the TCP timeout for the inactive subnet IP must expire first).
+### [I1 — F18] Multi-Subnet Listener Has OFFLINE IP — MultiSubnetFailover=True Required
+- **Observed:** `ip_address = 10.1.1.200` shows `ip_state = 'OFFLINE'` — indicates a multi-subnet VNN listener is configured; the DR-subnet IP is offline because this replica is not currently active on that subnet
+- **Impact:** This is normal for multi-subnet VNN listeners. However, applications without `MultiSubnetFailover=True` in their connection strings will take 20–30 seconds longer to detect failover (the TCP timeout for the offline-subnet IP must expire first).
 - **Fix:** Verify all application connection strings and ODBC/DSN configurations include `MultiSubnetFailover=True`:
   `Server=finance-ag-l;Database=PayrollDB;Integrated Security=SSPI;MultiSubnetFailover=True;`
 
@@ -147,7 +147,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 | F31 — Contained AG with Windows Auth | PASS — is_contained = 0 |
 | F32 — Distributed AG Synchronous Link | NOT ASSESSED — no distributed AG described |
 | F33 — Cross-Database Dependencies | NOT ASSESSED — T-SQL code not provided |
-| F35 — Listener IP Not Conformant | PASS — all IPs show is_conformant = 1 |
+| F35 — Listener Not Conformant with Cluster | PASS — sys.availability_group_listeners.is_conformant = 1 |
 
 ---
 

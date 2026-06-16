@@ -3,15 +3,21 @@ hadr_enabled  product_version   edition                         ag_name   failur
 1             15.0.4375.4       Enterprise Edition (64-bit)     FinanceAG  1                        30000                 SECONDARY_ONLY                    0            0               0             0
 
 --- Query 2: Replica Configuration ---
-ag_name    replica_server_name     availability_mode_desc   failover_mode_desc  session_timeout  primary_role_allow_connections_desc  secondary_role_allow_connections_desc  backup_priority  seeding_mode_desc  endpoint_url                          read_only_routing_url            join_state_desc
-FinanceAG  SQLPROD01\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD01.corp.local:5022        NULL                             JOINED
-FinanceAG  SQLPROD02\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD02.corp.local:5022        NULL                             JOINED
-FinanceAG  SQLDR01\FINANCEDB       ASYNCHRONOUS_COMMIT      MANUAL              10               ALL                                  NO                                     50               MANUAL             TCP://SQLDR01.corp.local:5022          NULL                             JOINED
+ag_name    replica_server_name     availability_mode_desc   failover_mode_desc  session_timeout  primary_role_allow_connections_desc  secondary_role_allow_connections_desc  backup_priority  seeding_mode_desc  endpoint_url                          read_only_routing_url
+FinanceAG  SQLPROD01\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD01.corp.local:5022        NULL
+FinanceAG  SQLPROD02\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD02.corp.local:5022        NULL
+FinanceAG  SQLDR01\FINANCEDB       ASYNCHRONOUS_COMMIT      MANUAL              10               ALL                                  NO                                     50               MANUAL             TCP://SQLDR01.corp.local:5022          NULL
+
+--- Query 2b: Replica Join State (F11) ---
+replica_server_name     group_id                              join_state  join_state_desc
+SQLPROD01\FINANCEDB     A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
+SQLPROD02\FINANCEDB     A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
+SQLDR01\FINANCEDB       A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
 
 --- Query 3: Listener and IP Configuration ---
-ag_name    dns_name           port  ip_address      ip_subnet_mask   ip_state   is_conformant
-FinanceAG  finance-ag-l       1433  10.0.1.200      255.255.255.0    ONLINE     1
-FinanceAG  finance-ag-l       1433  10.1.1.200      255.255.255.0    INACTIVE   1
+ag_name    dns_name           port  is_conformant  ip_address      ip_subnet_mask   ip_state
+FinanceAG  finance-ag-l       1433  1              10.0.1.200      255.255.255.0    ONLINE
+FinanceAG  finance-ag-l       1433  1              10.1.1.200      255.255.255.0    OFFLINE
 
 --- Query 4: Mirroring Endpoint ---
 name                state_desc  role_desc  connection_auth_desc      encryption_algorithm_desc  encryption_desc  port
