@@ -1,0 +1,39 @@
+--- Query 1: Instance and AG Overview ---
+hadr_enabled  product_version   edition                         ag_name   failure_condition_level  health_check_timeout  automated_backup_preference_desc  db_failover  basic_features  is_contained  required_synchronized_secondaries_to_commit
+1             15.0.4375.4       Enterprise Edition (64-bit)     FinanceAG  1                        30000                 SECONDARY_ONLY                    0            0               0             0
+
+--- Query 2: Replica Configuration ---
+ag_name    replica_server_name     availability_mode_desc   failover_mode_desc  session_timeout  primary_role_allow_connections_desc  secondary_role_allow_connections_desc  backup_priority  seeding_mode_desc  endpoint_url                          read_only_routing_url
+FinanceAG  SQLPROD01\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD01.corp.local:5022        NULL
+FinanceAG  SQLPROD02\FINANCEDB     SYNCHRONOUS_COMMIT       AUTOMATIC           10               ALL                                  ALL                                    50               MANUAL             TCP://SQLPROD02.corp.local:5022        NULL
+FinanceAG  SQLDR01\FINANCEDB       ASYNCHRONOUS_COMMIT      MANUAL              10               ALL                                  NO                                     50               MANUAL             TCP://SQLDR01.corp.local:5022          NULL
+
+--- Query 2b: Replica Join State (F11) ---
+replica_server_name     group_id                              join_state  join_state_desc
+SQLPROD01\FINANCEDB     A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
+SQLPROD02\FINANCEDB     A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
+SQLDR01\FINANCEDB       A1B2C3D4-E5F6-7890-ABCD-EF1234567890  2           JOINED_STANDALONE
+
+--- Query 3: Listener and IP Configuration ---
+ag_name    dns_name           port  is_conformant  ip_address      ip_subnet_mask   ip_state
+FinanceAG  finance-ag-l       1433  1              10.0.1.200      255.255.255.0    ONLINE
+FinanceAG  finance-ag-l       1433  1              10.1.1.200      255.255.255.0    OFFLINE
+
+--- Query 4: Mirroring Endpoint ---
+name                state_desc  role_desc  connection_auth_desc      encryption_algorithm_desc  encryption_desc  port
+Hadr_endpoint_FIN   STARTED     ALL        WINDOWS NEGOTIATE          AES                        SUPPORTED        5022
+
+--- Query 5: AG Database Recovery Models ---
+ag_database_id                         database_name  recovery_model_desc  is_read_committed_snapshot_on  state_desc
+{11111111-1111-1111-1111-111111111111}  PayrollDB       FULL                 1                              ONLINE
+{22222222-2222-2222-2222-222222222222}  GeneralLedger   FULL                 0                              ONLINE
+{33333333-3333-3333-3333-333333333333}  ArchiveReports  SIMPLE               0                              ONLINE
+
+--- Query 6: Endpoint Certificates ---
+(0 rows returned — Windows authentication in use)
+
+--- Query 7: Automatic Seeding Status ---
+(0 rows returned)
+
+--- Query 8: XE Sessions for AG Diagnostics ---
+(0 rows returned)

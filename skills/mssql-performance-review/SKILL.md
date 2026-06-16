@@ -1,6 +1,6 @@
 ---
 name: mssql-performance-review
-description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch, sqlmemory-review, sqldiskio-review, sqlencryption-review, sqldbconfig-review, sqlbootstraplog-review, ssrstracelog-review), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats, memory clerks, file I/O stats, encryption audit, sp_configure output, setup bootstrap logs, SSRS report server trace logs) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow", "SSRS reports timing out") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
+description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlag-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch, sqlmemory-review, sqldiskio-review, sqlencryption-review, sqldbconfig-review, sqlbootstraplog-review, ssrstracelog-review), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats, memory clerks, file I/O stats, encryption audit, sp_configure output, setup bootstrap logs, SSRS report server trace logs, AG catalog view output) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow", "SSRS reports timing out", "AG backup failing on secondary") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
 triggers:
   - /mssql-performance-review
   - /mssql-perf-review
@@ -64,6 +64,7 @@ Content-based, not extension-reliant:
 | `query_store_*` table refs, plan_id / runtime_stats columns | sqlquerystore-review |
 | `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | sqlprocstats-review |
 | `replica_id`, `synchronization_state` columns | sqlhadr-review |
+| `sys.availability_groups` columns (`failure_condition_level`, `health_check_timeout`, `automated_backup_preference_desc`, `basic_features`, `is_contained`), `sys.availability_replicas` with `backup_priority` / `session_timeout` / `seeding_mode_desc`, `sys.database_mirroring_endpoints`, `sys.availability_group_listener_ip_addresses` with `is_conformant` | sqlag-review |
 | `RES_EVENT`, `00000a1c` GUID prefixes, `Cluster.Resource` lines | sqlclusterlog-review |
 | `spid` prefixes with `Logon`, `Server`, `Backup` markers | sqlerrorlog-review |
 | `MSSQLSvc/`, `setspn` output, `Existing SPN found for` | sqlspn-review |
@@ -88,6 +89,7 @@ Example hypotheses:
 | Server-wide I/O bottleneck | PAGEIOLATCH_SH dominant in wait stats | sqlwait-review → sqlstats-review → sqlplan-review on top reader |
 | Deadlock loop | error 1205 reported, deadlock XML present | sqldeadlock-review → sqlplan-review on victim |
 | AG failover root cause | ERRORLOG shows lease expiry, CLUSTER.LOG present | sqlerrorlog-review → sqlclusterlog-review → sqlhadr-review |
+| AG configuration review | sys.availability_groups / sys.availability_replicas / sys.database_mirroring_endpoints output present, or user asks about AG setup, backup failures on secondary, listener routing, endpoint certificate | sqlag-review |
 | Kerberos auth fail | NTLM fallback, login burst, setspn output present | sqlspn-review → sqlerrorlog-review (login burst correlation) |
 | Workload regression | Two plans for same query, dates differ, durations diverge | sqlplan-compare → sqlplan-review on both |
 
@@ -479,6 +481,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlquerystore-review` — Query Store DMV analysis. Routed when Query Store output is present; informs regression hypotheses.
 - `/sqlprocstats-review` — Procedure / trigger / function runtime stats. Routed when `sys.dm_exec_procedure_stats` output is present.
 - `/sqlhadr-review` — Always On AG state. Routed for AG topology questions or failover root cause.
+- `/sqlag-review` — Always On AG configuration audit. Routed for AG setup reviews, backup-on-secondary failures, listener misconfiguration, endpoint certificate expiry, distributed AG design questions, Basic AG or Contained AG constraints.
 - `/sqlclusterlog-review` — WSFC cluster log. Routed alongside sqlhadr-review and sqlerrorlog-review for failover analysis.
 - `/sqlerrorlog-review` — SQL Server ERRORLOG. Routed for outage timelines, login bursts, memory pressure, I/O warnings.
 - `/sqlspn-review` — SPN and Kerberos delegation. Routed when Kerberos / login failure signals are present.
