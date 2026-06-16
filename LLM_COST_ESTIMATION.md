@@ -47,6 +47,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlplan-batch` | ~3,100 |
 | `sqlclusterlog-review` | ~8,800 |
 | `sqlhadr-review` | ~7,800 |
+| `sqlag-review` | ~9,200 |
 | `sqlerrorlog-review` | ~8,800 |
 | `sqlspn-review` | ~7,400 |
 | `sqlmemory-review` | ~5,800 |

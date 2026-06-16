@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 745 checks in this library apply to your SQL Server version.
+Which of the 780 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -32,6 +32,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 | `sqlerrorlog-review` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ◑ | ◑ |
 | `sqlspn-review` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ◑ | ◑ |
 | `sqlhadr-review` | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ◑ |
+| `sqlag-review` | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ◑ |
 | `sqlclusterlog-review` | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ◑ |
 | `sqlquerystore-review` | ✗ | ✗ | ✗ | ◑ | ◑ | ◑ | ✓ | ✓ | ✓ |
 | `sqlencryption-review` | ◑ | ◑ | ◑ | ◑ | ◑ | ◑ | ✓ | ◑ | ◑ |
@@ -59,22 +60,23 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqlbootstraplog-review`: analyzes the Windows Setup Bootstrap log layout — applies to SQL Server on Windows only. U20 (`SQLSVCINSTANTFILEINIT`) and U21 (setup-time TempDB parameters) require SQL 2016+ setup; U1–U19/U22–U24 apply to all on-premises versions. Azure SQL DB/MI have no user-visible setup: ✗.
 - `ssrstracelog-review`: analyzes SQL Server Reporting Services report server trace logs, configuration, and `ExecutionLog3` — applies to on-premises SSRS (SQL 2008 R2–2022) on Windows Server only. G15 (legacy `ProcessingEngine=1` setting) applies to SSRS 2014/2016 only — removed in SSRS 2017+ and self-skips on later versions. Azure SQL DB/MI: ✗ — SSRS does not run as a service on Azure-managed platforms (only the report server catalog database can be hosted on Azure SQL MI for an SSRS instance running on a VM).
 - `sqldiskio-review`: all Z checks rely on `sys.dm_io_virtual_file_stats`, available on every supported version. On Azure SQL DB: file placement checks (Z6–Z8, Z10) are platform-managed and skipped; Z11/Z14 (auto-growth event trace) are partial because the default trace is not exposed.
+- `sqlag-review`: requires Always On AG (SQL 2012+). F31 (Contained AG — SQL 2022+) and F32 (Distributed AG — SQL 2016+) self-skip on earlier versions. On Azure SQL MI: AG catalog views (`sys.availability_groups`, `sys.availability_replicas`) are accessible; F1 (IsHadrEnabled), F6 (version mismatch), and some endpoint checks may not apply in Azure-managed contexts. Azure SQL DB: ✗ — no Always On AG infrastructure.
 
 ---
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 745 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
+These cumulative counts show how many of the 780 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`).
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **673** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **643** | −30 SQL 2022-only checks unavailable (includes A59, A73–A76, A94) |
-| SQL Server 2017 | **621** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **608** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **572** | −36 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+) unavailable |
-| SQL Server 2012 | **566** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **506** | −60 more: all 57 Always On AG/WSFC checks unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
+| SQL Server 2022 | **708** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **677** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
+| SQL Server 2017 | **655** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **642** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **605** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
+| SQL Server 2012 | **599** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **506** | −93 more: all 57 Always On AG/WSFC checks and 35 AG-config checks (F1–F35) unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -96,7 +98,7 @@ These checks require features introduced in SQL Server 2012.
 | H27 | `sqlhadr-review` | AG Without Database-Level Health Detection | Always On AG (SQL 2012+) |
 | L30 | `sqlclusterlog-review` | sp_server_diagnostics Component Warning | `sp_server_diagnostics` (SQL 2012+) |
 
-**Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
+**Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30), `sqlag-review` (F1–F35, except F32 SQL 2016+ and F31 SQL 2022+). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
 
 | A82 | `sqlencryption-review` | SSISDB DMK Password Not Registered | SSISDB catalog (SQL Server Integration Services, SQL 2012+) |
 
@@ -120,6 +122,7 @@ These checks require features introduced in SQL Server 2012.
 | U21 | `sqlbootstraplog-review` | TempDB Setup Parameters Undersized | Setup-time TempDB parameters `SQLTEMPDB*` (SQL 2016+) |
 | H25 | `sqlhadr-review` | Parallel Redo Worker Saturation | Parallel redo for AG secondaries (SQL 2016+) |
 | K36 | `sqlspn-review` | Distributed AG Forwarder Listener SPN Missing | Distributed Availability Groups (SQL 2016+) |
+| F32 | `sqlag-review` | Distributed AG Replication Link Set to Synchronous | Distributed Availability Groups (SQL 2016+) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock | Temporal tables only (SQL 2016+); see SQL 2022+ for Ledger aspect |
 | R25 | `sqlprocstats-review` | QS Plan Instability Correlated to Procstats Variance | Query Store (SQL 2016+) |
 
@@ -195,6 +198,7 @@ These checks require features introduced in SQL Server 2012.
 | E31 | `sqlerrorlog-review` | Ledger Verification Failure | Ledger verification (SQL 2022+) |
 | E32 | `sqlerrorlog-review` | CE Feedback Model Version Change | CE Feedback model (SQL 2022+) |
 | H23 | `sqlhadr-review` | Contained AG Misrouted DML | Contained Availability Groups (SQL 2022+) |
+| F31 | `sqlag-review` | Contained AG Using Windows Endpoint Auth | Contained Availability Groups (SQL 2022+) |
 | L28 | `sqlclusterlog-review` | Contained AG: Contained System Database Offline | Contained Availability Groups (SQL 2022+) |
 | C19 | `sqlplan-compare` | PSP Dispatcher Added | PSP optimization (compat level 160) |
 | X21 | `sqltrace-review` | PSP Variant Switching in Trace | PSP variant switching XE events (SQL 2022+) |
@@ -267,7 +271,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**506 of 745 checks (67.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**506 of 780 checks (64.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 

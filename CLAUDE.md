@@ -4,7 +4,7 @@ A Claude Code skills library for SQL Server performance tuning — T-SQL static 
 
 ## Purpose
 
-Provides twenty-two slash-command skills — twenty-one specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance), instance/database configuration drift (MAXDOP, Max Server Memory, auto-shrink, compatibility level, RCSI, VLF count, IFI, TempDB sizing, surface area), SQL Server Setup Bootstrap log analysis (failed installs/patches, setup rules, ConfigurationFile.ini review), and SQL Server Reporting Services (SSRS) report server trace log analysis (trace configuration, database connectivity, memory/AppDomain recycling, report processing performance, subscription delivery, scale-out encryption keys). No application code — content is Markdown only.
+Provides twenty-three slash-command skills — twenty-two specialised review skills plus one agentic orchestrator (`mssql-performance-review`) that dispatches the right specialised skill(s) to mixed artifact inputs. Specialised skills cover T-SQL source code, `.sqlplan` XML files, STATISTICS IO/TIME output, Profiler/XE trace data, deadlock graphs, index recommendations, wait statistics, Query Store data, procedure/trigger/function runtime stats collected from `sys.dm_exec_procedure_stats`, Always On AG health from `sys.dm_hadr_*` DMVs, Always On AG configuration correctness (prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints), Windows Server Failover Cluster log files, SQL Server ERRORLOG files, SQL Server SPN and Kerberos delegation configuration, server memory pressure analysis, file-level I/O latency analysis, full encryption infrastructure (TDE, Always Encrypted, CLE, backup encryption, TLS, certificate/key lifecycle, key hierarchy, EKM, compliance), instance/database configuration drift (MAXDOP, Max Server Memory, auto-shrink, compatibility level, RCSI, VLF count, IFI, TempDB sizing, surface area), SQL Server Setup Bootstrap log analysis (failed installs/patches, setup rules, ConfigurationFile.ini review), and SQL Server Reporting Services (SSRS) report server trace log analysis (trace configuration, database connectivity, memory/AppDomain recycling, report processing performance, subscription delivery, scale-out encryption keys). No application code — content is Markdown only.
 
 ## Tech Stack
 
@@ -18,7 +18,7 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 
 | File | Purpose |
 |------|---------|
-| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 21 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 22 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 85 checks (T1–T85) — structural, correctness, security, deprecated syntax, performance smells, SQL 2017–2022 modern syntax |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
@@ -32,6 +32,7 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 | [skills/sqlprocstats-review/SKILL.md](skills/sqlprocstats-review/SKILL.md) | Procedure/trigger/function runtime stats analysis: `sqlprocstats-review`. 25 checks (R1–R25) — top consumers, per-execution efficiency, pattern detection, trend analysis |
 | [skills/sqlclusterlog-review/SKILL.md](skills/sqlclusterlog-review/SKILL.md) | WSFC cluster log analysis: `sqlclusterlog-review`. 30 checks (L1–L30) — lease timeouts, health check failures, quorum loss, node eviction, network partition, RHS crashes, AG resource transitions |
 | [skills/sqlhadr-review/SKILL.md](skills/sqlhadr-review/SKILL.md) | Always On AG health analysis: `sqlhadr-review`. 27 checks (H1–H27) — replica connectivity, data loss risk, recovery time, throughput, and configuration |
+| [skills/sqlag-review/SKILL.md](skills/sqlag-review/SKILL.md) | Always On AG configuration audit: `sqlag-review`. 35 checks (F1–F35) — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, operational monitoring |
 | [skills/sqlerrorlog-review/SKILL.md](skills/sqlerrorlog-review/SKILL.md) | SQL Server ERRORLOG analysis: `sqlerrorlog-review`. 33 checks (E1–E33) — AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, and configuration signals |
 | [skills/sqlspn-review/SKILL.md](skills/sqlspn-review/SKILL.md) | SPN and Kerberos delegation analysis: `sqlspn-review`. 40 checks (K1–K40) — MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, Kerberos delegation, AD account sensitivity |
 | [skills/sqlmemory-review/SKILL.md](skills/sqlmemory-review/SKILL.md) | Memory pressure analysis: `sqlmemory-review`. 20 checks (O1–O20) — PLE, plan cache bloat, memory grants, memory clerks, ColumnStore/XTP footprint, OS pressure, LPIM, Max Server Memory |
@@ -59,6 +60,7 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 | [skills/sqlprocstats-review/references/check-explanations.md](skills/sqlprocstats-review/references/check-explanations.md) | Plain-English explanation of all 25 R-checks with collection table examples and fix recipes |
 | [skills/sqlclusterlog-review/references/check-explanations.md](skills/sqlclusterlog-review/references/check-explanations.md) | Plain-English explanation of all 30 L-checks with CLUSTER.LOG examples, fix recipes, and Quick Reference table |
 | [skills/sqlhadr-review/references/check-explanations.md](skills/sqlhadr-review/references/check-explanations.md) | Plain-English explanation of all 27 H-checks with DMV examples, fix recipes, and Quick Reference table |
+| [skills/sqlag-review/references/check-explanations.md](skills/sqlag-review/references/check-explanations.md) | Plain-English explanation of all 35 F-checks with catalog view examples, T-SQL fix recipes, and Quick Reference table |
 | [skills/sqlerrorlog-review/references/check-explanations.md](skills/sqlerrorlog-review/references/check-explanations.md) | Plain-English explanation of all 33 E-checks with ERRORLOG examples, fix recipes, and Quick Reference table |
 | [skills/sqlspn-review/references/check-explanations.md](skills/sqlspn-review/references/check-explanations.md) | Plain-English explanation of all 40 K-checks with setspn/AD attribute examples, delegation model tables, and Quick Reference table |
 | [skills/sqlmemory-review/references/check-explanations.md](skills/sqlmemory-review/references/check-explanations.md) | Plain-English explanation of all 20 O-checks with DMV examples, fix recipes, and Quick Reference table |
@@ -83,10 +85,10 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 22 skills |
-| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 745-check ID reference |
+| [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 23 skills |
+| [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 780-check ID reference |
 | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
-| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 745 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
+| [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 780 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
 | [.claude-plugin/plugin.json](.claude-plugin/plugin.json) | Plugin manifest — declares `"skills": "./skills"` so all 22 SKILL.md files are discovered by the plugin system |
@@ -119,6 +121,7 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 | [skills/sqlprocstats-review/examples/](skills/sqlprocstats-review/examples/) | Q1 report output with CPU hotspot, parameter sniffing, N+1 caller, blocking signal + analysis |
 | [skills/sqlclusterlog-review/examples/](skills/sqlclusterlog-review/examples/) | CLUSTER.LOG with lease timeout, heartbeat loss, AG offline transition, VerboseLogging=0 + analysis |
 | [skills/sqlhadr-review/examples/](skills/sqlhadr-review/examples/) | 3-replica AG with disconnected secondary, 620 MB redo queue, secondary lag 85 sec + analysis |
+| [skills/sqlag-review/examples/](skills/sqlag-review/examples/) | 3-replica AG catalog output: failure_condition_level=1, SIMPLE recovery database, SUPPORTED endpoint encryption, session_timeout=10 on WAN replica, backup priority ties, no read-only routing URL + analysis |
 | [skills/sqlerrorlog-review/examples/](skills/sqlerrorlog-review/examples/) | ERRORLOG with I/O slow → AG lease expiry → failover sequence, login failure burst, trace flags + analysis |
 | [skills/sqlspn-review/examples/](skills/sqlspn-review/examples/) | setspn + AD attribute output: duplicate SPN, unconstrained delegation, missing delegation target SPN, end-user in Protected Users + analysis |
 | [skills/sqlmemory-review/examples/](skills/sqlmemory-review/examples/) | Memory clerk + PLE + grant queue output: ColumnStore pressure, single-use plan bloat, oversized grant blocking 4 sessions + analysis |
@@ -138,6 +141,7 @@ Provides twenty-two slash-command skills — twenty-one specialised review skill
 | [skills/sqlbootstraplog-review/scripts/README.md](skills/sqlbootstraplog-review/scripts/README.md) | Script usage guide: signals checked, parameters, exit codes, automation pattern |
 | [skills/ssrstracelog-review/scripts/collect-ssrs-diagnostics.ps1](skills/ssrstracelog-review/scripts/collect-ssrs-diagnostics.ps1) | PowerShell: collects RStrace config, Service config, trace log rollover counts, recent ERROR/Exception lines, and Application Event Log entries for the Report Server Windows Service |
 | [skills/ssrstracelog-review/scripts/README.md](skills/ssrstracelog-review/scripts/README.md) | Script usage guide: sections collected, parameters, prerequisites, ExecutionLog3 query handoff |
+| [skills/sqlag-review/scripts/capture-ag-config.sql](skills/sqlag-review/scripts/capture-ag-config.sql) | T-SQL: collects sys.availability_groups, sys.availability_replicas, sys.availability_group_listeners, sys.availability_group_listener_ip_addresses, sys.database_mirroring_endpoints, AG database recovery models, certificates, and XE sessions in one batch |
 
 ## Installing Skills
 
@@ -155,7 +159,7 @@ npx skills add vanterx/mssql-performance-skills -g       # global
 
 **Option 3: Manual fallback:**
 ```bash
-cp -r skills/* ~/.claude/skills/          # global (all 22 skills)
+cp -r skills/* ~/.claude/skills/          # global (all 23 skills)
 cp -r skills/* .claude/skills/            # project-scoped
 ```
 
@@ -173,7 +177,7 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 ## Adding a New Skill
 
 1. Create `skills/<skill-name>/SKILL.md` and `skills/<skill-name>/references/check-explanations.md` following the patterns in [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md)
-2. Choose an unused single-letter check prefix (current: S, N, C, D, P, T, I, W, X, V are taken)
+2. Choose an unused single-letter check prefix (current: S, N, C, D, P, T, I, W, X, V, Q, R, H, L, E, K, O, Z, A, B, U, G, F are taken)
 3. Add the skill to the Key Files tables above
 4. Add install line to [README.md](README.md) Installation section and `## Skills` table
 5. Add a full `## <skill-name>` section to [README.md](README.md) with triggers, usage, and output sample
@@ -232,6 +236,7 @@ Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader
 | `B` | `sqldbconfig-review` |
 | `U` | `sqlbootstraplog-review` |
 | `G` | `ssrstracelog-review` |
+| `F` | `sqlag-review` |
 | (none) | `mssql-performance-review` — dispatcher; delegates checks to other skills, like `sqlplan-batch` |
 
 New skills must choose an unused single uppercase letter, or document why they are dispatcher-style (no prefix) like the orchestrator and `sqlplan-batch`.
