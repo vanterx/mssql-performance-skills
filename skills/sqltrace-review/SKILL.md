@@ -23,7 +23,7 @@ Accept any of:
 - A `.trc` or `.xel` file path (describe what to extract if the file cannot be read directly)
 - A natural-language description of trace contents ("the trace shows 48,000 executions of a stored proc in 60 seconds, each reading 3,200 pages")
 
-**Duration units:** SQL Profiler `.trc` Duration column = **microseconds**. Extended Events `duration` = **microseconds**. CPU units differ by event class: for `SQL:BatchCompleted` (EventClass 12), CPU is in **milliseconds**; for `RPC:Completed` (EventClass 10) on SQL Server 2012+, CPU is in **microseconds** (same as Duration) — divide by 1,000 to normalize to milliseconds. On SQL Server 2008 R2 and earlier, all trace CPU values were in milliseconds. Normalize all duration values to milliseconds before applying thresholds and displaying results.
+**Duration units:** SQL Profiler `.trc` Duration column = **microseconds**. Extended Events `duration` = **microseconds**. CPU units differ by event class: for `SQL:BatchCompleted` (EventClass 12), CPU is in **milliseconds**; for `RPC:Completed` (EventClass 10), CPU is in **milliseconds** [Unverified — claims of microseconds in SQL 2012+ require live MS Learn confirmation]; On SQL Server 2008 R2 and earlier, all trace CPU values were in milliseconds. Normalize all duration values to milliseconds before applying thresholds and displaying results.
 
 **Query normalization:** Group events by normalized query text — replace literal values and parameter values with placeholders to identify the same logical query across executions. Example: `SELECT * FROM Orders WHERE Id = 42` and `SELECT * FROM Orders WHERE Id = 99` normalize to the same pattern.
 

@@ -468,7 +468,7 @@ ON [dbo].[...] ([...])
 INCLUDE ([...])
 WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
       -- SQL 2019+ on large tables: add RESUMABLE = ON, MAX_DURATION = 120 MINUTES (resumable CREATE INDEX is SQL 2019+; resumable rebuild is SQL 2017+; both require ONLINE = ON)
-      -- Remove ONLINE = ON for Standard edition (online index operations are Enterprise-only in all versions through SQL 2022) or tables with LOB columns
+      -- Remove ONLINE = ON for SQL Server 2014 and earlier (online nonclustered index operations became available in Standard edition starting SQL Server 2016 SP1; online clustered index operations in Standard edition starting SQL Server 2019), or tables with LOB columns
      );
 
 -- Validate before promoting to production:
@@ -506,7 +506,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
 - Operator-derived recommendations (Source A) are inferences — they are not guaranteed improvements. Always validate with `/sqlplan-review` findings before deploying.
 - The optimizer's Impact score reflects a single query's estimated benefit. A derived recommendation from a Nested Loops with 50,000 executions may be more valuable than an optimizer suggestion with Impact 90 from a query that runs once a day. DMV `weighted_impact` data is the most reliable ranking signal when available.
 - Always test in non-production first. New indexes can shift plan shapes for other queries on the same table.
-- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition (online index create and rebuild are Enterprise-only features in every version through SQL Server 2022) or tables with LOB columns (xml, varchar(max), etc.). Enterprise edition supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` — resumable rebuild from SQL 2017+, resumable CREATE INDEX from SQL 2019+; both require ONLINE = ON.
+- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition when the SQL Server version is 2014 or earlier (online nonclustered index operations became available in Standard edition starting SQL Server 2016 SP1; online clustered index operations became available in Standard edition starting SQL Server 2019), or tables with LOB columns (xml, varchar(max), etc.). Enterprise edition supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` — resumable rebuild from SQL 2017+, resumable CREATE INDEX from SQL 2019+; both require ONLINE = ON.
 - `DROP_EXISTING = ON` is appropriate when extending an existing index (D1 Key Lookup pattern). Always verify the current index name against `sys.indexes` before using it.
 
 ---

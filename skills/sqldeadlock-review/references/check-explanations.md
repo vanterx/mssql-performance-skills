@@ -104,13 +104,14 @@ When SQL Server can't use row-level locks (no suitable index exists), it escalat
 
 A ✗ means the two modes conflict — one session must wait for the other to release:
 
-| Held ↓ \ Requested → | S | U | X | IS | IX |
-|---|---|---|---|---|---|
-| **S** | ✓ | ✓ | ✗ | ✓ | ✗ |
-| **U** | ✓ | ✗ | ✗ | ✓ | ✗ |
-| **X** | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **IS** | ✓ | ✓ | ✗ | ✓ | ✓ |
-| **IX** | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Held ↓ \ Requested → | S | U | X | IS | IX | SIX |
+|---|---|---|---|---|---|---|
+| **S** | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| **U** | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| **X** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| **IS** | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| **IX** | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
+| **SIX** | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
 
 ### Isolation Levels
 

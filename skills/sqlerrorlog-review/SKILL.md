@@ -73,8 +73,8 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
 ## AG / High Availability Checks (E1–E8)
 
 ### E1 — AG Failover Event
-- **Trigger:** Log contains `performing a planned role change` or `automatic failover` in the same
-  entry or within the same minute as a role-change message; also `in response to a request from
+- **Trigger:** Log contains `is changing roles from` or `is preparing to transition to` or `automatic failover`
+  in the same entry or within the same minute as a role-change message; also `in response to a request from
   the Windows Server Failover Cluster`
 - **Severity:** Warning — planned failover expected; Critical if the word `automatic` appears
   (unplanned loss of primary)
