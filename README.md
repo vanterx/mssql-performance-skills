@@ -1143,6 +1143,162 @@ Service account is CONTOSO\sqlsvc. SQL Server is the default instance.
 
 ---
 
+## sqlclusterlog-review
+
+Analyzes Windows Server Failover Cluster (WSFC) `CLUSTER.LOG` files for Always On Availability Group root-cause diagnosis. Applies 30 checks (L1–L30) across five categories: file-wide patterns, AG resource transitions, network/node health, configuration signals, and modern cluster features (Cloud Witness, Azure Arc, Contained AG).
+
+**Triggers:** `/sqlclusterlog-review`
+
+**Input:** Paste content from `CLUSTER.LOG` (live: `C:\Windows\Cluster\cluster.log`; generated via `Get-ClusterLog`: `C:\Windows\Cluster\Reports\CLUSTER.LOG`) — covering at least 10 minutes before the incident across all nodes — or describe the symptoms in plain language.
+
+**Checks:** 30 total —
+- L1–L8 File-wide patterns: lease timeout, health check failure, RHS crash, error burst density, failover cycling, quorum loss, node eviction, log time gap
+- L9–L17 AG resource: offline transition, SQL connectivity loss, forced failover, long pending state, hadrres.dll init failure, resource DLL API timeout, cascade across AGs, primary role loss, replica disconnection
+- L18–L22 Network/node: network partition, cluster network interface failure, heartbeat timeout, witness access failure, node isolation
+- L23–L25 Configuration signals: VerboseLogging=0, SeparateMonitor not set, missing node coverage
+- L26–L30 Modern features: Cloud Witness repeated timeout, Azure Arc agent disconnect, Contained AG system database offline, cross-subnet probe failure, sp_server_diagnostics component warning
+
+**Usage:**
+
+```
+/sqlclusterlog-review
+[paste CLUSTER.LOG content]
+```
+
+**Sample output:** See [`skills/sqlclusterlog-review/examples/cluster-analysis.md`](skills/sqlclusterlog-review/examples/cluster-analysis.md).
+
+---
+
+## sqlhadr-review
+
+Analyzes `sys.dm_hadr_*` DMV output to assess Always On Availability Group replica health: synchronization state, secondary lag, redo/log send queue sizes, and configuration gaps. Applies 27 checks (H1–H27) across five categories.
+
+**Triggers:** `/sqlhadr-review`, `/hadr-review`
+
+**Input:** Paste output from the `sys.dm_hadr_*` capture query in `SKILL.md` (run on the primary replica), a file path to saved query output, or describe the symptom ("secondary is 90 seconds behind", "replica shows NOT_HEALTHY").
+
+**Checks:** 27 total —
+- H1–H6 Replica connectivity and role: disconnected, resolving state, sync unhealthy, not synchronizing, last connect error, manual failover on sync-commit
+- H7–H11 Data loss and recovery time: estimated data loss, estimated recovery time, secondary lag, redo queue buildup, log send queue buildup
+- H12–H16 Throughput: zero redo/send rate, redo/send rate mismatch, multiple databases lagging, commit latency signal
+- H17–H22 Configuration: async replica in sync-expected position, no automatic failover replica, single replica AG, listener not configured, read-only routing not configured, automatic seeding active
+- H23–H27 Modern AG features: Contained AG misrouted DML, Cloud Witness inaccessible, parallel redo worker saturation, read-scale secondary missing RCSI, AG without database-level health detection
+
+**Usage:**
+
+```
+/sqlhadr-review
+[paste sys.dm_hadr_* DMV output]
+```
+
+**Sample output:** See [`skills/sqlhadr-review/examples/hadr_dmv_output-analysis.md`](skills/sqlhadr-review/examples/hadr_dmv_output-analysis.md).
+
+---
+
+## sqlag-review
+
+Audits Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, and Basic/Contained AG constraints. Applies 35 checks (F1–F35) across seven categories. Companion to `/sqlhadr-review` (runtime health) and `/sqlclusterlog-review` (WSFC events).
+
+**Triggers:** `/sqlag-review`, `/ag-review`, `/ag-config-review`, `/hadr-config`, `/distributed-ag-review`, `/ag-setup-review`
+
+**Input:** Paste output from the catalog-view capture queries in `SKILL.md` (run on the primary replica), a file path, or a natural language description of the AG topology and any known issues.
+
+**Checks:** 35 total —
+- F1–F6 Prerequisites: AlwaysOn feature disabled, database not in FULL recovery, endpoint missing/not started, endpoint encryption disabled, failure condition level at extremes, version mismatch
+- F7–F13 Replica design: excessive sync-commit replicas, WAN session timeout too low, aggressive health check timeout, backup priority ties, incomplete replica join, missing databases after join, no readable secondary
+- F14–F18 Listener/network: multi-subnet listener missing IP, read-only routing URL/list absent, non-default port, multi-subnet OFFLINE IP guidance
+- F19–F23 Backup strategy: automated backup preference NONE, backup jobs not preferred-replica-guarded, log backups not scheduled, backup compression disabled, PRIMARY preference with 3+ replicas
+- F24–F27 Endpoint security: Windows auth cross-domain, certificate expiring within 90 days, RC4 encryption, port documented as blocked
+- F28–F33 Distributed AG / advanced: instance name instead of listener URL, Basic AG with multiple databases or readable secondary, Contained AG Windows endpoint auth, distributed AG stuck sync-commit, cross-database dependencies
+- F34–F35 Operational monitoring: no Extended Events session for AG diagnostics, listener IP not conformant with Windows cluster
+
+**Usage:**
+
+```
+/sqlag-review
+[paste AG catalog view output, or describe the topology]
+```
+
+**Sample output:** See [`skills/sqlag-review/examples/ag-config-analysis.md`](skills/sqlag-review/examples/ag-config-analysis.md).
+
+---
+
+## sqlerrorlog-review
+
+Analyzes SQL Server ERRORLOG files for operational issues: availability group failures, memory pressure, I/O subsystem warnings, and security events. Applies 33 checks (E1–E33) across six categories.
+
+**Triggers:** `/sqlerrorlog-review`
+
+**Input:** Paste content from the ERRORLOG file (default: `C:\Program Files\Microsoft SQL Server\MSSQL<ver>.<inst>\MSSQL\Log\ERRORLOG`) — ideally current + at least one prior (`ERRORLOG.1`) — or describe the symptoms / paste selected lines with context.
+
+**Checks:** 33 total —
+- E1–E8 AG/HA: failover event, lease expiry, replica state change, database joining failure, sync suspended, AG health check timeout, redo thread error, secondary not synchronising
+- E9–E14 Memory/resource pressure: FAIL_PAGE_ALLOCATION, OS memory pressure, insufficient memory, worker thread exhaustion, non-yielding scheduler, memory grant timeout
+- E15–E19 I/O and storage: I/O subsystem slow, database corruption warning, TempDB space exhaustion, log backup overdue, VLF proliferation signal
+- E20–E24 Startup/shutdown/connectivity: abnormal shutdown, repeated restarts, login failure burst, linked server error, connectivity error
+- E25–E28 Configuration/informational: trace flag active, Max Server Memory default, ERRORLOG rotation gap, SQL Server version
+- E29–E33 SQL 2019/2022 modern features: ADR PVS cleanup stall, IQP DOP feedback applied, Ledger verification failure, CE feedback model version change, Azure Arc agent disconnect
+
+**Usage:**
+
+```
+/sqlerrorlog-review
+[paste ERRORLOG content]
+```
+
+**Sample output:** See [`skills/sqlerrorlog-review/examples/ERRORLOG-analysis.md`](skills/sqlerrorlog-review/examples/ERRORLOG-analysis.md).
+
+---
+
+## sqlmemory-review
+
+Analyzes SQL Server memory pressure from buffer pool metrics (PLE), plan cache composition, memory grants, and memory clerk data. Applies 20 checks (O1–O20) across four categories.
+
+**Triggers:** `/sqlmemory-review`, `/memory-review`, `/ple-check`
+
+**Input:** Paste output from `sys.dm_os_memory_clerks`, `sys.dm_os_ring_buffers` (`RING_BUFFER_RESOURCE_MONITOR` or `RING_BUFFER_OOM`), `sys.dm_exec_query_memory_grants`, PLE counters, or `sys.dm_os_sys_memory` — any subset, combined or alone — or describe the symptom ("PLE is 200 and dropping, RESOURCE_SEMAPHORE is 15% of waits").
+
+**Checks:** 20 total —
+- O1–O5 Buffer pool/PLE: low PLE, declining trend, NUMA node imbalance, single-database dominance, excessive stolen memory
+- O6–O10 Plan cache: single-use bloat, high compilation rate, oversized individual plan, excessive lock memory, low cache hit rate (churn)
+- O11–O15 Memory grants: queue depth, grant timeout, oversized grant, Resource Governor pool imbalance, Buffer Pool Extension active on SSDs
+- O16–O20 Memory clerk/OS/configuration: ColumnStore pressure, In-Memory OLTP (XTP) pressure, OS memory pressure notifications, LPIM misconfiguration, Max Server Memory not explicitly set
+
+**Usage:**
+
+```
+/sqlmemory-review
+[paste memory clerk / PLE / memory grant output]
+```
+
+**Sample output:** See [`skills/sqlmemory-review/examples/memory_pressure-analysis.md`](skills/sqlmemory-review/examples/memory_pressure-analysis.md).
+
+---
+
+## sqldiskio-review
+
+Analyzes SQL Server file-level I/O latency and auto-growth events from `sys.dm_io_virtual_file_stats`, `sys.master_files`, and default trace auto-growth records. Applies 15 checks (Z1–Z15) across three categories.
+
+**Triggers:** `/sqldiskio-review`, `/diskio-review`, `/io-latency`
+
+**Input:** A snapshot pair from `sys.dm_io_virtual_file_stats` (preferred — two captures with the delta calculated), a single cumulative capture, `sys.master_files` output, default-trace auto-growth events, or describe the symptom ("log file grew three times today, data drive showing 80ms reads").
+
+**Checks:** 15 total —
+- Z1–Z5 Latency/stall: data file read latency, data file write latency, log file write latency, hot data file, high stall ratio
+- Z6–Z10 Storage placement/configuration: data and log on same volume, TempDB on same volume as user databases, TempDB log file latency, file count imbalance, database file on system drive
+- Z11–Z15 Auto-growth patterns: events in last 24h, data file growth too small, log file growth too small, growth during production hours, I/O stall trend worsening
+
+**Usage:**
+
+```
+/sqldiskio-review
+[paste sys.dm_io_virtual_file_stats / sys.master_files output]
+```
+
+**Sample output:** See [`skills/sqldiskio-review/examples/diskio-analysis.md`](skills/sqldiskio-review/examples/diskio-analysis.md).
+
+---
+
 ## Collection Framework
 
 Each skill's `scripts/` directory contains T-SQL and PowerShell capture scripts that collect
