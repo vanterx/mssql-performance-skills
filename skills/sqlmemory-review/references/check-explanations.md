@@ -240,7 +240,7 @@ ORDER BY size_in_bytes DESC;
 ```sql
 SELECT pages_kb / 1024 AS lock_memory_mb
 FROM sys.dm_os_memory_clerks
-WHERE type = 'LOCK';
+WHERE type = 'OBJECTSTORE_LOCK_MANAGER';
 ```
 
 **Fix options:**

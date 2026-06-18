@@ -55,12 +55,12 @@ Runtime stats are aggregated into fixed-length intervals (default: 60 minutes). 
 
 ### Execution Types
 
-Query Store tracks three execution types:
+Query Store tracks three execution types (the `execution_type` column in `sys.query_store_runtime_stats` is `tinyint`; values 1 and 2 are not used):
 | `execution_type` | Meaning |
 |------------------|---------|
 | 0 | Regular — completed normally |
-| 1 | Aborted — client cancelled or timed out |
-| 2 | Exception — query hit an error |
+| 3 | Aborted — client cancelled or timed out |
+| 4 | Exception — query hit an error |
 
 ### Query Store Wait Categories (SQL 2017+)
 
@@ -364,7 +364,7 @@ Query Store tracks three execution types:
 
 **How to spot it:**
 - In expert mode or when `sys.query_store_plan_feedback` is queried, `feature_desc` indicates active feedback
-- Common feedback types: `PARAMETER_SENSITIVE_PLAN_OPTIMIZATION`, `MEMORY_GRANT_FEEDBACK`, `DOP_FEEDBACK`
+- Documented `feature_desc` values: `'CE Feedback'`, `'DOP Feedback'`, `'Memory Grant Feedback'`. PSP optimization itself does not appear in `sys.query_store_plan_feedback` — detect it via `plan_type_desc IN ('Dispatcher Plan', 'Query Variant Plan')` in `sys.query_store_plan` (see Q26)
 
 **Example (problem + fix):**
 ```
@@ -737,11 +737,15 @@ Query Store tracks three execution types:
 
 ### Q26 — PSP Optimization Active (SQL 2022+)
 
-**What it means:** `sys.query_store_plan_feedback` has rows with `feedback_type = 'PSP'` — Parameter Sensitive Plan optimization is generating multiple variant plans for a query, one per distinct parameter range bucket.
+**What it means:** `sys.query_store_plan` has rows with `plan_type_desc IN ('Dispatcher Plan', 'Query Variant Plan')` — Parameter Sensitive Plan optimization is generating multiple variant plans for a query, one per distinct parameter range bucket. (PSP activity does not appear in `sys.query_store_plan_feedback`; that view is used by CE/DOP/Memory Grant Feedback instead — see Q27–Q29.)
 
 **How to spot it:**
 ```sql
-SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP';
+SELECT q.query_id, p.plan_id, p.plan_type_desc, p.count_compiles
+FROM sys.query_store_plan p
+JOIN sys.query_store_query q ON p.query_id = q.query_id
+WHERE p.plan_type_desc IN ('Dispatcher Plan', 'Query Variant Plan')
+ORDER BY q.query_id, p.plan_type_desc;
 ```
 
 **Why it matters:** PSP optimization is beneficial when it converges on stable variants. However, if the engine switches between variants too frequently — because data distribution drifts between bucket boundaries — you get repeated compile overhead and inconsistent response times. The feature itself is a signal that parameter sniffing was severe enough to trigger automatic intervention.
@@ -749,7 +753,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP';
 **Fix options:**
 1. Check variant plan stability: if the active variant switches frequently, the distribution may be too fluid for PSP to converge
 2. Apply `OPTION (OPTIMIZE FOR UNKNOWN)` or `OPTION (OPTIMIZE FOR (@param = <value>))` to lock in a single plan for the common case
-3. Add a Query Store hint to pin one plan: `EXEC sys.sp_query_store_set_hints @query_id = <id>, @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'`
+3. Add a Query Store hint to pin one plan: `EXEC sys.sp_query_store_set_hints @query_id = <id>, @query_hints = N'OPTION(OPTIMIZE FOR UNKNOWN)'` (`@query_id` is `bigint` — pass the integer value, not a quoted string)
 4. Run `/sqlplan-review` check S34 to evaluate the variant plans directly
 5. If PSP is causing regressions, disable at database scope: `ALTER DATABASE SCOPED CONFIGURATION SET PARAMETER_SENSITIVE_PLAN_OPTIMIZATION = OFF`
 
@@ -759,11 +763,11 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'PSP';
 
 ### Q27 — CE Feedback Persistent Model Adjustment (SQL 2022+)
 
-**What it means:** `sys.query_store_plan_feedback` has rows with `feedback_type = 'CE'` — the cardinality estimator model has been persistently adjusted for one or more queries based on observed versus estimated row counts.
+**What it means:** `sys.query_store_plan_feedback` has rows with `feature_desc = 'CE Feedback'` — the cardinality estimator model has been persistently adjusted for one or more queries based on observed versus estimated row counts.
 
 **How to spot it:**
 ```sql
-SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'CE';
+SELECT * FROM sys.query_store_plan_feedback WHERE feature_desc = 'CE Feedback';
 ```
 
 **Why it matters:** CE Feedback refines cardinality estimates for specific queries without requiring statistics updates. This is beneficial when it reduces spills, hash join to nested loops regressions, or over-large memory grants. However, a persistent CE adjustment also signals that the base statistics or model assumptions are wrong — the root cause deserves investigation rather than just accepting the automated fix.
@@ -786,11 +790,11 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'CE';
 
 ### Q28 — DOP Feedback Applied (SQL 2022+)
 
-**What it means:** `sys.query_store_plan_feedback` has rows with `feedback_type = 'DOP'` — the engine has automatically reduced the degree of parallelism for one or more queries because measured parallelism overhead exceeded the benefit.
+**What it means:** `sys.query_store_plan_feedback` has rows with `feature_desc = 'DOP Feedback'` — the engine has automatically reduced the degree of parallelism for one or more queries because measured parallelism overhead exceeded the benefit.
 
 **How to spot it:**
 ```sql
-SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'DOP';
+SELECT * FROM sys.query_store_plan_feedback WHERE feature_desc = 'DOP Feedback';
 ```
 
 **Why it matters:** DOP Feedback lowers the effective DOP for queries where thread synchronization cost (CXPACKET/CXCONSUMER waits) outweighs the speedup from parallel execution. When it works correctly, elapsed time drops. When it does not converge — or when it reduces DOP for a query that genuinely benefits from parallelism — elapsed time increases.
@@ -813,13 +817,13 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feedback_type = 'DOP';
 
 ### Q29 — Memory Grant Feedback Instability (SQL 2019+)
 
-**What it means:** The same `plan_id` has three or more feedback rows in `sys.query_store_plan_feedback` with `feedback_type = 'MemoryGrant'` and different grant values — Memory Grant Feedback (MGF) is oscillating between grant sizes rather than converging on a stable value.
+**What it means:** The same `plan_id` has three or more feedback rows in `sys.query_store_plan_feedback` with `feature_desc = 'Memory Grant Feedback'` and different grant values — Memory Grant Feedback (MGF) is oscillating between grant sizes rather than converging on a stable value.
 
 **How to spot it:**
 ```sql
 SELECT plan_id, COUNT(*) AS feedback_count, MIN(feedback_data) AS min_grant, MAX(feedback_data) AS max_grant
 FROM sys.query_store_plan_feedback
-WHERE feedback_type = 'MemoryGrant'
+WHERE feature_desc = 'Memory Grant Feedback'
 GROUP BY plan_id
 HAVING COUNT(*) >= 3;
 ```
@@ -862,7 +866,7 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 1. Enable Query Store on secondary replicas:
    ```sql
    ALTER DATABASE [YourDatabase] SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);
-   ALTER DATABASE [YourDatabase] SET QUERY_STORE FOR SECONDARY = ON;
+   ALTER DATABASE [YourDatabase] FOR SECONDARY SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);
    ```
 2. After enabling, verify all replicas appear: `SELECT * FROM sys.query_store_replicas` — each replica should have a row
 3. Note that secondary replica Query Store data is read-only on the secondary and replicated to the primary's Query Store store — review it via the primary connection
@@ -875,24 +879,23 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 
 ### Q31 — Query Store Hint Ineffective or Stale (SQL 2022+)
 
-**What it means:** `sys.query_store_query_hints` contains a row that is disabled, failed to apply on the last invocation, or references a `query_id` that no longer exists in `sys.query_store_query` — the hint is a dead artifact providing no protection.
+**What it means:** `sys.query_store_query_hints` contains a row with a nonzero `query_hint_failure_count` (the hint failed to apply on at least one invocation), or one that references a `query_id` that no longer exists in `sys.query_store_query` — the hint is a dead artifact providing no protection.
 
 **How to spot it:**
 ```sql
--- Find disabled or failed hints
+-- Find failed or orphaned hints
 SELECT qh.query_hint_id, qh.query_id, qh.query_hint_text,
-       qh.is_disabled, qh.nthint_failed_last_invocation
+       qh.query_hint_failure_count, qh.last_query_hint_failure_reason_desc
 FROM sys.query_store_query_hints qh
 LEFT JOIN sys.query_store_query q ON qh.query_id = q.query_id
-WHERE qh.is_disabled = 1
-   OR qh.nthint_failed_last_invocation = 1
+WHERE qh.query_hint_failure_count > 0
    OR q.query_id IS NULL;  -- orphaned
 ```
 
-**Why it matters:** `sp_query_store_set_hints` accepts only a subset of `OPTION()` hints. Invalid hint names are not validated at creation time — they fail silently on first invocation and set `nthint_failed_last_invocation = 1`. Orphaned hints accumulate when query text changes enough to evict the original query from the store, leaving the hint attached to a ghost `query_id`. Both cases mean the intended plan shape is not being enforced.
+**Why it matters:** `sp_query_store_set_hints` accepts only a subset of `OPTION()` hints. Invalid hint names are not validated at creation time — they fail silently on first invocation and increment `query_hint_failure_count`, with the reason recorded in `last_query_hint_failure_reason` / `last_query_hint_failure_reason_desc`. Orphaned hints accumulate when query text changes enough to evict the original query from the store, leaving the hint attached to a ghost `query_id`. Both cases mean the intended plan shape is not being enforced.
 
 **Fix options:**
-1. For `nthint_failed_last_invocation = 1`: remove the hint and re-apply with corrected syntax:
+1. For a nonzero `query_hint_failure_count`: remove the hint and re-apply with corrected syntax:
    ```sql
    EXEC sys.sp_query_store_clear_hints @query_id = <id>;
    EXEC sys.sp_query_store_set_hints @query_id = <id>,
@@ -903,7 +906,7 @@ WHERE qh.is_disabled = 1
    EXEC sys.sp_query_store_clear_hints @query_id = <orphaned_id>;
    ```
 3. If IQP CE Feedback (Q27) or DOP Feedback (Q28) is active on the same query, consider removing the hint entirely and letting adaptive feedback manage the plan — manual hints block adaptive mechanisms
-4. To list all active hints: `SELECT * FROM sys.query_store_query_hints WHERE is_disabled = 0`
+4. To list all active hints: `SELECT * FROM sys.query_store_query_hints`
 5. Requires SQL Server 2022 (16.x); this DMV does not exist on earlier versions
 
 **Related checks:** Q26 (PSP optimization), Q27 (CE feedback), Q28 (DOP feedback), Q8 (forced plan failure)
@@ -976,10 +979,10 @@ WHERE name = 'FORCE_LAST_GOOD_PLAN';
 | Q23 | Near Size Limit | storage > 80% of max |
 | Q24 | Capture Disabled | state = READ_ONLY or capture = NONE |
 | Q25 | No Wait Stats | QS ON but wait stats not enabled |
-| Q26 | PSP Optimization Active (SQL 2022+) | feedback_type = 'PSP' in sys.query_store_plan_feedback |
-| Q27 | CE Feedback Persistent Model Adjustment (SQL 2022+) | feedback_type = 'CE' in sys.query_store_plan_feedback |
-| Q28 | DOP Feedback Applied (SQL 2022+) | feedback_type = 'DOP' in sys.query_store_plan_feedback |
-| Q29 | Memory Grant Feedback Instability (SQL 2019+) | ≥ 3 MemoryGrant feedback rows for same plan_id |
+| Q26 | PSP Optimization Active (SQL 2022+) | plan_type_desc IN ('Dispatcher Plan', 'Query Variant Plan') in sys.query_store_plan |
+| Q27 | CE Feedback Persistent Model Adjustment (SQL 2022+) | feature_desc = 'CE Feedback' in sys.query_store_plan_feedback |
+| Q28 | DOP Feedback Applied (SQL 2022+) | feature_desc = 'DOP Feedback' in sys.query_store_plan_feedback |
+| Q29 | Memory Grant Feedback Instability (SQL 2019+) | ≥ 3 'Memory Grant Feedback' rows for same plan_id |
 | Q30 | Query Store Replica Coverage Gap (SQL 2022+) | sys.query_store_replicas count < AG replica count |
-| Q31 | Query Store Hint Ineffective or Stale (SQL 2022+) | is_disabled=1 OR nthint_failed_last_invocation=1 OR orphaned query_id |
+| Q31 | Query Store Hint Ineffective or Stale (SQL 2022+) | query_hint_failure_count > 0 OR orphaned query_id |
 | Q32 | Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled (SQL 2017+) | dm_db_tuning_recommendations has Active/Verifying rows + auto-tuning OFF |

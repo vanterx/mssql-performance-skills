@@ -1747,10 +1747,9 @@ SELECT TOP 1000 * FROM dbo.Orders ORDER BY OrderDate DESC
 
 **Fix (when it's causing problems)**
 ```sql
-OPTION (DISABLE_OPTIMIZER_ROWGOAL)  -- SQL Server 2016+
--- or:
-OPTION (NO_PERFORMANCE_SPOOL)       -- prevents row goal spool creation
+OPTION (DISABLE_OPTIMIZER_ROWGOAL)  -- SQL Server 2016 SP1+; equivalent to trace flag 4138
 ```
+`NO_PERFORMANCE_SPOOL` is not a documented `USE HINT` name [Unverified — not found in the documented USE HINT list or `sys.dm_exec_valid_use_hints`; `DISABLE_OPTIMIZER_ROWGOAL` is the documented way to suppress row goal optimization].
 
 ---
 
@@ -3565,7 +3564,7 @@ Inside a PSP dispatcher plan, each variant is a specialized sub-plan for a parti
 Within a PSP plan, a variant node with `actualRows / estimateRows > 100` and `actualRows > 1,000` (requires actual plan).
 
 **Fix**
-Use `sys.query_store_query_variant` to inspect variant boundaries. Use Query Store hints (`sys.sp_query_store_set_hints`) to force the correct variant for the problem parameter range, or disable PSP for this query with `OPTION (USE HINT ('DISABLE_PARAMETER_SNIFFING'))` and fix the underlying cardinality issue instead. Related: S34.
+Use `sys.query_store_query_variant` to inspect variant boundaries. Use Query Store hints (`sys.sp_query_store_set_hints`) to force the correct variant for the problem parameter range, or disable PSP for this query with `OPTION (USE HINT ('DISABLE_PARAMETER_SENSITIVE_PLAN'))` and fix the underlying cardinality issue instead (database scoped configuration `PARAMETER_SENSITIVE_PLAN_OPTIMIZATION = OFF` disables it for the whole database). Related: S34.
 
 ---
 
