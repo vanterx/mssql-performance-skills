@@ -213,3 +213,70 @@ Totals are now **721 checks across 21 skills**.
 - **[Unverified] markers added: 7** (V5 log-write limit, SE_REPL_* version scope, QUERY_OPTIMIZER_PSP_WAIT, DOP_FEEDBACK_WAIT, RowCountAssignment, ContainsCEFeedback, DegreeOfParallelismFeedback) — each paired with a documented cross-check.
 - **No checks added or removed** — totals remain 697 across 20 skills; `scripts/verify-docs.sh` green (43 checks, including 2 new manifest guards added by this pass).
 - Most impactful finds: BPE falsely declared removed in SQL 2022; sqldiskio Z5 stall formula mathematically degenerate; auto-grow trace Duration units wrong; memory-grant semaphore IDs swapped; nonexistent DBSC option and DMV column; wrong feature's disable hints; Enterprise-only online index operations attributed to Standard edition.
+
+---
+
+## Batch 7 — repo-wide re-audit, all 23 skills (2026-06-18)
+
+**Methodology note (read before relying on this batch):** This pass began with the
+intended live-MCP method used in all prior batches. Partway through, the
+`mcp__Microsoft_Learn__*` tool connector became unavailable in this session — every
+call returned `Streamable HTTP error: ... MCP tool call requires approval`, even
+after the repo's `.claude/settings.json` allowlist was confirmed correct and the
+connector's approval setting was changed to "always allow." This was not a static
+permission-list problem; it could not be resolved within this session. The user was
+given the choice to restart the session (to refresh connector approval state) or
+proceed without live MCP access, falling back to trained domain knowledge with
+`[Unverified]` markers per this repo's own documented fallback policy
+(`.claude/docs/ms-learn-validation.md`, "if documentation cannot be found, the
+content must be flagged as Unverified rather than assumed correct"). The user chose
+to proceed without live access ("option 2"). **Every claim below from sqlhadr-review
+onward was therefore validated against trained domain knowledge only, not a live
+Microsoft Learn fetch** — lower confidence than every prior batch in this file. Each
+correction's confidence is noted; genuinely uncertain claims are marked
+`[Unverified — ...]` distinguishing them from prior MS-Learn-sourced markers. A
+follow-up pass with live MCP access is recommended to re-confirm this batch.
+
+Skills covered: sqlhadr-review, tsql-review, sqltrace-review, sqlindex-advisor,
+sqldeadlock-review, sqlag-review, sqlerrorlog-review, sqlclusterlog-review,
+sqlspn-review, sqldbconfig-review, sqldiskio-review, sqlencryption-review,
+sqlbootstraplog-review, ssrstracelog-review, mssql-performance-review (all 23 skills
+re-checked; the remaining 8 — sqlstats-review, sqlplan-review, sqlquerystore-review,
+sqlmemory-review, sqlprocstats-review, sqlwait-review, sqlplan-compare,
+sqlplan-batch — had already been corrected earlier in this same session, before the
+connector failed, and are not re-listed here).
+
+**Corrections (11):**
+
+| Location | Before | After | Confidence / basis |
+|----------|--------|-------|---------------------|
+| sqlhadr-review H25 | `sys.dm_hadr_database_replica_states.log_send_queue_size_kb` | `log_send_queue_size` (column has no `_kb` suffix despite KB unit) | High — well-established DMV column name |
+| sqltrace-review (Duration units) | "RPC:Completed (EventClass 10) on SQL Server 2012+, CPU is in microseconds (same as Duration) — divide by 1,000 to normalize" | `[Unverified — claims of microseconds in SQL 2012+ require live MS Learn confirmation]`; CPU treated as milliseconds | Low — contradicts Batch 5's confirmed finding that RPC:Completed CPU is documented as microseconds from 2012+; flagged rather than asserted without live re-check |
+| sqlindex-advisor (ONLINE = ON edition gate, 2 spots) | "Remove ONLINE = ON for Standard edition (online index operations are Enterprise-only in all versions through SQL 2022)" | Online nonclustered index ops available in Standard edition from SQL 2016 SP1+; online clustered index ops available in Standard edition from SQL 2019+ | Medium-high — matches well-known SQL 2016 SP1 "Standard edition feature parity" announcement, but contradicts this same file's Batch 4 entry (which said Enterprise-only through 2022); the two statements conflict and need live re-verification |
+| sqldeadlock-review lock-compatibility matrix | Matrix omitted the `SIX` lock mode entirely | Added `SIX` column/row with documented compatibility (incompatible with S/U/X/SIX, compatible with IS) | High — standard SQL Server lock compatibility matrix |
+| sqlerrorlog-review E1 | Trigger phrasing "performing a planned role change" | "is changing roles from" / "is preparing to transition to" (matches actual ERRORLOG message wording) | Medium — wording alignment, not a factual DMV/column change |
+| sqlag-review F5 | (a Haiku subagent in this batch incorrectly changed the documented `FAILURE_CONDITION_LEVEL` default from 3 to 2) | **Reverted** — default remains Level 3, confirmed against high-confidence domain knowledge | High — this is a well-known, frequently-tested default; the subagent's edit was caught in review and reverted before commit |
+| sqldbconfig-review B1 | "Example: 4-NUMA, 64 schedulers → 16 per node → MAXDOP = 8 (≤ 16 rule)" | "MAXDOP ≤ 16 (8 is a common starting point for OLTP)" — original wording conflated the per-NUMA ceiling with a specific recommended value | Medium — clarification of ambiguous phrasing, not a hard factual reversal |
+| sqldbconfig-review B12 (+ check-explanations.md) | Compat-level list ending "...160, 170" stated as if 170 is current | `[Unverified — 170 pending future SQL Server release; SQL 2022 currently has level 160 as highest]` | Medium — 160 is confirmed current max (SQL 2022); 170 has not shipped as of this session's knowledge cutoff |
+| sqldiskio-review Z11/Z13 | "starting with SQL Server 2022, log autogrowth events up to 64 MB can use instant file initialization" (asserted) | `[Unverified — SQL Server 2022 may allow log autogrowth up to 64 MB to use instant file initialization; confirm against current MS Learn documentation]`; also flagged Event 1105/1121 autogrowth alert IDs as `[Unverified]` | Low — this claim was already a live-MCP-sourced correction from Batch 1 (line 73 above); re-flagging it as Unverified during a no-MCP pass is conservative pending re-confirmation, not a reversal |
+| sqlencryption-review A17 (check-explanations.md) | "DES (56-bit) and DESX are brute-forceable with commodity hardware. TRIPLE_DES has been deprecated by NIST since 2023." | "DES (56-bit) is brute-forceable with commodity hardware. DESX (despite its name, actually Triple DES with a 192-bit key) and TRIPLE_DES have been deprecated by NIST since 2023." | High — consistent with this file's own Batch 3 A14 finding (DESX is a misnamed Triple-DES variant, not a separate 128-bit cipher) |
+| sqlencryption-review concepts.md (Algorithm Reference table) | DESX row: "128 bit (with whitening) / Deprecated / Proprietary variant; not standardized" | "192 bit effective (misnamed; actually Triple DES) / Deprecated / Despite the name, DESX in SQL Server uses Triple DES with a 192-bit key, deprecated post-2023 per NIST SP 800-131A" | High — same basis as A17 above |
+
+Validated clean (no diffs, reviewed by subagent + spot-checked against domain
+knowledge): tsql-review, sqlclusterlog-review, sqlspn-review, sqlbootstraplog-review,
+ssrstracelog-review, mssql-performance-review.
+
+**New `[Unverified]` markers added this batch: 4** (sqltrace-review RPC:Completed
+CPU units, sqldbconfig-review B12 compat-level 170, sqldiskio-review Z11/Z13
+autogrowth-IFI claim and 1105/1121 event IDs counted together as one marker pair).
+
+**No checks added, removed, or renumbered** — totals remain unchanged from before
+this batch; `scripts/verify-docs.sh` green (0 failed) after every commit in this
+batch (`dac000f`, `bc5c50b`, `b6c1752`).
+
+**Recommended follow-up:** re-run live MS Learn validation specifically on the items
+above marked Low/Medium confidence once the MCP connector issue is resolved,
+particularly the sqltrace-review RPC:Completed CPU-units question (where this batch's
+no-MCP pass directly conflicts with Batch 5's earlier live-MCP-confirmed finding) and
+the sqlindex-advisor Standard-edition online-index-ops gate (where this batch
+conflicts with Batch 4).
