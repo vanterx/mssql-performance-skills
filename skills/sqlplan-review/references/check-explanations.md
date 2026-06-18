@@ -3532,10 +3532,10 @@ FROM sys.dm_tran_persistent_version_store_stats;
 ### S36 — Cardinality Estimation Feedback Applied
 
 **What it means**
-CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardinality estimates across executions when the CE model consistently underestimates or overestimates row counts. When `ContainsCEFeedback="true"` [Unverified attribute — confirm via sys.query_store_plan_feedback feature_desc = 'CE Feedback'] appears on a plan, the estimates reflect the engine's learned corrections rather than the base CE model. SQL 2022+ only.
+CE Feedback (SQL 2022 Intelligent Query Processing) automatically adjusts cardinality estimates across executions when the CE model consistently underestimates or overestimates row counts. When the `CardinalityFeedback` attribute appears in the Showplan XML, the estimates reflect the engine's learned corrections rather than the base CE model. SQL 2022+ only.
 
 **How to spot it**
-`ContainsCEFeedback="true"` attribute on `StmtSimple` in the plan XML [Unverified — cross-check `sys.query_store_plan_feedback`].
+`CardinalityFeedback` attribute present in the Showplan XML. Cross-check with `sys.query_store_plan_feedback` where `feature_desc = 'CE Feedback'`.
 
 **Fix**
 CE Feedback is generally beneficial. Monitor query stability using Query Store: if the plan shape or performance oscillates after feedback applies, the workload characteristics are changing too frequently for the feedback model to converge. Related: Q27 in sqlquerystore-review.
@@ -3584,10 +3584,10 @@ If approximate results are acceptable (dashboards, analytics), this is a positiv
 ### N70 — DOP Feedback Adjusted Plan
 
 **What it means**
-IQP DOP Feedback (SQL 2022) monitors parallel query thread utilization across executions. When a query consistently underutilizes its parallel threads, DOP Feedback reduces the degree of parallelism at compile time to free resources for other queries. The `DegreeOfParallelismFeedback` element in the plan confirms the adjustment [Unverified — cross-check `sys.query_store_plan_feedback` with feature_desc = 'DOP Feedback']. SQL 2022+ only.
+IQP DOP Feedback (SQL 2022) monitors parallel query thread utilization across executions. When a query consistently underutilizes its parallel threads, DOP Feedback reduces the degree of parallelism at compile time to free resources for other queries. There is no documented `DegreeOfParallelismFeedback` plan XML element; the reliable signal is `sys.query_store_plan_feedback` with `feature_desc = 'DOP Feedback'`. SQL 2022+ only, and requires database compatibility level 160+ with `DOP_FEEDBACK` database-scoped configuration enabled.
 
 **How to spot it**
-`DegreeOfParallelismFeedback` element present in the plan XML [Unverified].
+Query `sys.query_store_plan_feedback` for `feature_desc = 'DOP Feedback'` joined to the plan's `plan_id`. Do not rely on a plan XML attribute — none is documented for DOP feedback.
 
 **Fix**
 DOP Feedback is generally beneficial. Verify the adjusted DOP is improving elapsed time and reducing CXPACKET waits. If performance worsened after adjustment, disable feedback for the specific query using `OPTION (USE HINT ('DISABLE_DOP_FEEDBACK'))`. Related: S8 (DOP forcing), S9 (DOP threshold).
