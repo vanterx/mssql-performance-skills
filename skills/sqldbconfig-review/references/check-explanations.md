@@ -426,7 +426,7 @@ SELECT name, compatibility_level,
 FROM sys.databases
 WHERE compatibility_level < (CAST(SERVERPROPERTY('ProductMajorVersion') AS int) * 10)
   AND database_id > 4;
--- Valid levels: 80, 90, 100, 110, 120, 130, 140, 150, 160, 170
+-- Valid levels: 80, 90, 100, 110, 120, 130, 140, 150, 160, 170 [Unverified — 170 pending future SQL Server release; SQL 2022 currently has level 160 as highest]
 ```
 
 **Example (problem → fix)**

@@ -90,7 +90,7 @@ Certificates have a `NotBefore` and `NotAfter` (expiry) date embedded in them. A
 | AES_256 | 256 bit | Current — recommended | Strongest; required by many compliance frameworks |
 | TRIPLE_DES (3DES) | 168 bit effective | Deprecated (NIST 2023) | NIST SP 800-131A prohibits 3DES after 2023; PCI-DSS v4 disallows |
 | DES | 56 bit | Broken | Brute-forceable; do not use |
-| DESX | 128 bit (with whitening) | Deprecated | Proprietary variant; not standardized |
+| DESX | 192 bit effective (misnamed; actually Triple DES) | Deprecated | Despite the name, DESX in SQL Server uses Triple DES with a 192-bit key, deprecated post-2023 per NIST SP 800-131A |
 | RC4 / RC4_128 | variable | Broken | WEP attacks, RC4-NOMORE; do not use for any purpose |
 | RC2 | variable | Broken | Small-key differential cryptanalysis; do not use |
 

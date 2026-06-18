@@ -614,7 +614,7 @@ WHERE create_date < DATEADD(YEAR, -2, GETDATE());
 ### A17 — Symmetric key using deprecated or broken algorithm
 
 **What it means**
-Cell-Level Encryption uses symmetric keys to encrypt individual cell values via `ENCRYPTBYKEY()`. The algorithm chosen when the key was created determines its strength. RC4 and RC2 are cryptographically broken and must be replaced immediately. DES (56-bit) and DESX are brute-forceable with commodity hardware. TRIPLE_DES has been deprecated by NIST since 2023.
+Cell-Level Encryption uses symmetric keys to encrypt individual cell values via `ENCRYPTBYKEY()`. The algorithm chosen when the key was created determines its strength. RC4 and RC2 are cryptographically broken and must be replaced immediately. DES (56-bit) is brute-forceable with commodity hardware. DESX (despite its name, actually Triple DES with a 192-bit key) and TRIPLE_DES have been deprecated by NIST since 2023.
 
 **How to spot it**
 ```sql
