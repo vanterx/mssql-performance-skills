@@ -47,7 +47,8 @@ case "$claude_word" in
     thirteen) claude_num=13 ;; fourteen) claude_num=14 ;; fifteen)  claude_num=15 ;;
     sixteen)  claude_num=16 ;; seventeen) claude_num=17 ;; eighteen) claude_num=18 ;;
     nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; twenty-one) claude_num=21 ;;
-    twenty-two) claude_num=22 ;; *)         claude_num=0 ;;
+    twenty-two) claude_num=22 ;; twenty-three) claude_num=23 ;; twenty-four) claude_num=24 ;;
+    twenty-five) claude_num=25 ;; *)         claude_num=0 ;;
 esac
 if [ "$claude_num" -eq 0 ]; then
     warn "Could not parse skill count word from CLAUDE.md (found: '$claude_word')"
@@ -707,6 +708,7 @@ declare -A P2S=(
     [L]="sqlclusterlog-review" [E]="sqlerrorlog-review"
     [K]="sqlspn-review"      [C]="sqlplan-compare"
     [P]="sqldeadlock-review" [D]="sqlindex-advisor"
+    [F]="sqlag-review"
     [O]="sqlmemory-review"   [Z]="sqldiskio-review"
     [A]="sqlencryption-review" [B]="sqldbconfig-review"
     [U]="sqlbootstraplog-review"
@@ -880,6 +882,61 @@ for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
     done < <(grep -o '[0-9]\+ checks across' "$manifest" 2>/dev/null | grep -o '^[0-9]*')
 done
 [ "$check43_ok" -eq 1 ] && pass "Plugin manifest check counts match $total_checks total checks"
+
+# ---------------------------------------------------------------------------
+# Check 44: CLAUDE.md Key Files table check counts match SKILL.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[44 ] CLAUDE.md Key Files table check counts match SKILL.md"
+check44_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    # sqlplan-batch and mssql-performance-review are dispatchers with no checks of their own
+    [ "$name" = "sqlplan-batch" ] && continue
+    [ "$name" = "mssql-performance-review" ] && continue
+    # sqlindex-advisor uses derivation rules, not ### headers
+    [ "$name" = "sqlindex-advisor" ] && continue
+    actual=$(grep -c "^### [A-Z][0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    claude_count=$(grep "skills/$name/SKILL.md\]" CLAUDE.md 2>/dev/null \
+        | grep -o '[0-9]* checks' | head -1 | grep -o '^[0-9]*')
+    [ -z "$claude_count" ] && continue   # row has no stated count — skip
+    if [ "$claude_count" != "$actual" ]; then
+        fail "$name: CLAUDE.md Key Files table says '$claude_count checks' but SKILL.md has $actual — update the table"
+        check44_ok=0
+    fi
+done
+[ "$check44_ok" -eq 1 ] && pass "CLAUDE.md Key Files table check counts match SKILL.md"
+
+# ---------------------------------------------------------------------------
+# Check 45: README.md install comment reflects actual skill count
+# ---------------------------------------------------------------------------
+echo ""
+echo "[45 ] README.md install comment"
+if grep -qE "Install all $skill_dirs skills" README.md 2>/dev/null; then
+    pass "README.md install comment says 'Install all $skill_dirs skills'"
+else
+    warn "README.md install comment may not say 'Install all $skill_dirs skills' — check the Installation section"
+fi
+
+# ---------------------------------------------------------------------------
+# Check 46: Installation command strings stay in sync between CLAUDE.md and README.md
+# ---------------------------------------------------------------------------
+echo ""
+echo "[46 ] Installation commands match between CLAUDE.md and README.md"
+check46_ok=1
+for cmd in \
+    "/plugin marketplace add vanterx/mssql-performance-skills" \
+    "/plugin install mssql-performance-skills@mssql-performance-skills" \
+    "npx skills add vanterx/mssql-performance-skills"
+do
+    in_claude=$(grep -qF "$cmd" CLAUDE.md 2>/dev/null && echo 1 || echo 0)
+    in_readme=$(grep -qF "$cmd" README.md 2>/dev/null && echo 1 || echo 0)
+    if [ "$in_claude" != "$in_readme" ]; then
+        fail "Install command '$cmd' present in CLAUDE.md=$in_claude but README.md=$in_readme — keep both files' Installation sections in sync"
+        check46_ok=0
+    fi
+done
+[ "$check46_ok" -eq 1 ] && pass "Installation commands are in sync between CLAUDE.md and README.md"
 
 # ---------------------------------------------------------------------------
 # Summary
