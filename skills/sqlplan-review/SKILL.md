@@ -229,7 +229,7 @@ Run these once per `<StmtSimple>` element before inspecting individual operators
 - **Severity:** Warning
 - **Fix:** ADR moves the persistent version store (PVS) to TempDB. Long-running transactions under ADR cause PVS to grow continuously until the transaction commits or rolls back. Keep transactions short and monitor PVS size with `sys.dm_tran_persistent_version_store_stats`. Cross-reference E29 in sqlerrorlog-review.
 ### S36 — Cardinality Estimation Feedback Applied
-- **Trigger:** `ContainsCEFeedback="true"` attribute on `StmtSimple` [Unverified — attribute not found in documented showplan references; CE feedback state is reliably visible in `sys.query_store_plan_feedback` with `feature_desc = 'CE Feedback'`] — SQL 2022+ only
+- **Trigger:** `CardinalityFeedback` attribute present in the Showplan XML — SQL 2022+ only. Cross-check with `sys.query_store_plan_feedback` where `feature_desc = 'CE Feedback'`
 - **Severity:** Info
 - **Fix:** The CE model was automatically adjusted by feedback across prior executions. This is generally beneficial but means the plan's cardinality estimates no longer reflect the base CE model. Monitor stability: if query performance fluctuates across executions after CE feedback applies, the feedback model may be oscillating. Use Query Store to track plan history. Related: Q27 in sqlquerystore-review.
 

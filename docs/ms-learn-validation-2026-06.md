@@ -280,3 +280,32 @@ particularly the sqltrace-review RPC:Completed CPU-units question (where this ba
 no-MCP pass directly conflicts with Batch 5's earlier live-MCP-confirmed finding) and
 the sqlindex-advisor Standard-edition online-index-ops gate (where this batch
 conflicts with Batch 4).
+
+## Batch 8 — live MCP follow-up, resolving Batch 7 conflicts (2026-06-18)
+
+**Methodology note:** Live `mcp__Microsoft_Learn__*` MCP access was confirmed
+working in this session. This batch resolves the two named conflicts from Batch 7's
+"Recommended follow-up" and re-checks several `[Unverified]` markers left over from
+the no-MCP Batch 7 pass.
+
+**Corrections (4):**
+
+| Location | Before | After | Basis |
+|----------|--------|-------|-------|
+| sqltrace-review (Duration/CPU units) | `[Unverified — claims of microseconds in SQL 2012+ require live MS Learn confirmation]`; CPU treated as milliseconds | `RPC:Completed` (EventClass 10) CPU is in **microseconds beginning with SQL Server 2012 (11.x)**, and in **milliseconds in earlier versions** | Live MS Learn RPC:Completed event class documentation. **Resolves Conflict #1** — confirms Batch 5's original finding, reverts Batch 7's no-MCP downgrade |
+| sqlindex-advisor (ONLINE = ON edition gate, 2 spots) | Online nonclustered index ops available in Standard edition from SQL 2016 SP1+; online clustered index ops available in Standard edition from SQL 2019+ | Online index create/rebuild operations are **Enterprise-only in every SQL Server version through 2022** — no Standard-edition exception | Live MS Learn SQL Server 2016 and SQL Server 2022 edition-feature-matrix pages ("Online indexing" = Enterprise Yes / Standard No, no footnote exception). **Resolves Conflict #2** — confirms Batch 4's original finding, reverts Batch 7's no-MCP claim |
+| sqlwait-review V18 (SE_REPL_* wait types) | `[Unverified]` on `SE_REPL_CATCHUP_THROTTLE`, `SE_REPL_COMMIT_ACK`, `SE_REPL_COMMIT_TURN`, `SE_REPL_ROLLBACK_ACK`, `SE_REPL_SLOW_SECONDARY_THROTTLE` | Marker removed; confirmed as real, documented Azure SQL Database wait types per `sys.dm_db_wait_stats` | Live MS Learn `sys.dm_db_wait_stats` documentation lists each wait type with description |
+| sqlplan-review S36 / check-explanations.md (CE Feedback attribute) | `ContainsCEFeedback="true"` `[Unverified attribute]` | `CardinalityFeedback` attribute in the Showplan XML (correct documented name); also corrected the related DOP Feedback entry, which claimed a `DegreeOfParallelismFeedback` plan XML element — no such element is documented, so the entry now points solely to `sys.query_store_plan_feedback` with `feature_desc = 'DOP Feedback'` | Live MS Learn "Cardinality estimation (CE) feedback for expressions" page confirms `CardinalityFeedback` as the real Showplan attribute name; no MS Learn page documents a `DegreeOfParallelismFeedback` element |
+
+**Markers re-checked and left unchanged (remain genuinely `[Unverified]` — no
+confirming or denying MS Learn source found):** sqlwait-review V5 (log-write I/O
+limit raised from 32 to 112 in SQL 2012+), sqlwait-review V41/V42
+(`QUERY_OPTIMIZER_PSP_WAIT` / `DOP_FEEDBACK_WAIT` wait names, not found in documented
+`sys.dm_os_wait_stats` wait-type list), sqlplan-review `RowCountAssignment` showplan
+attribute. sqldbconfig-review B12 (compat level 170) and sqldiskio-review Z11/Z13
+(autogrowth/IFI claim, event IDs 1105/1121) were not re-investigated in this pass.
+
+**No checks added, removed, or renumbered** — totals remain unchanged from before
+this batch.
+
+**Both conflicts named in Batch 7's "Recommended follow-up" are now resolved.**
