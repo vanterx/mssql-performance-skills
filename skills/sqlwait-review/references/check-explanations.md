@@ -1148,9 +1148,9 @@ ORDER BY redo_queue_size DESC;
 **Fix options**
 1. **Check redo throughput vs. log generation rate** — if `redo_rate` < primary log generation rate, the gap will grow. The fix must increase redo throughput on the secondary.
 2. **Improve secondary I/O** — the redo thread is write-bound on the secondary's data and log files. Move them to faster storage (NVMe).
-3. **Increase parallel redo workers**:
-   - SQL Server 2022+: `ALTER DATABASE SCOPED CONFIGURATION SET PARALLEL_REDO_WORKER_POOL_SIZE = N` (default 0 = automatic)
+3. **Check parallel redo allocation**:
    - SQL Server 2016–2019: parallel redo is automatic, up to 100 threads instance-wide; trace flag 3459 disables it if serial redo proves faster under contention
+   - SQL Server 2022+: redo worker allocation is automatic based on workload
 4. **Consider async commit** for replicas that are not required for synchronous quorum — this removes the back-pressure on the primary.
 5. **Reduce primary write workload** — if the primary is generating more log than the secondary can apply, addressing the primary's write volume (batch inserts, reduced index maintenance) reduces the redo backlog.
 

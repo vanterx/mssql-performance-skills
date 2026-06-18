@@ -134,8 +134,7 @@ SELECT
     grantee_count,
     waiter_count,
     forced_grant_count,        -- > 0 signals memory pressure forcing grants
-    timeout_error_count,
-    total_reduced_memory_grant_count
+    timeout_error_count
 FROM sys.dm_exec_query_resource_semaphores
 ORDER BY resource_semaphore_id;
 */

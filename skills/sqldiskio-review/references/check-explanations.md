@@ -231,9 +231,9 @@ Log Auto-Grow     Orders     Orders_log.ldf          4,190         64          2
 
 **Fix options:**
 1. **Pre-size the database**: estimate monthly growth rate from trace history, pre-grow by 3–6 months.
-2. **Enable Instant File Initialization**: grant the SQL Server service account the `Perform Volume Maintenance Tasks` right — eliminates data file initialization time. Log files zero-initialize on growth, except that starting with SQL Server 2022, log autogrowth events up to 64 MB can use instant file initialization.
+2. **Enable Instant File Initialization**: grant the SQL Server service account the `Perform Volume Maintenance Tasks` right — eliminates data file initialization time. Log files zero-initialize on growth, except that [Unverified — SQL Server 2022 may allow log autogrowth up to 64 MB to use instant file initialization; confirm against current MS Learn documentation].
 3. **Increase growth increment** (see Z12) to reduce frequency.
-4. **Alert on auto-growth** using a SQL Agent alert on Event 1105/1121 or a custom XE session.
+4. **Alert on auto-growth** using a SQL Agent alert on Event 1105/1121 [Unverified — event IDs for autogrowth alerts; confirm against current SQL Server ERRORLOG documentation] or a custom XE session.
 
 **Related checks:** Z12, Z13, Z14
 
@@ -260,7 +260,7 @@ Avoid percentage growth on large databases — 10% of 1 TB = 100 GB per growth e
 
 ### Z13 — Log File Auto-Growth Too Small
 
-**What it means:** Log file growth events are synchronous and block committing transactions. Unlike data files, log growth generally zeroes new space — although starting with SQL Server 2022, log autogrowth events up to 64 MB can use instant file initialization. A small log increment on a high-transaction database means frequent growth events, each adding latency to all concurrent transactions.
+**What it means:** Log file growth events are synchronous and block committing transactions. Unlike data files, log growth generally zeroes new space — [Unverified — SQL Server 2022 may allow log autogrowth events up to 64 MB to use instant file initialization; confirm against current MS Learn documentation]. A small log increment on a high-transaction database means frequent growth events, each adding latency to all concurrent transactions.
 
 **Fix options:**
 ```sql

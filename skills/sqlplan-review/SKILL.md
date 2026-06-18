@@ -516,7 +516,7 @@ Apply these to every operator node in the plan tree.
 ### N68 — PSP Variant Cardinality Error
 - **Trigger:** Inside a PSP dispatcher plan, an individual variant node has `actualRows / estimateRows` > 100 AND `actualRows` > 1,000 — SQL 2022+ only; requires actual plan
 - **Severity:** Warning
-- **Fix:** A PSP variant has a severe cardinality error despite being specialized for a parameter range. The variant's threshold boundary does not match the actual data skew. Use `sys.query_store_query_variant` to inspect variant boundaries and adjust using Query Store hints or by disabling PSP for this query with `DISABLE_PARAMETER_SNIFFING` hint.
+- **Fix:** A PSP variant has a severe cardinality error despite being specialized for a parameter range. The variant's threshold boundary does not match the actual data skew. Use `sys.query_store_query_variant` to inspect variant boundaries and adjust using Query Store hints or by disabling PSP for this query with the `DISABLE_PARAMETER_SENSITIVE_PLAN` hint (database scoped configuration `PARAMETER_SENSITIVE_PLAN_OPTIMIZATION = OFF` for the whole database).
 ### N69 — IQP Approximate Count Distinct Active
 - **Trigger:** An aggregate operator's defined values or the statement text reference `APPROX_COUNT_DISTINCT` — SQL 2019+ IQP feature
 - **Severity:** Info

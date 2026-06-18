@@ -139,7 +139,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'max degree of parallelism' config_value = 0` AND `sys.dm_os_sys_info.numa_node_count > 1`
 - **Severity:** Warning
-- **Fix:** NUMA (Non-Uniform Memory Access) is a hardware architecture where each CPU socket has its own local memory bank. Accessing memory on a remote NUMA node is 2–3× slower than local access. When MAXDOP = 0, a single query can span all NUMA nodes. Apply the SQL Server 2016+ guidance: if ≤ 16 logical processors per NUMA node, set MAXDOP ≤ logical-per-node; if > 16 per node, set MAXDOP = half that count, max 16. For SQL 2014 and earlier the cap is 8. Example: 4-NUMA, 64 schedulers → 16 per node → MAXDOP = 8 (≤ 16 rule). Example: 2-NUMA, 64 schedulers → 32 per node → MAXDOP = 16 (half of 32, max 16). `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
+- **Fix:** NUMA (Non-Uniform Memory Access) is a hardware architecture where each CPU socket has its own local memory bank. Accessing memory on a remote NUMA node is 2–3× slower than local access. When MAXDOP = 0, a single query can span all NUMA nodes. Apply the SQL Server 2016+ guidance: if ≤ 16 logical processors per NUMA node, set MAXDOP ≤ logical-per-node; if > 16 per node, set MAXDOP = half that count, max 16. For SQL 2014 and earlier the cap is 8. Example: 4-NUMA, 64 schedulers → 16 per node → MAXDOP ≤ 16 (8 is a common starting point for OLTP). Example: 2-NUMA, 64 schedulers → 32 per node → MAXDOP = 16 (half of 32, max 16). `EXEC sp_configure 'max degree of parallelism', <value>; RECONFIGURE;`
 
 ### B2 — Cost Threshold for Parallelism at Default
 
@@ -205,7 +205,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `compatibility_level < (SERVERPROPERTY('ProductMajorVersion') * 10)` for any user database
 - **Severity:** Warning
-- **Fix:** Running an older compatibility level prevents the Query Optimizer from using newer cardinality estimator improvements, IQP features, and modern T-SQL syntax. Test workload at current level, then: `ALTER DATABASE [dbname] SET COMPATIBILITY_LEVEL = 160;` (for SQL 2022). Valid values: 80, 90, 100, 110, 120, 130, 140, 150, 160, 170.
+- **Fix:** Running an older compatibility level prevents the Query Optimizer from using newer cardinality estimator improvements, IQP features, and modern T-SQL syntax. Test workload at current level, then: `ALTER DATABASE [dbname] SET COMPATIBILITY_LEVEL = 160;` (for SQL 2022). Valid values: 80, 90, 100, 110, 120, 130, 140, 150, 160, 170 [Unverified — 170 pending future SQL Server release; SQL 2022 currently has level 160 as highest].
 
 ### B13 — RCSI Not Enabled
 

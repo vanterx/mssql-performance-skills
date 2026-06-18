@@ -37,7 +37,7 @@ Optional additional fields (appear in Azure SQL or columnstore workloads):
 - `lob page server reads`, `lob page server read-ahead reads`
 - `segment reads`, `segment skipped` — columnstore index segment elimination
 
-Special table names: `Worktable` (hash/sort spill), `Workfile` (hash spill), names starting with `#` (explicit temp tables).
+Special table names: `Worktable` (sort spill, e.g. ORDER BY, hash aggregate spool), `Workfile` (hash spill, e.g. hash join/aggregate build input), names starting with `#` (explicit temp tables).
 
 ### STATISTICS TIME lines
 ```
@@ -128,7 +128,7 @@ Evaluate per-statement and per-table IO metrics.
 ### I6 — Worktable or Workfile Detected
 - **Trigger:** Table name is exactly `Worktable` or `Workfile`
 - **Severity:** Warning
-- **Fix:** SQL Server created a temporary work structure in `tempdb` for an in-memory sort or hash join that exceeded its memory grant. This corresponds to a spill to tempdb — see checks N41–N43 in `sqlplan-review`. Reduce spills by: updating statistics, adding indexes to avoid large sorts, or increasing the memory grant via `OPTION (MIN_GRANT_PERCENT)`.
+- **Fix:** SQL Server created a temporary work structure in `tempdb` because a sort or hash operation exceeded its memory grant: a `Worktable` backs a spilled sort (or a hash aggregate spool), a `Workfile` backs a spilled hash join/aggregate build input. This corresponds to a spill to tempdb — see checks N41–N43 in `sqlplan-review`. Reduce spills by: updating statistics, adding indexes to avoid large sorts, or increasing the memory grant via `OPTION (MIN_GRANT_PERCENT)`.
 ### I7 — Temporary Table in IO Output
 - **Trigger:** Table name starts with `#` (explicit local temp table) or `##` (global temp table)
 - **Severity:** Info

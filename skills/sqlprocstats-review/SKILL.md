@@ -324,7 +324,7 @@ Format as a two-column table. Include every check explicitly evaluated and not t
 - Do not invent findings not triggered by the rules above.
 - `total_worker_time` is cumulative microseconds in the DMV; `avg_worker_time_ms` is already
   converted to milliseconds in the report queries — do not double-convert.
-- `avg_spills` = NULL means the SQL Server version does not support `total_spills` (pre-2017 CU3 — `total_spills` was added in SQL Server 2017 CU3, not SQL Server 2017 RTM; SQL Server 2017 RTM through CU2 also return NULL) — skip R10 and note the version limitation.
+- `avg_spills` = NULL means the SQL Server version does not support `total_spills` (versions prior to SQL Server 2016 SP2 or SQL Server 2017 CU3; `total_spills` was added in SQL Server 2016 SP2 and SQL Server 2017 CU3; SQL Server 2017 RTM through CU2 also return NULL) — skip R10 and note the version limitation.
 
 ---
 

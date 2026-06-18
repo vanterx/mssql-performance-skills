@@ -299,7 +299,7 @@ causing intermediate data to overflow to TempDb. This dramatically slows the ope
 creates I/O pressure on TempDb.
 
 **How to spot it**
-In Q4, look at `avg_spills`. NULL means SQL Server 2016 (spill tracking not available).
+In Q4, look at `avg_spills`. NULL means the SQL Server version predates SQL Server 2016 SP2 or SQL Server 2017 CU3 (spill tracking not available in earlier versions).
 
 **Example (problem)**
 ```
