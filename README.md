@@ -236,6 +236,20 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║  25 checks — top CPU/IO procedures, per-execution            ║
 ║  efficiency, N+1 callers, trend analysis, advanced patterns  ║
 ║                                                              ║
+║  sys.dm_os_memory_clerks / PLE / memory grant DMVs           ║
+║         │                                                    ║
+║         ▼                                                    ║
+║  /sqlmemory-review                                           ║
+║  20 checks — PLE decline, plan cache bloat, memory           ║
+║  grant queue/timeouts, ColumnStore/XTP, LPIM, OS pressure    ║
+║                                                              ║
+║  sys.dm_io_virtual_file_stats — snapshot pair preferred      ║
+║         │                                                    ║
+║         ▼                                                    ║
+║  /sqldiskio-review                                           ║
+║  15 checks — data/log latency, hot files, stall ratio,       ║
+║  storage placement, auto-growth sizing and timing            ║
+║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  DEEP DIVE — execution plan analysis                         ║
 ╠══════════════════════════════════════════════════════════════╣
@@ -295,6 +309,11 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║  /sqlhadr-review                                         ║
 ║  27 checks — replica connectivity, redo queue, data loss     ║
 ║  risk, log send rate, Contained AG, parallel redo            ║
+║         │ AG config drift suspected?                         ║
+║         ▼                                                    ║
+║  /sqlag-review                                               ║
+║  35 checks — prerequisites, replica design, listener,        ║
+║  backup strategy, endpoint security, distributed AG          ║
 ║         │ Kerberos / auth failure in ERRORLOG?               ║
 ║         ▼                                                    ║
 ║  /sqlspn-review                                                 ║
