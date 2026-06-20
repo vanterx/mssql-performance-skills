@@ -1,6 +1,6 @@
 ---
 name: sqlhadr-review
-description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, a database appears stuck initializing after a failover, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 28 checks (H1–H28) covering replica connectivity, data loss risk, recovery time, throughput, configuration, SQL 2016–2022 modern AG features, and seeding/initialization integrity.
+description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, a database appears stuck initializing after a failover, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 27 checks (H1–H28, with H21 retired and merged into sqlag-review F15) covering replica connectivity, data loss risk, recovery time, throughput, configuration, SQL 2016–2022 modern AG features, and seeding/initialization integrity.
 triggers:
   - /sqlhadr-review
   - /hadr-review
@@ -11,7 +11,8 @@ triggers:
 ## Purpose
 
 Analyze output from the `sys.dm_hadr_*` DMV family to assess the health of one or more
-Always On Availability Groups. Applies 28 checks (H1–H28) across six categories:
+Always On Availability Groups. Applies 27 checks (H1–H28, with H21 retired and merged into
+`sqlag-review` F15 — see Category 4) across six categories:
 
 - **H1–H6** — Replica connectivity and role: detect disconnected replicas, resolving state,
   unhealthy synchronization health, replicas not synchronizing, last-connect errors, and
@@ -22,8 +23,8 @@ Always On Availability Groups. Applies 28 checks (H1–H28) across six categorie
   rate mismatch causing queue accumulation, multiple databases lagging on the same replica,
   and commit latency signals on sync-commit replicas
 - **H17–H22** — Configuration: async replica in unexpected position, no automatic failover
-  replica, single-replica AG, missing listener, read-only routing not configured, and
-  automatic seeding in progress
+  replica, single-replica AG, missing listener, and automatic seeding in progress (H21 is
+  retired — read-only routing absence is covered by `sqlag-review` F15)
 - **H23–H27** — Modern AG features: Contained AG DML misrouting, Cloud Witness inaccessible, Parallel Redo saturation, Read-Scale secondary missing RCSI, AG without database-level health detection (SQL 2012–2022+)
 - **H28** — Seeding and initialization integrity: database stuck in INITIALIZING synchronization state, particularly after a failover
 
@@ -71,7 +72,8 @@ JOIN sys.dm_hadr_database_replica_states drs
 ORDER BY ar.replica_server_name, drs.database_name;
 ```
 
-Also capture listener configuration for H20–H21:
+Also capture listener configuration for H20 (and `sqlag-review` F15, which covers read-only
+routing — H21 is retired):
 
 ```sql
 SELECT ag.name AS ag_name, agl.dns_name, agl.port,
@@ -303,14 +305,15 @@ These checks surface AG topology gaps that may not cause immediate problems but 
   `ALTER AVAILABILITY GROUP [ag] ADD LISTENER N'ag-listener' (WITH IP ((N'10.0.0.10',
   N'255.255.255.0')), PORT=1433)`. Update application connection strings to use the
   listener DNS name.
-### H21 — Read-Only Routing Not Configured
-- **Trigger:** A readable secondary exists (`secondary_role_allow_connections_desc =
-  ALL` or `READ_ONLY`) AND `read_only_routing_url` IS NULL on that replica
-- **Severity:** Info
-- **Fix:** Readable secondaries without routing configuration require explicit connection
-  string targeting. Configure routing: set `READ_ONLY_ROUTING_URL` on each secondary and
-  `READ_ONLY_ROUTING_LIST` on the primary replica so that `ApplicationIntent=ReadOnly`
-  connections are automatically directed to a readable secondary.
+### Retired — H21 (merged into sqlag-review F15)
+- **Status:** This check ID is retired. The condition it covered — a readable secondary with
+  `read_only_routing_url IS NULL` — is identical to `sqlag-review` F15 (Read-Only Routing URL
+  Absent on Readable Secondary). Both skills evaluated the same static replica-configuration
+  columns (`secondary_role_allow_connections_desc`, `read_only_routing_url`) from
+  `sys.availability_replicas`, with no runtime-only signal available to distinguish them — the
+  finding belongs to `sqlag-review`, which owns AG *configuration-correctness* checks. Run
+  `/sqlag-review` for this condition. The H21 ID is left retired rather than reused or
+  renumbered, to avoid shifting H22–H28 (H28 is cross-referenced by ID from `sqlag-review` F37).
 ### H22 — Automatic Seeding Active
 - **Trigger:** `seeding_mode_desc = AUTOMATIC` AND a secondary database is in
   `synchronization_state_desc = NOT SYNCHRONIZING` (seeding in progress)
@@ -413,10 +416,12 @@ Structure the report exactly as follows. Follow the labeling convention: output 
 
 ### Info
 
-### [I1 — H21] Read-Only Routing Not Configured — NODE3\SQL2019
-- **Observed:** read_only_routing_url IS NULL; secondary is readable
-- **Impact:** ApplicationIntent=ReadOnly connections will not be redirected automatically.
-- **Fix:** Set READ_ONLY_ROUTING_URL and configure READ_ONLY_ROUTING_LIST on primary.
+### [I1 — H27] AG Without Database-Level Health Detection
+- **Observed:** db_failover = 0 on an AG where high availability is the stated goal
+- **Impact:** A database-level failure (suspect/offline) will not trigger AG failover; the
+  AG remains online with a failed database silently.
+- **Fix:** Enable database-level health detection: `ALTER AVAILABILITY GROUP [ag] SET
+  (DB_FAILOVER = ON)` after confirming the application tolerates transient failovers.
 
 ### Passed Checks
 
@@ -435,7 +440,7 @@ Include a **Prioritized Action Order** table after all findings:
 |----------|--------|----------|--------|
 | 1 — Immediately | Investigate replica connectivity on NODE2\SQL2019 | C1 | 15 min |
 | 2 — Today | Enable AUTOMATIC failover mode on sync secondary | W1 | 30 min |
-| 3 — This sprint | Configure read-only routing on NODE3\SQL2019 | I1 | 20 min |
+| 3 — This sprint | Enable DB_FAILOVER on the AG | I1 | 10 min |
 
 ---
 *Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
@@ -520,6 +525,8 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
   dispatches AG runtime-health overlap back to this skill.
 - `/sqlag-review` — If H28 fires (a database stuck in INITIALIZING), check F37 for the
   configuration-level root cause: `seeding_mode_desc = AUTOMATIC` left active on a replica
-  during what was intended as a manual-restore workflow.
+  during what was intended as a manual-restore workflow. Also run `/sqlag-review` for F15
+  (read-only routing URL absent on a readable secondary) — this is the canonical check for
+  that condition; the equivalent `sqlhadr-review` check (H21) is retired.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

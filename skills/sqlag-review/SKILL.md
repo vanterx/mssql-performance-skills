@@ -319,6 +319,8 @@ or leave databases unjoinable.
 - **Trigger:** `secondary_role_allow_connections_desc IN ('READ_ONLY', 'ALL')` AND
   `read_only_routing_url IS NULL` on that replica
 - **Severity:** Warning
+- **Note:** This is the canonical check for this condition. `sqlhadr-review` H21 covered the
+  identical condition and is retired in favor of this check.
 - **Fix:** Without a routing URL, read-intent connections to the listener will not be
   redirected to this secondary even if a routing list is configured on the primary:
   `ALTER AVAILABILITY GROUP [ag] MODIFY REPLICA ON N'secondary'`

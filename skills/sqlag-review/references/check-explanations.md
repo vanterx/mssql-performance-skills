@@ -446,6 +446,10 @@ ALTER AVAILABILITY GROUP [ProdAG]
 2. URL must use the SQL Server listener port (1433 default), NOT the AG endpoint port (5022)
 3. Use the FQDN, not the short hostname, for DNS resolution reliability
 
+**Note:** This is the canonical check for this condition. `sqlhadr-review` H21 covered the
+identical configuration gap and is retired in favor of this check, since both skills observed
+the same static `sys.availability_replicas` columns with no runtime-only distinguishing signal.
+
 **Related checks:** F16 (routing list on primary), F13 (secondary connections allowed)
 
 ---

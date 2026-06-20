@@ -13,8 +13,9 @@
 ---
 
 
-Plain-English explanations for all 28 H-checks. For check trigger conditions and thresholds,
-see `SKILL.md`. This file is for human reference only — it is not loaded by the skill.
+Plain-English explanations for all 27 active H-checks (H1–H28; H21 is retired — merged into
+`sqlag-review` F15). For check trigger conditions and thresholds, see `SKILL.md`. This file is
+for human reference only — it is not loaded by the skill.
 
 ---
 
@@ -775,45 +776,32 @@ ADD LISTENER N'sales-ag-listener' (
 3. Update application connection strings to use the listener DNS name
 4. Test the listener from the application tier before removing the old server-name references
 
-**Related checks:** H21
+**Related checks:** `sqlag-review` F15 (read-only routing — H21 retired)
 
 ---
 
-### H21 — Read-Only Routing Not Configured
+### Retired — H21 (merged into sqlag-review F15)
 
 **What it means**
-Readable secondaries can offload reporting and read-only queries from the primary. But
-without read-only routing configured, connection strings with `ApplicationIntent=ReadOnly`
-still land on the primary (they are not redirected automatically).
+H21 used to fire on a readable secondary with `read_only_routing_url IS NULL`. That condition
+is identical to `sqlag-review` F15 (Read-Only Routing URL Absent on Readable Secondary) — both
+checks evaluate the same static columns (`secondary_role_allow_connections_desc`,
+`read_only_routing_url`) from `sys.availability_replicas`, and there is no runtime-only signal
+in the `sys.dm_hadr_*` DMVs that distinguishes a "configured but unreachable" routing URL from
+a "not configured" one without an active connectivity probe outside this skill's input model.
 
-**How to spot it**
-```
-replica_server_name   read_only_routing_url   secondary_role_allow_connections
-NODE2\SQL2019         NULL                    READ_ONLY
-```
+**Why F15 is the canonical check**
+`sqlag-review` owns AG configuration-correctness checks; `sqlhadr-review` owns runtime-health
+checks. Read-only routing absence is a configuration gap, not a runtime health symptom, so it
+belongs in `sqlag-review`. Run `/sqlag-review` to get this finding (F15).
 
-**Example (problem + fix)**
-```sql
--- Step 1: Set the read-only routing URL on each secondary:
-ALTER AVAILABILITY GROUP [SalesAG]
-MODIFY REPLICA ON N'NODE2\SQL2019'
-WITH (SECONDARY_ROLE (READ_ONLY_ROUTING_URL = N'TCP://NODE2\SQL2019.domain.com:1433'));
+**Why the ID is retired, not renumbered**
+H22–H28 follow H21 in this skill's numbering, and H28 is referenced by ID from `sqlag-review`
+F37. Renumbering H22→H21 and so on would cascade into that cross-reference and every check-count
+touch point already documented elsewhere. Leaving H21 retired (a documented gap) avoids that
+cascade while still deduplicating the finding.
 
--- Step 2: Configure the routing list on the primary:
-ALTER AVAILABILITY GROUP [SalesAG]
-MODIFY REPLICA ON N'NODE1\SQL2019'
-WITH (PRIMARY_ROLE (READ_ONLY_ROUTING_LIST = (N'NODE2\SQL2019')));
-
--- Application connection string:
--- Server=sales-ag-listener;Database=SalesDB;ApplicationIntent=ReadOnly;
-```
-
-**Fix options**
-1. Set `READ_ONLY_ROUTING_URL` on each readable secondary (see Step 1 above)
-2. Set `READ_ONLY_ROUTING_LIST` on the primary replica (see Step 2 above)
-3. Verify by connecting with `ApplicationIntent=ReadOnly` and checking `@@SERVERNAME`
-
-**Related checks:** H20
+**Related checks:** `sqlag-review` F15 (canonical), H20
 
 ---
 
@@ -974,7 +962,7 @@ WHERE name IN (SELECT database_name FROM sys.dm_hadr_database_replica_states);
 2. Monitor version store growth after enabling: `SELECT * FROM sys.dm_tran_version_store_space_usage`
 3. Confirm: `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = 'db'`
 
-**Related checks:** H21 (Read-Only Routing Not Configured), H9 (Secondary Lag)
+**Related checks:** `sqlag-review` F15 (Read-Only Routing URL Absent — H21 retired), H9 (Secondary Lag)
 
 ---
 
@@ -1096,7 +1084,7 @@ root cause)
 | H18 | Configuration | Warning | No replica has `failover_mode_desc = AUTOMATIC` |
 | H19 | Configuration | Info | Only one replica in the AG |
 | H20 | Configuration | Info | No listener configured |
-| H21 | Configuration | Info | `read_only_routing_url` NULL on readable secondary |
+| H21 | Retired | — | Merged into `sqlag-review` F15 (read-only routing URL absent) |
 | H22 | Configuration | Info | Automatic seeding in progress |
 | H23 | Modern — Contained AG | Warning | Contained system database not SYNCHRONIZED |
 | H24 | Modern — Cloud Witness | Critical | Cloud Witness quorum state abnormal |
