@@ -228,8 +228,11 @@ mirroring endpoints (covered by `/sqlag-review`).
 **Severity:** Warning
 **Fix:** Script the endpoint definition from `sys.endpoints`/`sys.service_broker_endpoints` and
 recreate with `CREATE ENDPOINT` on the target, including the correct `STATE`, port, and
-authentication/encryption options; legacy SOAP/HTTP endpoints have been discontinued since SQL
-Server 2008 R2 and have no native migration path — redesign the integration if still in use.
+authentication/encryption options; legacy SOAP/HTTP (native XML Web Services) endpoints have
+been deprecated since SQL Server 2008 R2 and remain present-but-unsupported-for-new-development
+through current versions — Microsoft has not published a removal date, but treat any still in
+use as a migration-blocking redesign item rather than a like-for-like `CREATE ENDPOINT` port,
+since the feature has no investment and no guaranteed availability on newer target versions.
 
 ## Output Format
 
@@ -286,7 +289,7 @@ When `--verbose` is passed, also write
 
 ## Companion Skills
 
-- **`sqlmigration-review`** — parent skill; version/edition/platform compatibility (Y1–Y14)
+- **`sqlmigration-review`** — parent skill; version/edition/platform compatibility (Y1–Y15)
 - **`sqlmigration-security-review`** — login/credential prerequisites for M2 (job owner) and M5
   (proxy credential)
 - **`sqlag-review`** — Always On AG mirroring endpoints, distinct from the non-AG endpoints M16

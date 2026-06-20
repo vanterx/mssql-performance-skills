@@ -61,8 +61,8 @@ ORDER BY backup_start_date DESC;
 |---|---|---|
 | Logins, server/db permissions, credentials, certificates/keys ownership, CMS registrations | `sqlmigration-security-review` (J1–J15) | Distinct check-prefix family; large enough scope to warrant its own skill |
 | SQL Agent jobs/operators/alerts/proxies, linked servers, Database Mail, backup devices, custom error messages, server triggers, XE sessions, endpoints | `sqlmigration-objects-review` (M1–M16) | Distinct check-prefix family; large enough scope to warrant its own skill |
-| Always On AG topology, listener architecture, backup preference | `sqlag-review` (F1–F35) | Already a complete AG-configuration audit; Y13 only checks the edition ceiling for seeding, not AG design |
-| AG replica health during/after migration cutover | `sqlhadr-review` (H1–H27) | Runtime health DMVs, not a configuration audit |
+| Always On AG topology, listener architecture, backup preference | `sqlag-review` (F1–F37) | Already a complete AG-configuration audit; Y13 only checks the edition ceiling for seeding, not AG design |
+| AG replica health during/after migration cutover | `sqlhadr-review` (H1–H28, H21 retired) | Runtime health DMVs, not a configuration audit |
 | Cross-domain authentication, SPN/Kerberos for the new instance name | `sqlspn-review` (K1–K40) | SPN/delegation is a complete domain of its own |
 | TDE, certificate-protected backups, transport encryption | `sqlencryption-review` (A1–A112) | Encryption posture is a complete domain of its own |
 | MAXDOP/Max Server Memory/TempDB sizing drift between source and target instance | `sqldbconfig-review` (B1–B28) | Instance configuration drift is a complete domain of its own |
@@ -138,7 +138,7 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 ### Y13 — Target Edition or Platform Cannot Support Always On AG Seeding
 **Trigger:** Migration mechanism is Always On AG seeding, and either the target platform is Azure SQL Database (which cannot participate in an Always On Availability Group as a replica at all — it is not a clusterable instance), or the target edition is below Standard Edition, or the source's requirements (more than one database per AG, readable secondary) exceed Basic Availability Groups' limits.
 **Severity:** Critical
-**Fix:** If the target platform is Azure SQL Database, AG seeding is not a valid mechanism regardless of edition — switch to backup/restore, the Data Migration Assistant, or (if the broader feature set is required) retarget to Azure SQL Managed Instance, which does support Always On-style failover groups. If the target is on-prem/Managed Instance, use Enterprise Edition if more than one database must share an AG or a readable secondary is required; otherwise scope the migration to Basic AG's single-database, non-readable-secondary constraints — see `/sqlag-review` F29/F30 for the exact limits.
+**Fix:** If the target platform is Azure SQL Database, AG seeding is not a valid mechanism regardless of edition — switch to backup/restore, the Data Migration Assistant, or (if the broader feature set is required) retarget to Azure SQL Managed Instance, which does support standard Always On Availability Groups between Managed Instances, plus auto-failover groups for cross-region HA/DR (a separate geo-replication mechanism, not built on Always On AG technology — do not conflate the two when planning the target topology). If the target is on-prem/Managed Instance, use Enterprise Edition if more than one database must share an AG or a readable secondary is required; otherwise scope the migration to Basic AG's single-database, non-readable-secondary constraints — see `/sqlag-review` F29/F30 for the exact limits.
 
 ## Category 4 — Lifecycle
 

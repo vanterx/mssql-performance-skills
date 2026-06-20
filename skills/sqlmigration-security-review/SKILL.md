@@ -198,12 +198,18 @@ hierarchy migration sequence if this database uses Always Encrypted or column-le
 
 ### J15 — Central Management Server Registration Points at Old Instance Name
 **Trigger:** The migration changes the instance name or the listener name the application
-connects through, and CMS registrations (`msdb.dbo.sysmanagement_shared_registered_servers` on
-the CMS host) still reference the pre-migration name.
+connects through, and CMS registrations on the CMS host (managed via SSMS Registered Servers,
+backed internally by `msdb.dbo.sysmanagement_shared_registered_servers`) still reference the
+pre-migration name.
 **Severity:** Info
-**Fix:** Update the CMS registration's server name via SSMS Registered Servers, or script the
-change against `msdb.dbo.sp_sysmanagement_update_shared_registered_server` on the CMS instance,
-after cutover is confirmed stable.
+**Fix:** Update the CMS registration's server name via the SSMS Registered Servers GUI — this is
+the Microsoft-documented mechanism and the one to use by default. **Unverified:** the underlying
+`msdb.dbo.sysmanagement_shared_registered_servers` table and a
+`sp_sysmanagement_update_shared_registered_server` procedure are referenced in community
+documentation of CMS internals, but Microsoft Learn does not publicly document this schema or
+any T-SQL procedure for scripting CMS registration changes — treat any T-SQL-based update to
+these objects as unsupported and verify against a non-production CMS host before relying on it,
+or confirm current behavior against the CMS host's actual schema before scripting.
 
 ## Output Format
 
@@ -258,7 +264,7 @@ When `--verbose` is passed, also write
 
 ## Companion Skills
 
-- **`sqlmigration-review`** — parent skill; version/edition/platform compatibility (Y1–Y14)
+- **`sqlmigration-review`** — parent skill; version/edition/platform compatibility (Y1–Y15)
 - **`sqlmigration-objects-review`** — operational objects (Agent jobs, linked servers, Database
   Mail) for the rest of the proxy/linked-server definition beyond the stored login (J11/J12)
 - **`sqlencryption-review`** — TDE, full DMK/SMK key hierarchy, Always Encrypted, CLE

@@ -104,7 +104,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V44 |
 | `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
 | `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
-| `H` | `sqlhadr-review` | Always On AG health checks | H1–H27 |
+| `H` | `sqlhadr-review` | Always On AG health checks | H1–H28 (H21 retired) |
 | `L` | `sqlclusterlog-review` | WSFC cluster log checks | L1–L30 |
 | `E` | `sqlerrorlog-review` | SQL Server ERRORLOG checks | E1–E33 |
 | `K` | `sqlspn-review` | SPN and Kerberos delegation checks | K1–K40 |

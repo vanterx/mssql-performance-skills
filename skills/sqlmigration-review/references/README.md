@@ -14,4 +14,4 @@ Load `check-explanations.md` when:
 
 | File | Purpose |
 |------|---------|
-| `check-explanations.md` | Five-part (What/Spot/Example/Fix/Related) plain-English explanation for all 14 Y-checks (Y1–Y14) with DMV query examples, T-SQL fix recipes, and Quick Reference table |
+| `check-explanations.md` | Five-part (What/Spot/Example/Fix/Related) plain-English explanation for all 15 Y-checks (Y1–Y15) with DMV query examples, T-SQL fix recipes, and Quick Reference table |

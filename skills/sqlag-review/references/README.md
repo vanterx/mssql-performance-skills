@@ -14,4 +14,4 @@ Load `check-explanations.md` when:
 
 | File | Purpose |
 |------|---------|
-| `check-explanations.md` | Five-part (What/Spot/Example/Fix/Related) plain-English explanation for all 35 F-checks (F1–F35) with DMV query examples, T-SQL fix recipes, and Quick Reference table |
+| `check-explanations.md` | Five-part (What/Spot/Example/Fix/Related) plain-English explanation for all 37 F-checks (F1–F37) with DMV query examples, T-SQL fix recipes, and Quick Reference table |
