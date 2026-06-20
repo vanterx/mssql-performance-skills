@@ -1,6 +1,6 @@
-# sqlag-review Check Explanations (F1–F36)
+# sqlag-review Check Explanations (F1–F37)
 
-Plain-English explanations for all 36 checks. Load this file when a user asks "explain check
+Plain-English explanations for all 37 checks. Load this file when a user asks "explain check
 F##", requests deeper fix options, or wants to understand why a threshold was chosen.
 
 ---
@@ -13,7 +13,7 @@ F##", requests deeper fix options, or wants to understand why a threshold was ch
 - [Category 4 — Backup Strategy (F19–F23)](#category-4--backup-strategy-f19f23)
 - [Category 5 — Endpoint Security (F24–F27)](#category-5--endpoint-security-f24f27)
 - [Category 6 — Distributed AG and Advanced Features (F28–F33)](#category-6--distributed-ag-and-advanced-features-f28f33)
-- [Category 7 — Operational Monitoring (F34–F35)](#category-7--operational-monitoring-f34f35)
+- [Category 7 — Operational Monitoring (F34–F37)](#category-7--operational-monitoring-f34f37)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -929,7 +929,7 @@ Review T-SQL code or application layer for:
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F36)
+## Category 7 — Operational Monitoring (F34–F37)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 
@@ -1042,6 +1042,70 @@ F9 (health check timeout — symptom surface for an overloaded instance)
 
 ---
 
+### F37 — Automatic Seeding Left Enabled During a Manual-Restore Workflow
+
+**What it means:** `SEEDING_MODE` is not a one-time setting applied only when the AG or replica
+is created — SQL Server re-evaluates it dynamically every time a database is added to or
+discovered by the availability group. If an operator's migration plan is "restore each database
+manually `WITH NORECOVERY`, then `ADD DATABASE` to the AG," but a replica still has
+`seeding_mode_desc = AUTOMATIC` from AG creation defaults, SQL Server can launch its own
+seed attempt over the database mirroring endpoint at the same moment the operator's manual
+restore is in flight. Microsoft Learn confirms automatic seeding requires the secondary to be
+granted `CREATE ANY DATABASE` permission, and that toggling seeding mode "cancels any replicas
+that are currently seeding" — both indicate seeding state is actively managed at join time, not
+fixed at setup time. Whichever process — the manual restore or the automatic seed — loses the
+race can leave the secondary database with an inconsistent restore chain. The danger is that
+this inconsistency does not always surface immediately: the AG can report the database as
+`SYNCHRONIZED`/healthy for routine log streaming, with the underlying problem only exposed when
+a failover later forces a full redo/undo pass (see `sqlhadr-review` H28).
+
+**How to spot it:**
+```sql
+SELECT ar.replica_server_name, ar.seeding_mode_desc
+FROM sys.availability_replicas ar
+WHERE ar.seeding_mode_desc = 'AUTOMATIC';
+
+-- Cross-check for seeding activity that occurred without being requested
+SELECT * FROM sys.dm_hadr_automatic_seeding ORDER BY start_time DESC;
+```
+Treat this as a pre-migration checklist item, not just a reactive finding: if the migration
+runbook describes manual backup/restore, audit every target replica's `seeding_mode_desc`
+before the first `RESTORE ... WITH NORECOVERY` is run.
+
+**Example:**
+```
+-- Pattern: any workflow that restores a database manually WITH NORECOVERY, brings the
+-- primary online, and runs ADD DATABASE — applies equally to a one-off database add, a
+-- DR rebuild, or a large multi-database migration. seeding_mode was left at AUTOMATIC
+-- (the AG-creation default in most wizard paths) on one or more replicas. All secondaries
+-- join and the AG reports healthy at the time. Later, at the next failover, one of the
+-- affected databases on the new secondary is found stuck in INITIALIZING/RECOVERY_PENDING —
+-- consistent with an automatic seed attempt racing the manual restore on that replica.
+```
+
+**Fix options:**
+1. Before any manual restore, explicitly set every target replica to manual seeding:
+   `ALTER AVAILABILITY GROUP [ag] MODIFY REPLICA ON N'server' WITH (SEEDING_MODE = MANUAL)`.
+2. Confirm the change took effect on every replica: `SELECT replica_server_name,
+   seeding_mode_desc FROM sys.availability_replicas`.
+3. If `GRANT CREATE ANY DATABASE` was issued on any replica for an unrelated reason, reissue
+   `ALTER AVAILABILITY GROUP [ag] DENY CREATE ANY DATABASE` on replicas where automatic
+   database creation is not wanted.
+4. After each `ADD DATABASE`, verify the specific database's `synchronization_state_desc` and
+   `database_state_desc` on every secondary individually — don't rely solely on the AG-level
+   healthy rollup, since a single inconsistent database can be masked by N-1 healthy ones.
+5. Going forward for any future onboarding to the same AG, keep `SEEDING_MODE = MANUAL` set
+   unless automatic seeding is the deliberate, intended method for that addition.
+
+**Related checks:** `sqlhadr-review` H22 (automatic seeding observed in progress — benign when
+intentional), `sqlhadr-review` H28 (database stuck in INITIALIZING, the downstream symptom if
+this race already occurred), F11 (replica join state — a different DMV/concept; join completing
+does not mean seeding was clean)
+
+**Microsoft Learn reference:** [Use automatic seeding to initialize an Always On availability group](https://learn.microsoft.com/sql/database-engine/availability-groups/windows/automatic-seeding-secondary-replicas) — automatic seeding requires `GRANT CREATE ANY DATABASE` on the secondary, and `SEEDING_MODE` is re-evaluated dynamically whenever a database is added to or discovered by the group rather than fixed at AG/replica creation; changing seeding mode "cancels any replicas that are currently seeding."
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger Summary | Severity |
@@ -1082,3 +1146,4 @@ F9 (health check timeout — symptom surface for an overloaded instance)
 | F34 | Monitoring | No XE session for AG diagnostics | Info |
 | F35 | Monitoring | Listener IP is_conformant = 0 | Warning |
 | F36 | Monitoring | AG database count exceeds Microsoft's tested scale ceiling (>100) | Warning |
+| F37 | Monitoring | seeding_mode_desc = AUTOMATIC during a manual-restore workflow | Warning |

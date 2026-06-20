@@ -7,12 +7,13 @@
 - [Category 3: Throughput and Performance (H12–H16)](#category-3-throughput-and-performance-h12h16)
 - [Category 4: Configuration (H17–H22)](#category-4-configuration-h17h22)
 - [Category 5: Modern AG Feature Checks (H23–H27)](#category-5-modern-ag-feature-checks-h23h27)
+- [Category 6: Seeding and Initialization Integrity (H28)](#category-6-seeding-and-initialization-integrity-h28)
 - [Quick Reference](#quick-reference)
 
 ---
 
 
-Plain-English explanations for all 27 H-checks. For check trigger conditions and thresholds,
+Plain-English explanations for all 28 H-checks. For check trigger conditions and thresholds,
 see `SKILL.md`. This file is for human reference only — it is not loaded by the skill.
 
 ---
@@ -1002,6 +1003,75 @@ WHERE db_failover = 0;
 
 ---
 
+## Category 6: Seeding and Initialization Integrity (H28)
+
+### H28 — Secondary Database Stuck in INITIALIZING State
+
+**What it means**
+`INITIALIZING` is one of five values for `synchronization_state_desc` (alongside `NOT
+SYNCHRONIZING`, `SYNCHRONIZING`, `SYNCHRONIZED`, `REVERTING`). Microsoft documents it as the
+phase of undo in which the transaction log a secondary needs to catch up to the undo LSN is
+still being shipped and hardened on that secondary. Microsoft Learn carries an explicit caution
+for this state: forcing failover to a secondary replica while its database is `INITIALIZING`
+leaves the database in a state where it cannot be started as a primary database — it must
+either reconnect as a secondary to resume normal data movement, or have new log records applied
+from a log backup. This means the danger window is not "the database is unhealthy" in the way
+`NOT SYNCHRONIZING` is — it is a transient state that becomes a stuck state specifically if a
+failover happens to land on it.
+
+**How to spot it**
+```sql
+SELECT ag.name AS ag_name, ar.replica_server_name, drs.database_name,
+       drs.synchronization_state_desc, drs.is_suspended, drs.suspend_reason_desc,
+       drs.redo_queue_size, drs.redo_rate, drs.last_redone_time
+FROM sys.dm_hadr_database_replica_states drs
+JOIN sys.availability_replicas ar ON drs.replica_id = ar.replica_id
+JOIN sys.availability_groups ag ON ar.group_id = ag.group_id
+WHERE drs.synchronization_state_desc = 'INITIALIZING';
+```
+Sample the query at least twice a few minutes apart — `INITIALIZING` alone is not abnormal
+during a legitimate seed or rejoin; what makes it a finding is no forward progress between
+samples, or its presence immediately after a failover event.
+
+**Common causes**
+- A failover occurred while a secondary database had not yet finished initial data movement
+  (legitimately mid-seed, mid-rejoin after a long outage, or mid-catch-up after a large backlog)
+- An automatic-seeding attempt collided with a manual backup/restore-based join — `SEEDING_MODE`
+  is evaluated dynamically every time a database is added to the AG, so a replica left at
+  `AUTOMATIC` can start its own seed in parallel with an operator's manual restore, leaving a
+  hybrid/inconsistent copy that reports healthy under routine log streaming and only surfaces
+  as stuck `INITIALIZING` at the next forced full redo/undo pass (failover)
+- Observed pattern, applicable to any manual-restore workflow (a single database add, a DR
+  rebuild, or a large migration): `seeding_mode = AUTOMATIC` is left on while databases are
+  restored manually `WITH NORECOVERY`, primaries brought online, and `ADD DATABASE` run; all
+  secondaries join and the AG reports healthy — but a database on the new secondary after a
+  later failover is found stuck in `INITIALIZING`/`RECOVERY_PENDING`
+
+**Fix options**
+1. Do not force failover onto a replica while a database shows `INITIALIZING` — wait for it to
+   reach `SYNCHRONIZING`/`SYNCHRONIZED` first if failover is plannable.
+2. If a database is already stuck post-failover, check `last_redone_time` and `redo_queue_size`
+   trend for any progress before concluding it is truly stuck rather than just slow.
+3. To recover a stuck database, either reconnect it as a secondary to a healthy primary so
+   normal log streaming resumes, or restore it from a log-backup chain to bring it current.
+4. If this followed a manual-restore operation, audit `seeding_mode_desc` on every replica
+   (`sqlag-review` F37) — `AUTOMATIC` left active alongside a manual-restore workflow is the
+   most likely root cause of a single inconsistent database surviving pre-failover health
+   checks undetected.
+5. Going forward, explicitly set `SEEDING_MODE = MANUAL` before any manual-restore operation,
+   and verify each database's synchronization state individually after `ADD DATABASE` rather
+   than relying solely on the AG-level healthy rollup.
+
+**Related checks:** H10 (Redo Queue Buildup — requires `SYNCHRONIZING`, does not cover
+`INITIALIZING`), H12 (Zero Redo Rate — same `SYNCHRONIZING` requirement), `sqlag-review` F37
+(automatic seeding left enabled during a manual-restore workflow — the configuration-level
+root cause)
+
+**Microsoft Learn reference:** [sys.dm_hadr_database_replica_states (Transact-SQL)](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-hadr-database-replica-states-transact-sql) — `synchronization_state` value `4` = `INITIALIZING`, with the documented caution that forcing failover to a secondary in this state leaves the database unable to start as primary.
+
+
+---
+
 ## Quick Reference
 
 | Check | Category | Severity | Key Signal |
@@ -1033,3 +1103,4 @@ WHERE db_failover = 0;
 | H25 | Modern — Parallel Redo | Warning | Redo queue growing; redo rate < send rate |
 | H26 | Modern — RCSI | Warning | Readable secondary, RCSI disabled on primary |
 | H27 | Modern — DB Health | Info | `db_failover = 0` on HA-configured AG |
+| H28 | Seeding/Initialization | Critical | `synchronization_state_desc = INITIALIZING`, stuck or post-failover |

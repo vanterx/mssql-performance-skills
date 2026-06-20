@@ -1,6 +1,6 @@
 ---
 name: sqlag-review
-description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 36 checks (F1–F36) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, or endpoint encryption. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
+description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 37 checks (F1–F37) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, endpoint encryption, or automatic seeding mode during a manual-restore workflow. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
 triggers:
   - /sqlag-review
   - /ag-review
@@ -15,7 +15,7 @@ triggers:
 ## Purpose
 
 Audit the configuration and design of one or more SQL Server Always On Availability Groups.
-Applies 36 checks (F1–F36) across seven categories:
+Applies 37 checks (F1–F37) across seven categories:
 
 - **F1–F6** — Prerequisites and instance setup: AlwaysOn feature, database recovery model,
   endpoint state, endpoint encryption, failure condition level, version alignment across replicas
@@ -30,10 +30,10 @@ Applies 36 checks (F1–F36) across seven categories:
   firewall port gaps
 - **F28–F33** — Distributed AG and advanced features: listener URL requirement for distributed AGs,
   Basic AG limits, Contained AG auth, synchronous distributed link, cross-database dependencies
-- **F34–F36** — Operational monitoring: Extended Events AG session, listener IP conformance, AG database-count scale ceiling
+- **F34–F37** — Operational monitoring: Extended Events AG session, listener IP conformance, AG database-count scale ceiling, automatic seeding left active during a manual-restore workflow
 
 **Scope distinction:** This skill audits configuration correctness ("is the AG designed right?").
-Use `/sqlhadr-review` (H1–H27) for runtime health ("is the AG healthy right now?") and
+Use `/sqlhadr-review` (H1–H28) for runtime health ("is the AG healthy right now?") and
 `/sqlclusterlog-review` (L1–L30) for WSFC cluster log events.
 
 ---
@@ -523,7 +523,7 @@ or leave databases unjoinable.
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F36)
+## Category 7 — Operational Monitoring (F34–F37)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 - **Trigger:** `sys.dm_xe_sessions` contains no session with events targeting
@@ -561,6 +561,27 @@ or leave databases unjoinable.
   `DBMIRROR_*` waits, and consider splitting the workload across multiple AGs on the same
   replicas (a single instance can host many AGs) if thread exhaustion or DMV latency appears
   under test.
+
+### F37 — Automatic Seeding Left Enabled During a Manual-Restore Workflow
+- **Trigger:** `seeding_mode_desc = AUTOMATIC` on one or more replicas (`sys.availability_replicas`)
+  AND the described or planned database-onboarding process is manual backup/restore (e.g.,
+  "restore WITH NORECOVERY then ADD DATABASE", a migration runbook, or a `GRANT CREATE ANY
+  DATABASE` step performed for an unrelated reason) rather than direct seeding over the network
+- **Severity:** Warning
+- **Fix:** `SEEDING_MODE` is evaluated dynamically at the moment a database is added to or
+  discovered by the AG, not fixed once at AG creation. If a replica is left at `AUTOMATIC`
+  while databases are being restored manually, SQL Server can initiate its own seed attempt
+  in parallel with the manual restore — the two can race, and whichever loses can leave the
+  secondary database with a hybrid or corrupt restore chain (see `sqlhadr-review` H28 for the
+  resulting `INITIALIZING`/stuck-redo symptom, which per Microsoft's documented behavior
+  surfaces only if a failover later forces a full redo/undo pass, not necessarily at join time).
+  Before any manual-restore operation, explicitly set every
+  target replica to manual seeding: `ALTER AVAILABILITY GROUP [ag] MODIFY REPLICA ON
+  N'server' WITH (SEEDING_MODE = MANUAL)`. Confirm with `SELECT replica_server_name,
+  seeding_mode_desc FROM sys.availability_replicas`. If `GRANT CREATE ANY DATABASE` was issued
+  for any replica, reissue `ALTER AVAILABILITY GROUP [ag] DENY CREATE ANY DATABASE` on replicas
+  that should not auto-create databases, and check `sys.dm_hadr_automatic_seeding` for any
+  seeding operation that started without being requested.
 
 ---
 

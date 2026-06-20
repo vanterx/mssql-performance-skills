@@ -1,6 +1,6 @@
 ---
 name: sqlhadr-review
-description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 27 checks (H1–H27) covering replica connectivity, data loss risk, recovery time, throughput, configuration, and SQL 2016–2022 modern AG features.
+description: Analyzes sys.dm_hadr_* DMV output to assess Always On Availability Group replica health, synchronization state, secondary lag, redo and log send queue sizes, and configuration gaps. Use this skill when an availability group is behaving unexpectedly, a secondary replica is lagging, data loss is a concern, a database appears stuck initializing after a failover, or you need a SQL-side snapshot of AG health to complement CLUSTER.LOG and ERRORLOG diagnostics. Applies 28 checks (H1–H28) covering replica connectivity, data loss risk, recovery time, throughput, configuration, SQL 2016–2022 modern AG features, and seeding/initialization integrity.
 triggers:
   - /sqlhadr-review
   - /hadr-review
@@ -11,7 +11,7 @@ triggers:
 ## Purpose
 
 Analyze output from the `sys.dm_hadr_*` DMV family to assess the health of one or more
-Always On Availability Groups. Applies 27 checks (H1–H27) across five categories:
+Always On Availability Groups. Applies 28 checks (H1–H28) across six categories:
 
 - **H1–H6** — Replica connectivity and role: detect disconnected replicas, resolving state,
   unhealthy synchronization health, replicas not synchronizing, last-connect errors, and
@@ -25,6 +25,7 @@ Always On Availability Groups. Applies 27 checks (H1–H27) across five categori
   replica, single-replica AG, missing listener, read-only routing not configured, and
   automatic seeding in progress
 - **H23–H27** — Modern AG features: Contained AG DML misrouting, Cloud Witness inaccessible, Parallel Redo saturation, Read-Scale secondary missing RCSI, AG without database-level health detection (SQL 2012–2022+)
+- **H28** — Seeding and initialization integrity: database stuck in INITIALIZING synchronization state, particularly after a failover
 
 ## Input
 
@@ -346,6 +347,27 @@ These checks surface AG topology gaps that may not cause immediate problems but 
 - **Severity:** Info — Without DB_FAILOVER = ON, a database-level failure (e.g., a database going suspect or offline) will not trigger AG failover; the AG remains online with a failed database silently
 - **Fix:** Enable database-level health detection: `ALTER AVAILABILITY GROUP [ag] SET (DB_FAILOVER = ON)`. Confirm the application can tolerate transient failovers triggered by database-level failures before enabling this option.
 
+## Category 6 — Seeding and Initialization Integrity (H28)
+
+### H28 — Secondary Database Stuck in INITIALIZING State
+- **Trigger:** `synchronization_state_desc = INITIALIZING` persists across repeated captures with
+  no advancing redo/hardened-LSN progress, or `INITIALIZING` is observed on a database
+  immediately following a failover involving that replica
+- **Severity:** Critical
+- **Fix:** Microsoft documents that `INITIALIZING` is the undo phase in which the transaction log
+  required to catch a secondary up to the undo LSN is still being shipped and hardened — and
+  explicitly warns that forcing failover to a secondary while its database is in this state
+  leaves the database unable to start as primary; it must either reconnect as a secondary or
+  have log backups applied. Do not force failover onto a replica with a database in
+  `INITIALIZING`. If a database is already stuck in this state post-failover, check
+  `sys.dm_hadr_database_replica_states.last_redone_lsn` for any progress, then either let it
+  reconnect to a healthy primary to resume normal log streaming, or restore from a log-backup
+  chain to bring it current. Also check whether this database was originally onboarded with
+  `seeding_mode_desc = AUTOMATIC` left active alongside a manual
+  backup/restore workflow — `SEEDING_MODE` is evaluated dynamically at join time, and an
+  automatic seed attempt racing a manual restore can leave exactly this kind of latent,
+  inconsistent secondary that only surfaces at the next failover (see `sqlag-review` F37).
+
 ---
 
 ## Version-Aware Check Suppression
@@ -496,5 +518,8 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlmigration-review` — Before seeding an AG as a migration mechanism, run this skill to
   confirm the target edition/version supports the planned replica count and topology; it
   dispatches AG runtime-health overlap back to this skill.
+- `/sqlag-review` — If H28 fires (a database stuck in INITIALIZING), check F37 for the
+  configuration-level root cause: `seeding_mode_desc = AUTOMATIC` left active on a replica
+  during what was intended as a manual-restore workflow.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.
