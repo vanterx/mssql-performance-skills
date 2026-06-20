@@ -1,6 +1,6 @@
 ---
 name: sqlmigration-review
-description: Audits a SQL Server migration plan for version, edition, and platform compatibility, then dispatches to sqlmigration-security-review, sqlmigration-objects-review, and other specialised skills for overlap areas. Use this skill when a user is planning, mid-flight on, or validating a SQL Server migration via backup/restore or log shipping/Always On seeding, mentions moving databases between instances/editions/versions or to Azure SQL, or asks "what breaks if I migrate to X". Trigger whenever migration readiness, cross-version compatibility, or cutover risk is the topic.
+description: Audits a SQL Server migration plan for version, edition, platform, and source-topology compatibility, then dispatches to sqlmigration-security-review, sqlmigration-objects-review, and other specialised skills for overlap areas. Use this skill when a user is planning, mid-flight on, or validating a SQL Server migration via backup/restore or log shipping/Always On seeding, mentions moving databases between instances/editions/versions, off a Failover Cluster Instance, or to Azure SQL, or asks "what breaks if I migrate to X". Trigger whenever migration readiness, cross-version compatibility, or cutover risk is the topic.
 triggers:
   - /sqlmigration-review
   - /migration-review
@@ -11,12 +11,13 @@ triggers:
 
 ## Purpose
 
-Reviews a planned or in-progress SQL Server migration for version, edition, and platform compatibility risk, then dispatches to companion skills for the object families a migration touches. This skill owns 14 checks (Y1–Y14) covering exactly one slice of migration risk — **does the target SQL Server version/edition/platform support what the source actually uses** — and routes everything else:
+Reviews a planned or in-progress SQL Server migration for version, edition, and platform compatibility risk, then dispatches to companion skills for the object families a migration touches. This skill owns 15 checks (Y1–Y15) covering exactly one slice of migration risk — **does the target SQL Server version/edition/platform support what the source actually uses, and does the cutover plan account for the source's own topology** — and routes everything else:
 
 - **Version & Edition Compatibility (Y1–Y6)** — edition-gated features, version downgrade risk, compatibility level ceiling, collation mismatch, discontinued features, In-Memory OLTP support
 - **Platform Compatibility — Azure SQL (Y7–Y9)** — instance-scoped object support, Windows Authentication migration path, SQL Server Agent availability
 - **Migration Mechanism Readiness (Y10–Y13)** — backup/restore chain integrity, recovery model, Always On AG edition limits for seeding
 - **Lifecycle (Y14)** — source version support-end urgency
+- **Source Topology Transition (Y15)** — Failover Cluster Instance client redirect planning
 
 The [dbatools.io `Start-DbaMigration`](https://dbatools.io/Start-DbaMigration/) page is used only as a checklist of migration object types — every check and fix recipe in this skill family is built on native T-SQL system views, the in-box Microsoft `SqlServer` PowerShell module, and `sqlcmd`/`bcp`. No third-party PowerShell module is referenced or required.
 
@@ -145,6 +146,13 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 **Trigger:** Source product version corresponds to a SQL Server release whose mainstream or extended support end date has passed or is within 12 months, per the Microsoft SQL Server servicing lifecycle for the detected major version.
 **Severity:** Warning
 **Fix:** Treat the migration as time-sensitive — schedule the cutover ahead of the support end date, or enroll in Extended Security Updates (on-premises or via Azure Arc) as a bridge if the migration cannot complete in time.
+
+## Category 5 — Source Topology Transition
+
+### Y15 — Failover Cluster Instance Source Retired Without a Client Redirect Plan
+**Trigger:** Source instance is a SQL Server Failover Cluster Instance (FCI — clients connect via its Virtual Network Name/Client Access Point) and the target is not also that same FCI (e.g., target is a standalone instance or an Always On AG), and the migration plan has no documented step to repoint client connection strings, DNS, or load-balancer/listener configuration from the FCI's VNN to the new target's connection endpoint.
+**Severity:** Critical
+**Fix:** Inventory every application, linked server, reporting subscription, and ETL job connection string that references the FCI's VNN before cutover. For an AG target, repoint to the new AG listener DNS name (not a specific replica's hostname) — see `/sqlag-review` F14–F18 for listener/multi-subnet design. Where the number of call sites is large or undocumented, consider a DNS CNAME swap (retire the old VNN as an alias pointing to the new endpoint with a short TTL) to make the cutover atomic and the rollback fast, rather than chasing every connection string individually. Test resolution (`Resolve-DnsName`/`nslookup`) from each application tier before the go/no-go decision, not after.
 
 ## Output Format
 

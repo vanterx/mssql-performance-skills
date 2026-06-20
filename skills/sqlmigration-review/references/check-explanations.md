@@ -1,6 +1,6 @@
-# sqlmigration-review Check Explanations (Y1–Y14)
+# sqlmigration-review Check Explanations (Y1–Y15)
 
-Plain-English explanations for all 14 checks. Load this file when a user asks "explain check
+Plain-English explanations for all 15 checks. Load this file when a user asks "explain check
 Y##", requests deeper fix options, or wants to understand why a threshold was chosen.
 
 ---
@@ -11,6 +11,7 @@ Y##", requests deeper fix options, or wants to understand why a threshold was ch
 - [Category 2 — Platform Compatibility — Azure SQL (Y7–Y9)](#category-2--platform-compatibility--azure-sql-y7y9)
 - [Category 3 — Migration Mechanism Readiness (Y10–Y13)](#category-3--migration-mechanism-readiness-y10y13)
 - [Category 4 — Lifecycle (Y14)](#category-4--lifecycle-y14)
+- [Category 5 — Source Topology Transition (Y15)](#category-5--source-topology-transition-y15)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -489,6 +490,59 @@ compatibility blocker.
 
 ---
 
+## Category 5 — Source Topology Transition (Y15)
+
+### Y15 — Failover Cluster Instance Source Retired Without a Client Redirect Plan
+
+**What it means:** A SQL Server Failover Cluster Instance (FCI) is reached by every client
+through one name — its Virtual Network Name (VNN), the cluster's Client Access Point. That name
+is what's in every connection string, linked server definition, reporting subscription, and ETL
+job. When the FCI is retired in favor of a new target (a standalone instance or an Always On AG),
+that name goes away — and an Always On AG listener gets its own, different DNS name. If the
+migration plan doesn't explicitly account for repointing every client from the old VNN to the new
+endpoint, the cutover itself looks clean (data is current, the new target is healthy) right up
+until applications try to connect and can't resolve or reach the old name. This is especially
+easy to under-scope when migrating many FCIs at once — each one needs its own redirect plan, and
+the inventory of call sites differs FCI by FCI.
+
+**How to spot it:** Source topology is described as an FCI (or `join_state_desc` showed
+`JOINED_FCI` historically, or the description mentions a cluster Client Access Point/VNN), the
+target is not the same FCI, and the migration plan's cutover/validation steps don't mention DNS,
+connection-string, or listener-name remediation.
+
+**Example:**
+```
+-- Problem: 10 on-prem FCIs are being retired, each replaced by its own 4-replica Always On AG
+-- (2 synchronous replicas in the primary AWS region, 2 asynchronous in the DR region).
+-- Each FCI has its own VNN (e.g., SQL-FCI03\PROD) that dozens of applications connect to.
+-- The cutover plan covers data sync and AG health but has no line item for repointing those
+-- applications to the 10 new AG listener DNS names.
+-- Fix: build a per-FCI connection-string/DNS inventory and redirect plan before cutover, not
+-- as a post-incident scramble after the first application can't connect.
+```
+
+**Fix options:**
+1. Inventory every connection string, linked server, SSRS data source, and SQL Agent job/proxy
+   target that references each FCI's VNN before cutover — `sqlmigration-objects-review` M7–M9
+   covers the linked-server portion of this inventory.
+2. For an AG target, repoint to the AG listener's DNS name, never to an individual replica's
+   hostname — see `/sqlag-review` F14–F18 for listener and multi-subnet design, since a
+   cross-region AG listener needs one IP per subnet for transparent failover.
+3. Where the call-site inventory is large or incomplete, swap in a DNS CNAME: retire the FCI's
+   VNN as an alias pointing to the new listener, with a short TTL, so the cutover is atomic for
+   every untracked caller and rollback is a single DNS change rather than re-touching every app.
+4. Verify resolution end-to-end (`Resolve-DnsName`/`nslookup` from each application tier, not
+   just from the SQL Server host) before the go/no-go decision — DNS propagation and client-side
+   caching are common silent failure points that only show up under real client resolution paths.
+5. When migrating many FCIs in the same wave, track this per FCI — a redirect plan that works for
+   one FCI's application footprint does not automatically generalize to the next.
+
+**Related checks:** Y13 (AG seeding mechanism — the most common topology pairing alongside this
+check), M7–M9 (linked server inventory and portability, the same family of call sites this check
+flags by name)
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger Summary | Severity |
@@ -507,3 +561,4 @@ compatibility blocker.
 | Y12 | Mechanism Readiness | Source not in FULL recovery for log-based migration | Critical |
 | Y13 | Mechanism Readiness | Target edition/platform cannot support AG seeding (incl. Azure SQL DB) | Critical |
 | Y14 | Lifecycle | Source version support end date passed or within 12 months | Warning |
+| Y15 | Source Topology | FCI source retired without client redirect/VNN cutover plan | Critical |

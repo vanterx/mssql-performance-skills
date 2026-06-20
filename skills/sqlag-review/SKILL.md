@@ -1,6 +1,6 @@
 ---
 name: sqlag-review
-description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 35 checks (F1–F35) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, or endpoint encryption. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
+description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 36 checks (F1–F36) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, or endpoint encryption. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
 triggers:
   - /sqlag-review
   - /ag-review
@@ -15,7 +15,7 @@ triggers:
 ## Purpose
 
 Audit the configuration and design of one or more SQL Server Always On Availability Groups.
-Applies 35 checks (F1–F35) across seven categories:
+Applies 36 checks (F1–F36) across seven categories:
 
 - **F1–F6** — Prerequisites and instance setup: AlwaysOn feature, database recovery model,
   endpoint state, endpoint encryption, failure condition level, version alignment across replicas
@@ -30,7 +30,7 @@ Applies 35 checks (F1–F35) across seven categories:
   firewall port gaps
 - **F28–F33** — Distributed AG and advanced features: listener URL requirement for distributed AGs,
   Basic AG limits, Contained AG auth, synchronous distributed link, cross-database dependencies
-- **F34–F35** — Operational monitoring: Extended Events AG session, listener IP conformance
+- **F34–F36** — Operational monitoring: Extended Events AG session, listener IP conformance, AG database-count scale ceiling
 
 **Scope distinction:** This skill audits configuration correctness ("is the AG designed right?").
 Use `/sqlhadr-review` (H1–H27) for runtime health ("is the AG healthy right now?") and
@@ -163,6 +163,7 @@ ORDER BY expiry_date;
 | Certificate expiry — near | < 90 days → Warning | F25 |
 | Certificate expiry — imminent | < 30 days → Critical | F25 |
 | Backup priority tie | All eligible secondaries at 50 with SECONDARY preference → Warning | F10 |
+| AG database count | > 100 databases in one AG → Warning | F36 |
 
 ---
 
@@ -522,7 +523,7 @@ or leave databases unjoinable.
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F35)
+## Category 7 — Operational Monitoring (F34–F36)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 - **Trigger:** `sys.dm_xe_sessions` contains no session with events targeting
@@ -546,6 +547,20 @@ or leave databases unjoinable.
   IP activation during failover. Resolve by dropping and recreating the listener IP in
   alignment with the cluster resource configuration, or repair the cluster resource via
   Failover Cluster Manager to match the SQL Server listener definition.
+
+### F36 — AG Database Count Exceeds Microsoft's Tested Scale Ceiling
+- **Trigger:** COUNT of databases in `sys.availability_databases_cluster` for a single AG
+  exceeds 100
+- **Severity:** Warning
+- **Fix:** Microsoft has tested up to 10 availability groups and 100 availability databases
+  per physical machine; this is not an enforced limit, but going meaningfully beyond it is
+  untested territory. Signs of an overloaded instance include worker thread exhaustion, slow
+  responses from AG system views/DMVs, and stalled dispatcher dumps. Before going live with a
+  large multi-hundred-database AG: load-test with a production-like workload under failure
+  conditions (not just steady-state), monitor `sys.dm_os_wait_stats` for `HADR_*` and
+  `DBMIRROR_*` waits, and consider splitting the workload across multiple AGs on the same
+  replicas (a single instance can host many AGs) if thread exhaustion or DMV latency appears
+  under test.
 
 ---
 

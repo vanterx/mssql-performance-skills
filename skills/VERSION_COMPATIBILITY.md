@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 825 checks in this library apply to your SQL Server version.
+Which of the 827 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -69,17 +69,17 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 825 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y14, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below.
+These cumulative counts show how many of the 825 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below.
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **753** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **722** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
-| SQL Server 2017 | **700** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **687** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **650** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
-| SQL Server 2012 | **644** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **551** | −93 more: all 57 Always On AG/WSFC checks and 35 AG-config checks (F1–F35) unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
+| SQL Server 2022 | **755** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **724** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
+| SQL Server 2017 | **702** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **689** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **652** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
+| SQL Server 2012 | **646** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **552** | −94 more: all 57 Always On AG/WSFC checks and 36 AG-config checks (F1–F36) unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -101,7 +101,7 @@ These checks require features introduced in SQL Server 2012.
 | H27 | `sqlhadr-review` | AG Without Database-Level Health Detection | Always On AG (SQL 2012+) |
 | L30 | `sqlclusterlog-review` | sp_server_diagnostics Component Warning | `sp_server_diagnostics` (SQL 2012+) |
 
-**Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30), `sqlag-review` (F1–F35, except F32 SQL 2016+ and F31 SQL 2022+). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
+**Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H27), `sqlclusterlog-review` (L1–L30), `sqlag-review` (F1–F36, except F32 SQL 2016+ and F31 SQL 2022+). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
 
 | A82 | `sqlencryption-review` | SSISDB DMK Password Not Registered | SSISDB catalog (SQL Server Integration Services, SQL 2012+) |
 

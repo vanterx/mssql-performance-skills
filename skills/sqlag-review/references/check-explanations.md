@@ -1,6 +1,6 @@
-# sqlag-review Check Explanations (F1–F35)
+# sqlag-review Check Explanations (F1–F36)
 
-Plain-English explanations for all 35 checks. Load this file when a user asks "explain check
+Plain-English explanations for all 36 checks. Load this file when a user asks "explain check
 F##", requests deeper fix options, or wants to understand why a threshold was chosen.
 
 ---
@@ -929,7 +929,7 @@ Review T-SQL code or application layer for:
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F35)
+## Category 7 — Operational Monitoring (F34–F36)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 
@@ -997,6 +997,51 @@ WHERE is_conformant = 0;
 
 ---
 
+### F36 — AG Database Count Exceeds Microsoft's Tested Scale Ceiling
+
+**What it means:** Microsoft documents that it has tested up to 10 availability groups and 100
+availability databases per physical machine, and explicitly notes this is not an enforced limit
+— but it is the boundary of what has actually been validated at scale. Beyond it, the realistic
+risks are worker thread exhaustion, slow responses from AG system views and DMVs, and stalled
+dispatcher dumps under failure conditions (not necessarily under steady-state load). A migration
+that consolidates a very large number of source databases (e.g., from an on-prem FCI or a set of
+standalone instances) into a single target AG can land well past this ceiling without anyone
+having load-tested that specific shape.
+
+**How to spot it:**
+```sql
+SELECT ag.name AS ag_name, COUNT(*) AS database_count
+FROM sys.availability_groups ag
+JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
+GROUP BY ag.name
+HAVING COUNT(*) > 100;
+```
+
+**Example:**
+```
+-- Problem: a migration consolidates 200 databases from a retiring on-prem FCI into one
+-- 4-replica AG (2 synchronous in the primary region, 2 asynchronous in the DR region).
+-- 200 > the 100-database ceiling Microsoft has actually tested — failover time, log-send
+-- queue fan-out, and DMV/system-view responsiveness under load are unvalidated at this scale.
+```
+
+**Fix options:**
+1. Before going live, load-test with a production-like workload under failure conditions
+   (not just steady-state) — specifically a forced failover with all databases active — and
+   measure failover duration and worker thread headroom.
+2. Monitor `sys.dm_os_wait_stats` for `HADR_*` and `DBMIRROR_*` wait categories during the test;
+   rising wait time under load is the leading indicator of thread or queue exhaustion.
+3. If the test surfaces stress, split the database set across multiple AGs hosted on the same
+   replica set — a single instance can host many availability groups, so this doesn't require
+   additional hardware, only additional AG definitions and listeners.
+4. Re-test after any split to confirm failover time for each AG independently meets the
+   migration's RTO target.
+
+**Related checks:** F7 (synchronous replica count — a related but distinct scale dimension),
+F9 (health check timeout — symptom surface for an overloaded instance)
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger Summary | Severity |
@@ -1036,3 +1081,4 @@ WHERE is_conformant = 0;
 | F33 | Distributed/Advanced | Cross-database dependencies on non-AG databases | Info |
 | F34 | Monitoring | No XE session for AG diagnostics | Info |
 | F35 | Monitoring | Listener IP is_conformant = 0 | Warning |
+| F36 | Monitoring | AG database count exceeds Microsoft's tested scale ceiling (>100) | Warning |
