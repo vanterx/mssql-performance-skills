@@ -671,6 +671,9 @@ Derive `<input-prefix>` from the AG name, filename stem, or `run` as fallback.
   Kerberos authentication fails through the listener (double-hop, constrained delegation).
 - `/sqlencryption-review` — Full encryption posture audit including endpoint certificates,
   TDE on AG databases, and backup encryption.
+- `/sqlmigration-review` — Dispatches AG-as-migration-mechanism findings here (edition limits
+  on Basic/Contained AG, distributed AG topology gaps) when AG seeding is the chosen migration
+  mechanism.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple
   specialised skills (this one included). Use when you have several artifact types together

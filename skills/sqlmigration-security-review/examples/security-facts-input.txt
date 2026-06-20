@@ -1,0 +1,34 @@
+Migration: SalesDB moved from on-prem SQL Server 2014 to on-prem SQL Server 2019 via
+backup/restore. The DBA manually re-created logins on the new server with
+CREATE LOGIN [AppUser] WITH PASSWORD = 'TempPass123!' rather than scripting them from the source.
+
+--- Query 1: Source Logins ---
+name        type_desc  is_disabled  default_database_name  is_policy_checked  is_expiration_checked
+AppUser     SQL_LOGIN  0            SalesDB                 1                  1
+AppReporting SQL_LOGIN 0            SalesDB                 1                  1
+
+--- Query 2: Database Users (post-restore, on target) ---
+user_name      type_desc  login_name
+AppUser        SQL_USER   NULL
+AppReporting   SQL_USER   NULL
+
+--- Query 3: Server Role Membership (source) ---
+login_name  role_name
+AppUser     dbcreator
+
+--- Query 4: Database Role Membership (source) ---
+user_name      role_name
+AppReporting   db_datareader
+
+--- Query 5: Explicit Permissions (source) ---
+grantee        permission_name  state_desc  object_name
+AppReporting   SELECT           DENY        SalaryDetails
+
+--- Query 6: Credentials ---
+(no rows)
+
+--- Query 9: Certificates ---
+(no rows)
+
+--- Query 10: Database Master Key ---
+(no rows)

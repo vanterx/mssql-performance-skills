@@ -493,5 +493,8 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
   is generating excessive log volume, contributing to send queue buildup (H11, H14).
 - `/tsql-review` — Review T-SQL that runs on a readable secondary to identify implicit
   conversions or non-sargable predicates that add read load and compete with redo threads.
+- `/sqlmigration-review` — Before seeding an AG as a migration mechanism, run this skill to
+  confirm the target edition/version supports the planned replica count and topology; it
+  dispatches AG runtime-health overlap back to this skill.
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

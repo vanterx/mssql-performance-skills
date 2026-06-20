@@ -1,0 +1,39 @@
+Migration plan: moving SalesDB and OrdersDB from SQL Server 2014 Enterprise Edition (on-prem)
+to SQL Server 2019 Standard Edition (on-prem) by seeding a new Always On Availability Group.
+Both databases will be added to the same AG, "SalesAG". Cutover scheduled for next weekend.
+
+--- Query 1: Source Instance ---
+product_version  edition                      engine_edition  server_collation                  hadr_enabled
+12.0.6293.0       Enterprise Edition (64-bit)  3               SQL_Latin1_General_CP1_CI_AS      1
+
+--- Query 2: Database Facts ---
+name        compatibility_level  recovery_model_desc  collation_name                       is_read_committed_snapshot_on
+SalesDB     120                  FULL                  SQL_Latin1_General_CP1_CI_AS         0
+OrdersDB    120                  FULL                  Latin1_General_100_CI_AS_SC          0
+
+--- Query 3: Persisted SKU Features ---
+feature_name
+Partitioning
+OnlineIndexOperation
+
+--- Query 4: Memory-Optimized Tables ---
+(no rows)
+
+--- Query 5: Backup Chain (last 14 days) ---
+database_name  type_desc  backup_start_date        backup_finish_date       differential_base_lsn  first_lsn        last_lsn         is_password_protected  key_algorithm  encryptor_type
+SalesDB        Database   2026-06-13 22:00:00.000  2026-06-13 22:14:00.000  NULL                   38000000012000   38000000099000   0                       NULL           NULL
+OrdersDB       Database   2026-06-13 22:20:00.000  2026-06-13 22:31:00.000  NULL                   21000000045000   21000000091000   0                       NULL           NULL
+
+--- Query 6: Active Agent Jobs ---
+name              enabled
+Nightly_Reindex   1
+
+--- Query 7: Windows-Authenticated Logins ---
+name              type_desc      is_disabled
+DOMAIN\svc_app    WINDOWS_LOGIN  0
+
+--- Query 8: Linked Servers ---
+(no rows)
+
+Target instance confirmed SQL Server 2019 Standard Edition, on-premises (not Azure).
+Target server collation: Latin1_General_100_CI_AS_SC.

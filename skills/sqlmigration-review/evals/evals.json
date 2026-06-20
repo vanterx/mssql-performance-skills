@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "We're moving SalesDB and OrdersDB from SQL Server 2014 Enterprise on-prem to SQL Server 2019 Standard on-prem by seeding a new Always On AG called SalesAG with both databases in it. Source uses table partitioning and Online Index Rebuild (confirmed via sys.dm_db_persisted_sku_features showing Partitioning and OnlineIndexOperation). Both databases are in FULL recovery. Source server collation is SQL_Latin1_General_CP1_CI_AS, target is Latin1_General_100_CI_AS_SC. Review with /sqlmigration-review.",
+    "expected_behavior": "Should fire: Y1 (Partitioning and OnlineIndexOperation are Enterprise-only, target is Standard), Y13 (Standard Edition Basic AG capped at 1 database per AG, plan has 2), Y4 (collation mismatch, no cross-DB testing mentioned), Y14 (SQL Server 2014 extended support has ended). Should not fire Y2 (target newer than source), Y3 (compat level 120 well under 2019's ceiling), Y12 (already FULL recovery). Should recommend /sqlag-review as a dispatch target once the edition decision is resolved."
+  },
+  {
+    "prompt": "Planning to migrate our on-prem SQL Server 2016 SP2 Standard Edition database to Azure SQL Database. The app uses a linked server to pull customer data from a second on-prem instance, and there's a Windows-authenticated service account login (DOMAIN\\svc_etl) used by a nightly SQL Agent job that runs a stored procedure. Run /sqlmigration-review.",
+    "expected_behavior": "Should fire: Y7 (Azure SQL Database cannot host linked servers — instance-scoped object), Y8 (Windows-authenticated login DOMAIN\\svc_etl has no Entra ID/SQL auth migration plan stated), Y9 (nightly Agent job has no execution path on Azure SQL Database, which has no Agent service). Should explain Azure SQL Managed Instance as an alternative that avoids re-platforming Y7-Y9, and should recommend /sqlmigration-objects-review for the Agent job migration detail and /sqlmigration-security-review for the login migration detail."
+  },
+  {
+    "prompt": "We're doing a backup/restore migration of ReportDB from SQL Server 2017 Standard to SQL Server 2014 Standard (downgrading hardware, keeping the older SQL version on the new box temporarily). The database is in SIMPLE recovery model currently. Review with /sqlmigration-review.",
+    "expected_behavior": "Should fire: Y2 (target major version 2014 is older than source 2017 — native backup/restore cannot restore to an older engine version, this blocks the plan outright) as Critical, and should clearly state that backup/restore is impossible in this direction regardless of any other finding. Should note Y12 does not apply here since the mechanism is backup/restore, not log shipping/AG seeding, so SIMPLE recovery model alone is not a blocker for this specific mechanism. Should suggest switching to a script-out/data-copy migration method instead of backup/restore given the version downgrade."
+  }
+]

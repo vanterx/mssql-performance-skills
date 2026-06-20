@@ -1,0 +1,48 @@
+Migration: on-prem SQL Server instance moving to a new on-prem server in a different time zone
+(source: US Eastern, target: UTC). Database SalesDB is being renamed to Sales on the target.
+
+--- Query 1: Agent Jobs ---
+name              enabled  category_name      owner_sid
+Nightly_ETL       1        Data Collector     0x0105000...AppUser
+
+--- Query 2: Job Steps ---
+job_name      step_name        database_name  proxy_name
+Nightly_ETL   LoadSalesData    SalesDB        BlobProxy
+
+--- Query 3: Job Owner Resolution ---
+name          owner_login
+Nightly_ETL   NULL
+
+--- Query 4: Job Schedules ---
+schedule_name   active_start_time  freq_type  freq_interval
+Nightly_2200    220000             4          1
+
+--- Query 5: Operators ---
+name        email_address
+DBA_Team    dba-team@company.com
+
+--- Query 6: Alerts ---
+name              message_id  severity
+ETL_Failure_Alert  50001       16
+
+--- Query 7: Linked Servers ---
+(no rows)
+
+--- Query 8: Database Mail ---
+name        description
+Default     Default profile for alerts
+
+--- Query 9: Backup Devices ---
+(no rows)
+
+--- Query 10: Custom Error Messages ---
+(no rows)
+
+--- Query 11: Server Triggers ---
+(no rows)
+
+--- Query 12: XE Sessions ---
+(no rows)
+
+--- Query 13: Endpoints ---
+(no rows)
