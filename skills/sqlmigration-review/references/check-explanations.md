@@ -408,31 +408,45 @@ seeding edition limits)
 
 ---
 
-### Y13 — Target Edition Lacks Always On Availability Group Capacity Needed for Seeding
+### Y13 — Target Edition or Platform Cannot Support Always On AG Seeding
 
 **What it means:** Always On Availability Groups require at least Standard Edition; Standard
 Edition's Basic Availability Groups are further capped at one database per AG with no readable
 secondary. A migration plan that seeds via AG but needs more than one database in the AG or a
 readable secondary needs Enterprise Edition on the target, regardless of how well everything
-else in the plan is prepared.
+else in the plan is prepared. Separately — and independent of edition — Azure SQL Database
+cannot be an Always On AG replica at all: it is not a clusterable instance, so AG seeding is not
+a valid migration mechanism for that target platform under any edition. Teams sometimes choose
+AG seeding purely to minimize cutover downtime without first confirming the target platform can
+host a replica.
 
-**How to spot it:** Compare the stated target edition against the AG topology the migration plan
-assumes (number of databases per AG, whether a readable secondary is required).
+**How to spot it:** First confirm the target platform. If it is Azure SQL Database, AG seeding
+fails outright regardless of edition. Otherwise, compare the stated target edition against the
+AG topology the migration plan assumes (number of databases per AG, whether a readable secondary
+is required).
 
 **Example:**
 ```
--- Problem: Migration plan seeds 3 databases into one AG on SQL Server 2019 Standard Edition
+-- Problem A: Migration plan seeds 3 databases into one AG on SQL Server 2019 Standard Edition
 -- Basic Availability Groups (Standard Edition) support exactly 1 database per AG
 -- Fix: either split into 3 separate Basic AGs, or use Enterprise Edition for one AG with 3 DBs
+
+-- Problem B: Migration plan seeds SalesDB via Always On AG into an Azure SQL Database target
+-- Azure SQL Database cannot participate in an Always On AG as a replica under any edition
+-- Fix: use backup/restore, the Data Migration Assistant, or retarget to Azure SQL Managed
+-- Instance (which supports failover groups) if AG-style HA is required after cutover
 ```
 
 **Fix options:**
-1. Use Enterprise Edition on the target if more than one database must share an AG, or if a
-   readable secondary is required for the migration's intended use (e.g., offloading reporting
-   immediately after cutover).
-2. Otherwise, scope the plan to Basic AG's single-database, non-readable-secondary constraints —
+1. If the target platform is Azure SQL Database, abandon AG seeding entirely — use backup/restore
+   or the Data Migration Assistant instead, or retarget to Azure SQL Managed Instance if AG-style
+   high availability is a hard requirement.
+2. If the target is on-prem or Managed Instance, use Enterprise Edition if more than one database
+   must share an AG, or if a readable secondary is required for the migration's intended use
+   (e.g., offloading reporting immediately after cutover).
+3. Otherwise, scope the plan to Basic AG's single-database, non-readable-secondary constraints —
    one Basic AG per database.
-3. See `/sqlag-review` checks F29/F30 for the exact Basic AG limits and how they're detected from
+4. See `/sqlag-review` checks F29/F30 for the exact Basic AG limits and how they're detected from
    live configuration once the AG exists.
 
 **Related checks:** Y12 (recovery model prerequisite for any log-based seeding) — and
@@ -491,5 +505,5 @@ compatibility blocker.
 | Y10 | Mechanism Readiness | Encrypted backup algorithm unsupported by restore-side version | Warning |
 | Y11 | Mechanism Readiness | Differential/log chain gap in `msdb.dbo.backupset` | Critical |
 | Y12 | Mechanism Readiness | Source not in FULL recovery for log-based migration | Critical |
-| Y13 | Mechanism Readiness | Target edition below AG seeding requirements | Critical |
+| Y13 | Mechanism Readiness | Target edition/platform cannot support AG seeding (incl. Azure SQL DB) | Critical |
 | Y14 | Lifecycle | Source version support end date passed or within 12 months | Warning |

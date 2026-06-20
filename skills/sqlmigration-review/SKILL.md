@@ -134,10 +134,10 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 **Severity:** Critical
 **Fix:** `ALTER DATABASE ... SET RECOVERY FULL` and take a new full backup to start the log chain — both mechanisms require an unbroken FULL-recovery log chain from the initialization point forward.
 
-### Y13 — Target Edition Lacks Always On Availability Group Capacity Needed for Seeding
-**Trigger:** Migration mechanism is Always On AG seeding, and the target edition is below Standard Edition, or the source's requirements (more than one database per AG, readable secondary) exceed Basic Availability Groups' limits.
+### Y13 — Target Edition or Platform Cannot Support Always On AG Seeding
+**Trigger:** Migration mechanism is Always On AG seeding, and either the target platform is Azure SQL Database (which cannot participate in an Always On Availability Group as a replica at all — it is not a clusterable instance), or the target edition is below Standard Edition, or the source's requirements (more than one database per AG, readable secondary) exceed Basic Availability Groups' limits.
 **Severity:** Critical
-**Fix:** Use Enterprise Edition on the target if more than one database must share an AG or a readable secondary is required; otherwise scope the migration to Basic AG's single-database, non-readable-secondary constraints — see `/sqlag-review` F29/F30 for the exact limits.
+**Fix:** If the target platform is Azure SQL Database, AG seeding is not a valid mechanism regardless of edition — switch to backup/restore, the Data Migration Assistant, or (if the broader feature set is required) retarget to Azure SQL Managed Instance, which does support Always On-style failover groups. If the target is on-prem/Managed Instance, use Enterprise Edition if more than one database must share an AG or a readable secondary is required; otherwise scope the migration to Basic AG's single-database, non-readable-secondary constraints — see `/sqlag-review` F29/F30 for the exact limits.
 
 ## Category 4 — Lifecycle
 
