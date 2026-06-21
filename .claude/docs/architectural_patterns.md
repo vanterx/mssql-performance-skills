@@ -66,7 +66,12 @@ triggers:
 | `skills/sqlencryption-review/` | `/sqlencryption-review` | A |
 | `skills/sqldbconfig-review/` | `/sqldbconfig-review` | B |
 | `skills/ssrstracelog-review/` | `/ssrstracelog-review` | G |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 21) |
+| `skills/sqlag-review/` | `/sqlag-review` | F |
+| `skills/sqlbootstraplog-review/` | `/sqlbootstraplog-review` | U |
+| `skills/sqlmigration-review/` | `/sqlmigration-review` | Y (dispatcher with own checks) |
+| `skills/sqlmigration-security-review/` | `/sqlmigration-security-review` | J |
+| `skills/sqlmigration-objects-review/` | `/sqlmigration-objects-review` | M |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to the 22 performance specialised skills; does not route to the 3 migration skills) |
 
 ---
 
@@ -104,7 +109,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V44 |
 | `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
 | `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
-| `H` | `sqlhadr-review` | Always On AG health checks | H1–H27 |
+| `H` | `sqlhadr-review` | Always On AG health checks | H1–H28 (H21 retired) |
 | `L` | `sqlclusterlog-review` | WSFC cluster log checks | L1–L30 |
 | `E` | `sqlerrorlog-review` | SQL Server ERRORLOG checks | E1–E33 |
 | `K` | `sqlspn-review` | SPN and Kerberos delegation checks | K1–K40 |
@@ -113,10 +118,15 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
 | `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B28 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
+| `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
+| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
+| `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
+| `J` | `sqlmigration-security-review` | Migration security-object portability | J1–J15 |
+| `M` | `sqlmigration-objects-review` | Migration operational-object portability | M1–M16 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 21 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to the 22 performance specialised skills (not the 3 migration skills — see `sqlmigration-review`'s Notes) | n/a |
 
-**Available prefixes for new skills:** F, J, M, Y.
+**Available prefixes for new skills:** see `CLAUDE.md`'s "Check ID prefixes — currently taken" table for the canonical, up-to-date list — choose any unused single uppercase letter not in that table.
 
 ---
 

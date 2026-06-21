@@ -56,6 +56,9 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqldbconfig-review` | ~7,200 |
 | `sqlbootstraplog-review` | ~6,500 |
 | `ssrstracelog-review` | ~8,700 |
+| `sqlmigration-review` | ~4,500 |
+| `sqlmigration-security-review` | ~4,000 |
+| `sqlmigration-objects-review` | ~4,300 |
 | `mssql-performance-review` | ~7,900 |
 
 ### Your input artifact

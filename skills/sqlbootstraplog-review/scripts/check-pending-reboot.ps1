@@ -23,7 +23,7 @@
                                       (skipped silently when the client is absent)
 
     Planned home: skills/sqlsetup-review/scripts/ once the sqlsetup-review skill
-    (docs/backlog/sqlsetup-review-skill-plan.md, check U7) is implemented.
+    (backlog/sqlsetup-review-skill-plan.md, check U7) is implemented.
 
 .PARAMETER ShowDetail
     Also print the raw PendingFileRenameOperations entries so you can see which

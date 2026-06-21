@@ -350,4 +350,5 @@ WHERE servicename LIKE 'SQL Server (%';
 | `sqlwait-review` (V) | B19 excessive VLFs → V34 log write stalls; B23 TempDB files → V30–V32 TempDB contention waits |
 | `sqldiskio-review` (Z) | B20/B21 percent auto-growth → Z7–Z9 auto-growth event stalls — run `/sqldiskio-review` to quantify the file growth impact |
 | `sqlplan-review` (S/N) | B1–B3 MAXDOP misconfiguration → N44–N47 excessive parallelism in plans — cross-reference plan operators |
+| `sqlmigration-review` (Y) | Dispatches configuration-drift findings here when comparing source/target instance settings (MAXDOP, compatibility level, TempDB layout) ahead of a migration |
 | `mssql-performance-review` | Dispatches to this skill when artifact type is `dbconfig` |

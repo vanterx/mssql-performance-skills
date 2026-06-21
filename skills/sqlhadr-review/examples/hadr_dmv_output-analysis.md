@@ -1,7 +1,7 @@
 # HADR Health Analysis
 
 ### Summary
-- **3 Critical, 3 Warnings, 2 Info**
+- **3 Critical, 3 Warnings, 1 Info**
 - Availability group: **SalesAG**
 - Replicas:
   - NODE1\SQL2022 — PRIMARY (CONNECTED, HEALTHY)
@@ -128,26 +128,9 @@
   ```
   Update application connection strings to use `salesag-listener` as the server name.
 
-### [I2 — H21] Read-Only Routing Not Configured — NODE2\SQL2022, NODE3\SQL2022
-- **Observed:** Both NODE2\SQL2022 and NODE3\SQL2022 have `read_only_routing_url = NULL`
-  despite being configured as readable secondaries (`secondary_role_allow_connections_desc
-  = ALL` for NODE2, `READ_ONLY` for NODE3).
-- **Impact:** `ApplicationIntent=ReadOnly` connections are not automatically redirected to
-  a readable secondary. Reporting workloads that could be offloaded to NODE3\SQL2022 are
-  landing on the primary, adding unnecessary I/O load.
-- **Fix:** Configure routing on both replicas and the primary:
-  ```sql
-  -- Set routing URLs on secondaries:
-  ALTER AVAILABILITY GROUP [SalesAG]
-  MODIFY REPLICA ON N'NODE3\SQL2022'
-  WITH (SECONDARY_ROLE (READ_ONLY_ROUTING_URL = N'TCP://NODE3\SQL2022.domain.com:1433'));
-
-  -- Set routing list on primary:
-  ALTER AVAILABILITY GROUP [SalesAG]
-  MODIFY REPLICA ON N'NODE1\SQL2022'
-  WITH (PRIMARY_ROLE (READ_ONLY_ROUTING_LIST = (N'NODE3\SQL2022')));
-  ```
-  Requires a listener (I1) — configure the listener first, then routing.
+> **Note:** Read-only routing configuration (formerly H21) is now covered by `/sqlag-review`
+> F15, not `/sqlhadr-review` — run `/sqlag-review` against this AG's configuration to assess
+> routing gaps on NODE2\SQL2022 and NODE3\SQL2022.
 
 ---
 
@@ -178,4 +161,4 @@
 | 2 — After NODE2 reconnects | Monitor redo queue drain on NODE2 (target: redo_queue_size → 0) | C3 | Passive monitoring |
 | 3 — Today | Enable AUTOMATIC failover on NODE2\SQL2022 once it reaches SYNCHRONIZED state | W1 | 10 min |
 | 4 — This sprint | Create AG listener `salesag-listener` with static IP | I1 | 30 min |
-| 5 — This sprint | Configure read-only routing on NODE3\SQL2022 (requires listener first) | I2 | 20 min |
+| 5 — This sprint | Run `/sqlag-review` to assess read-only routing configuration on NODE3\SQL2022 | F15 (sqlag-review) | 20 min |

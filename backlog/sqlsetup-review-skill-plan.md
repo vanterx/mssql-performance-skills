@@ -111,7 +111,7 @@ names) gets validated against MS Learn before the skill is marked complete.
 12. Orchestrator (`mssql-performance-review/SKILL.md`): add artifact classification row
     for setup logs + dispatch heuristic
 13. MS Learn validation pass on the finished skill (mandatory policy) + record in
-    `docs/ms-learn-validation-2026-06.md` (or successor report)
+    `backlog/ms-learn-validation-2026-06.md` (or successor report)
 14. `bash scripts/verify-docs.sh` green; commit per repo conventions
 
 ## Effort estimate

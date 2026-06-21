@@ -1,0 +1,17 @@
+{
+  "skill_name": "sqlmigration-objects-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Migrating our SQL Server instance to a new on-prem box. We have an Agent job 'Nightly_ETL' with a step that hardcodes USE SalesDB_Prod, but the database is being renamed to SalesDB on the new server. There's also a proxy account 'BlobProxy' used by another job step, and we haven't migrated the underlying credential yet. Review with /sqlmigration-objects-review.",
+      "expected_output": "Should fire: M1 (job step references SalesDB_Prod, which won't exist under the new name SalesDB) as Critical, and M5 (proxy BlobProxy is being migrated without its underlying credential migrated first) as Critical. Should reference /sqlmigration-security-review J10/J11 for the credential-side fix sequencing, and provide sp_update_jobstep syntax to fix the database_name reference.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "We're moving from an on-prem datacenter in Chicago to a new on-prem datacenter in London as part of a SQL Server migration. We have 6 Agent job schedules tuned for 'after business close' (10 PM local), 2 linked servers (one using Microsoft.ACE.OLEDB.12.0 for an Excel import, one to a partner's SQL Server reachable only from our Chicago datacenter's firewall-allowed IP range), and a Database Mail profile currently relayed through an SMTP server that only allow-lists the Chicago datacenter's outbound IP. Review with /sqlmigration-objects-review.",
+      "expected_output": "Should fire: M6 (job schedules tuned for Chicago local time will run at the wrong real-world time in London's time zone), M7 (need to confirm Microsoft.ACE.OLEDB.12.0 is installed on the new London server), M8 (linked server to partner's SQL Server is reachable only from Chicago's allow-listed IP range, not London's), M11 (SMTP relay allow-list only includes Chicago's outbound IP, mail will fail to relay from London). Should recommend testing each of these explicitly rather than assuming migration of the definition alone is sufficient.",
+      "files": []
+    }
+  ]
+}

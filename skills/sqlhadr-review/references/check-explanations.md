@@ -7,13 +7,15 @@
 - [Category 3: Throughput and Performance (H12–H16)](#category-3-throughput-and-performance-h12h16)
 - [Category 4: Configuration (H17–H22)](#category-4-configuration-h17h22)
 - [Category 5: Modern AG Feature Checks (H23–H27)](#category-5-modern-ag-feature-checks-h23h27)
+- [Category 6: Seeding and Initialization Integrity (H28)](#category-6-seeding-and-initialization-integrity-h28)
 - [Quick Reference](#quick-reference)
 
 ---
 
 
-Plain-English explanations for all 27 H-checks. For check trigger conditions and thresholds,
-see `SKILL.md`. This file is for human reference only — it is not loaded by the skill.
+Plain-English explanations for all 27 active H-checks (H1–H28; H21 is retired — merged into
+`sqlag-review` F15). For check trigger conditions and thresholds, see `SKILL.md`. This file is
+for human reference only — it is not loaded by the skill.
 
 ---
 
@@ -774,45 +776,32 @@ ADD LISTENER N'sales-ag-listener' (
 3. Update application connection strings to use the listener DNS name
 4. Test the listener from the application tier before removing the old server-name references
 
-**Related checks:** H21
+**Related checks:** `sqlag-review` F15 (read-only routing — H21 retired)
 
 ---
 
-### H21 — Read-Only Routing Not Configured
+### Retired — H21 (merged into sqlag-review F15)
 
 **What it means**
-Readable secondaries can offload reporting and read-only queries from the primary. But
-without read-only routing configured, connection strings with `ApplicationIntent=ReadOnly`
-still land on the primary (they are not redirected automatically).
+H21 used to fire on a readable secondary with `read_only_routing_url IS NULL`. That condition
+is identical to `sqlag-review` F15 (Read-Only Routing URL Absent on Readable Secondary) — both
+checks evaluate the same static columns (`secondary_role_allow_connections_desc`,
+`read_only_routing_url`) from `sys.availability_replicas`, and there is no runtime-only signal
+in the `sys.dm_hadr_*` DMVs that distinguishes a "configured but unreachable" routing URL from
+a "not configured" one without an active connectivity probe outside this skill's input model.
 
-**How to spot it**
-```
-replica_server_name   read_only_routing_url   secondary_role_allow_connections
-NODE2\SQL2019         NULL                    READ_ONLY
-```
+**Why F15 is the canonical check**
+`sqlag-review` owns AG configuration-correctness checks; `sqlhadr-review` owns runtime-health
+checks. Read-only routing absence is a configuration gap, not a runtime health symptom, so it
+belongs in `sqlag-review`. Run `/sqlag-review` to get this finding (F15).
 
-**Example (problem + fix)**
-```sql
--- Step 1: Set the read-only routing URL on each secondary:
-ALTER AVAILABILITY GROUP [SalesAG]
-MODIFY REPLICA ON N'NODE2\SQL2019'
-WITH (SECONDARY_ROLE (READ_ONLY_ROUTING_URL = N'TCP://NODE2\SQL2019.domain.com:1433'));
+**Why the ID is retired, not renumbered**
+H22–H28 follow H21 in this skill's numbering, and H28 is referenced by ID from `sqlag-review`
+F37. Renumbering H22→H21 and so on would cascade into that cross-reference and every check-count
+touch point already documented elsewhere. Leaving H21 retired (a documented gap) avoids that
+cascade while still deduplicating the finding.
 
--- Step 2: Configure the routing list on the primary:
-ALTER AVAILABILITY GROUP [SalesAG]
-MODIFY REPLICA ON N'NODE1\SQL2019'
-WITH (PRIMARY_ROLE (READ_ONLY_ROUTING_LIST = (N'NODE2\SQL2019')));
-
--- Application connection string:
--- Server=sales-ag-listener;Database=SalesDB;ApplicationIntent=ReadOnly;
-```
-
-**Fix options**
-1. Set `READ_ONLY_ROUTING_URL` on each readable secondary (see Step 1 above)
-2. Set `READ_ONLY_ROUTING_LIST` on the primary replica (see Step 2 above)
-3. Verify by connecting with `ApplicationIntent=ReadOnly` and checking `@@SERVERNAME`
-
-**Related checks:** H20
+**Related checks:** `sqlag-review` F15 (canonical), H20
 
 ---
 
@@ -973,7 +962,7 @@ WHERE name IN (SELECT database_name FROM sys.dm_hadr_database_replica_states);
 2. Monitor version store growth after enabling: `SELECT * FROM sys.dm_tran_version_store_space_usage`
 3. Confirm: `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = 'db'`
 
-**Related checks:** H21 (Read-Only Routing Not Configured), H9 (Secondary Lag)
+**Related checks:** `sqlag-review` F15 (Read-Only Routing URL Absent — H21 retired), H9 (Secondary Lag)
 
 ---
 
@@ -1002,6 +991,75 @@ WHERE db_failover = 0;
 
 ---
 
+## Category 6: Seeding and Initialization Integrity (H28)
+
+### H28 — Secondary Database Stuck in INITIALIZING State
+
+**What it means**
+`INITIALIZING` is one of five values for `synchronization_state_desc` (alongside `NOT
+SYNCHRONIZING`, `SYNCHRONIZING`, `SYNCHRONIZED`, `REVERTING`). Microsoft documents it as the
+phase of undo in which the transaction log a secondary needs to catch up to the undo LSN is
+still being shipped and hardened on that secondary. Microsoft Learn carries an explicit caution
+for this state: forcing failover to a secondary replica while its database is `INITIALIZING`
+leaves the database in a state where it cannot be started as a primary database — it must
+either reconnect as a secondary to resume normal data movement, or have new log records applied
+from a log backup. This means the danger window is not "the database is unhealthy" in the way
+`NOT SYNCHRONIZING` is — it is a transient state that becomes a stuck state specifically if a
+failover happens to land on it.
+
+**How to spot it**
+```sql
+SELECT ag.name AS ag_name, ar.replica_server_name, drs.database_name,
+       drs.synchronization_state_desc, drs.is_suspended, drs.suspend_reason_desc,
+       drs.redo_queue_size, drs.redo_rate, drs.last_redone_time
+FROM sys.dm_hadr_database_replica_states drs
+JOIN sys.availability_replicas ar ON drs.replica_id = ar.replica_id
+JOIN sys.availability_groups ag ON ar.group_id = ag.group_id
+WHERE drs.synchronization_state_desc = 'INITIALIZING';
+```
+Sample the query at least twice a few minutes apart — `INITIALIZING` alone is not abnormal
+during a legitimate seed or rejoin; what makes it a finding is no forward progress between
+samples, or its presence immediately after a failover event.
+
+**Common causes**
+- A failover occurred while a secondary database had not yet finished initial data movement
+  (legitimately mid-seed, mid-rejoin after a long outage, or mid-catch-up after a large backlog)
+- An automatic-seeding attempt collided with a manual backup/restore-based join — `SEEDING_MODE`
+  is evaluated dynamically every time a database is added to the AG, so a replica left at
+  `AUTOMATIC` can start its own seed in parallel with an operator's manual restore, leaving a
+  hybrid/inconsistent copy that reports healthy under routine log streaming and only surfaces
+  as stuck `INITIALIZING` at the next forced full redo/undo pass (failover)
+- Observed pattern, applicable to any manual-restore workflow (a single database add, a DR
+  rebuild, or a large migration): `seeding_mode = AUTOMATIC` is left on while databases are
+  restored manually `WITH NORECOVERY`, primaries brought online, and `ADD DATABASE` run; all
+  secondaries join and the AG reports healthy — but a database on the new secondary after a
+  later failover is found stuck in `INITIALIZING`/`RECOVERY_PENDING`
+
+**Fix options**
+1. Do not force failover onto a replica while a database shows `INITIALIZING` — wait for it to
+   reach `SYNCHRONIZING`/`SYNCHRONIZED` first if failover is plannable.
+2. If a database is already stuck post-failover, check `last_redone_time` and `redo_queue_size`
+   trend for any progress before concluding it is truly stuck rather than just slow.
+3. To recover a stuck database, either reconnect it as a secondary to a healthy primary so
+   normal log streaming resumes, or restore it from a log-backup chain to bring it current.
+4. If this followed a manual-restore operation, audit `seeding_mode_desc` on every replica
+   (`sqlag-review` F37) — `AUTOMATIC` left active alongside a manual-restore workflow is the
+   most likely root cause of a single inconsistent database surviving pre-failover health
+   checks undetected.
+5. Going forward, explicitly set `SEEDING_MODE = MANUAL` before any manual-restore operation,
+   and verify each database's synchronization state individually after `ADD DATABASE` rather
+   than relying solely on the AG-level healthy rollup.
+
+**Related checks:** H10 (Redo Queue Buildup — requires `SYNCHRONIZING`, does not cover
+`INITIALIZING`), H12 (Zero Redo Rate — same `SYNCHRONIZING` requirement), `sqlag-review` F37
+(automatic seeding left enabled during a manual-restore workflow — the configuration-level
+root cause)
+
+**Microsoft Learn reference:** [sys.dm_hadr_database_replica_states (Transact-SQL)](https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-hadr-database-replica-states-transact-sql) — `synchronization_state` value `4` = `INITIALIZING`, with the documented caution that forcing failover to a secondary in this state leaves the database unable to start as primary.
+
+
+---
+
 ## Quick Reference
 
 | Check | Category | Severity | Key Signal |
@@ -1026,10 +1084,11 @@ WHERE db_failover = 0;
 | H18 | Configuration | Warning | No replica has `failover_mode_desc = AUTOMATIC` |
 | H19 | Configuration | Info | Only one replica in the AG |
 | H20 | Configuration | Info | No listener configured |
-| H21 | Configuration | Info | `read_only_routing_url` NULL on readable secondary |
+| H21 | Retired | — | Merged into `sqlag-review` F15 (read-only routing URL absent) |
 | H22 | Configuration | Info | Automatic seeding in progress |
 | H23 | Modern — Contained AG | Warning | Contained system database not SYNCHRONIZED |
 | H24 | Modern — Cloud Witness | Critical | Cloud Witness quorum state abnormal |
 | H25 | Modern — Parallel Redo | Warning | Redo queue growing; redo rate < send rate |
 | H26 | Modern — RCSI | Warning | Readable secondary, RCSI disabled on primary |
 | H27 | Modern — DB Health | Info | `db_failover = 0` on HA-configured AG |
+| H28 | Seeding/Initialization | Critical | `synchronization_state_desc = INITIALIZING`, stuck or post-failover |

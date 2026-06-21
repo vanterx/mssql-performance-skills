@@ -1017,6 +1017,7 @@ Load `references/howto-*.md` guides when the user asks for step-by-step operatio
 - `/sqlerrorlog-review` — if ERRORLOG is available, check for TDE certificate errors, "Cannot find the server certificate" messages (A49), AG endpoint disconnection events related to cert expiry (A33), and TLS startup messages (A28, A59)
 - `/sqlhadr-review` — if AG DMV data is provided, check for AG endpoint authentication failures that may be certificate-related (A33)
 - `/sqlspn-review` — if Kerberos issues are suspected, check for SPN misconfiguration that may force NTLM fallback, weakening the encryption posture around transport authentication (complements A61)
+- `/sqlmigration-security-review` — dispatched here for DMK/SMK key hierarchy migration detail (backup/restore sequencing, AG replica registration) and certificate-backed object portability during a SQL Server migration
 - `/mssql-performance-review` — for mixed artifact bundles; routes encryption artifacts here automatically
 
 ---

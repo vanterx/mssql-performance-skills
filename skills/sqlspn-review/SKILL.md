@@ -382,5 +382,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
   (L10, L17) may have missing VNN or listener SPNs as root cause
 - **/sqlhadr-review** — AG listener replica disconnection (H1, H5) may be SPN-driven
   when the listener name has no registered SPN and clients fall back to NTLM or fail entirely
+- **/sqlmigration-security-review** — Dispatched here for service-account SPN and delegation
+  re-registration after a migration moves a service account or computer object to a new host
 
 - **mssql-performance-review** — Orchestrator that routes mixed artifacts to multiple specialised skills (this one included), runs an adversarial root-cause check, and produces a single consolidated report with evidence chain, risk-rated fixes, and rollback. Use when you have several artifact types together or describe a symptom without knowing which skill to run.

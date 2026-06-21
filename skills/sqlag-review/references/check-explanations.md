@@ -1,6 +1,6 @@
-# sqlag-review Check Explanations (F1–F35)
+# sqlag-review Check Explanations (F1–F37)
 
-Plain-English explanations for all 35 checks. Load this file when a user asks "explain check
+Plain-English explanations for all 37 checks. Load this file when a user asks "explain check
 F##", requests deeper fix options, or wants to understand why a threshold was chosen.
 
 ---
@@ -13,7 +13,7 @@ F##", requests deeper fix options, or wants to understand why a threshold was ch
 - [Category 4 — Backup Strategy (F19–F23)](#category-4--backup-strategy-f19f23)
 - [Category 5 — Endpoint Security (F24–F27)](#category-5--endpoint-security-f24f27)
 - [Category 6 — Distributed AG and Advanced Features (F28–F33)](#category-6--distributed-ag-and-advanced-features-f28f33)
-- [Category 7 — Operational Monitoring (F34–F35)](#category-7--operational-monitoring-f34f35)
+- [Category 7 — Operational Monitoring (F34–F37)](#category-7--operational-monitoring-f34f37)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -445,6 +445,10 @@ ALTER AVAILABILITY GROUP [ProdAG]
 1. Set `READ_ONLY_ROUTING_URL` on every secondary that allows read connections (see above)
 2. URL must use the SQL Server listener port (1433 default), NOT the AG endpoint port (5022)
 3. Use the FQDN, not the short hostname, for DNS resolution reliability
+
+**Note:** This is the canonical check for this condition. `sqlhadr-review` H21 covered the
+identical configuration gap and is retired in favor of this check, since both skills observed
+the same static `sys.availability_replicas` columns with no runtime-only distinguishing signal.
 
 **Related checks:** F16 (routing list on primary), F13 (secondary connections allowed)
 
@@ -929,7 +933,7 @@ Review T-SQL code or application layer for:
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F35)
+## Category 7 — Operational Monitoring (F34–F37)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 
@@ -997,6 +1001,115 @@ WHERE is_conformant = 0;
 
 ---
 
+### F36 — AG Database Count Exceeds Microsoft's Tested Scale Ceiling
+
+**What it means:** Microsoft documents that it has tested up to 10 availability groups and 100
+availability databases per physical machine, and explicitly notes this is not an enforced limit
+— but it is the boundary of what has actually been validated at scale. Beyond it, the realistic
+risks are worker thread exhaustion, slow responses from AG system views and DMVs, and stalled
+dispatcher dumps under failure conditions (not necessarily under steady-state load). A migration
+that consolidates a very large number of source databases (e.g., from an on-prem FCI or a set of
+standalone instances) into a single target AG can land well past this ceiling without anyone
+having load-tested that specific shape.
+
+**How to spot it:**
+```sql
+SELECT ag.name AS ag_name, COUNT(*) AS database_count
+FROM sys.availability_groups ag
+JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
+GROUP BY ag.name
+HAVING COUNT(*) > 100;
+```
+
+**Example:**
+```
+-- Problem: a migration consolidates 200 databases from a retiring on-prem FCI into one
+-- 4-replica AG (2 synchronous in the primary region, 2 asynchronous in the DR region).
+-- 200 > the 100-database ceiling Microsoft has actually tested — failover time, log-send
+-- queue fan-out, and DMV/system-view responsiveness under load are unvalidated at this scale.
+```
+
+**Fix options:**
+1. Before going live, load-test with a production-like workload under failure conditions
+   (not just steady-state) — specifically a forced failover with all databases active — and
+   measure failover duration and worker thread headroom.
+2. Monitor `sys.dm_os_wait_stats` for `HADR_*` and `DBMIRROR_*` wait categories during the test;
+   rising wait time under load is the leading indicator of thread or queue exhaustion.
+3. If the test surfaces stress, split the database set across multiple AGs hosted on the same
+   replica set — a single instance can host many availability groups, so this doesn't require
+   additional hardware, only additional AG definitions and listeners.
+4. Re-test after any split to confirm failover time for each AG independently meets the
+   migration's RTO target.
+
+**Related checks:** F7 (synchronous replica count — a related but distinct scale dimension),
+F9 (health check timeout — symptom surface for an overloaded instance)
+
+---
+
+### F37 — Automatic Seeding Left Enabled During a Manual-Restore Workflow
+
+**What it means:** `SEEDING_MODE` is not a one-time setting applied only when the AG or replica
+is created — SQL Server re-evaluates it dynamically every time a database is added to or
+discovered by the availability group. If an operator's migration plan is "restore each database
+manually `WITH NORECOVERY`, then `ADD DATABASE` to the AG," but a replica still has
+`seeding_mode_desc = AUTOMATIC` from AG creation defaults, SQL Server can launch its own
+seed attempt over the database mirroring endpoint at the same moment the operator's manual
+restore is in flight. Microsoft Learn confirms automatic seeding requires the secondary to be
+granted `CREATE ANY DATABASE` permission, and that toggling seeding mode "cancels any replicas
+that are currently seeding" — both indicate seeding state is actively managed at join time, not
+fixed at setup time. Whichever process — the manual restore or the automatic seed — loses the
+race can leave the secondary database with an inconsistent restore chain. The danger is that
+this inconsistency does not always surface immediately: the AG can report the database as
+`SYNCHRONIZED`/healthy for routine log streaming, with the underlying problem only exposed when
+a failover later forces a full redo/undo pass (see `sqlhadr-review` H28).
+
+**How to spot it:**
+```sql
+SELECT ar.replica_server_name, ar.seeding_mode_desc
+FROM sys.availability_replicas ar
+WHERE ar.seeding_mode_desc = 'AUTOMATIC';
+
+-- Cross-check for seeding activity that occurred without being requested
+SELECT * FROM sys.dm_hadr_automatic_seeding ORDER BY start_time DESC;
+```
+Treat this as a pre-migration checklist item, not just a reactive finding: if the migration
+runbook describes manual backup/restore, audit every target replica's `seeding_mode_desc`
+before the first `RESTORE ... WITH NORECOVERY` is run.
+
+**Example:**
+```
+-- Pattern: any workflow that restores a database manually WITH NORECOVERY, brings the
+-- primary online, and runs ADD DATABASE — applies equally to a one-off database add, a
+-- DR rebuild, or a large multi-database migration. seeding_mode was left at AUTOMATIC
+-- (the AG-creation default in most wizard paths) on one or more replicas. All secondaries
+-- join and the AG reports healthy at the time. Later, at the next failover, one of the
+-- affected databases on the new secondary is found stuck in INITIALIZING/RECOVERY_PENDING —
+-- consistent with an automatic seed attempt racing the manual restore on that replica.
+```
+
+**Fix options:**
+1. Before any manual restore, explicitly set every target replica to manual seeding:
+   `ALTER AVAILABILITY GROUP [ag] MODIFY REPLICA ON N'server' WITH (SEEDING_MODE = MANUAL)`.
+2. Confirm the change took effect on every replica: `SELECT replica_server_name,
+   seeding_mode_desc FROM sys.availability_replicas`.
+3. If `GRANT CREATE ANY DATABASE` was issued on any replica for an unrelated reason, reissue
+   `ALTER AVAILABILITY GROUP [ag] DENY CREATE ANY DATABASE` on replicas where automatic
+   database creation is not wanted.
+4. After each `ADD DATABASE`, verify the specific database's `synchronization_state_desc` and
+   `database_state_desc` on every secondary individually — don't rely solely on the AG-level
+   healthy rollup, since a single inconsistent database can be masked by N-1 healthy ones.
+5. Going forward for any future onboarding to the same AG, keep `SEEDING_MODE = MANUAL` set
+   unless automatic seeding is the deliberate, intended method for that addition.
+
+**Related checks:** `sqlhadr-review` H22 (automatic seeding observed in progress — benign when
+intentional), `sqlhadr-review` H28 (database stuck in INITIALIZING, the downstream symptom if
+this race already occurred), F11 (replica join state — a different DMV/concept; join completing
+does not mean seeding was clean)
+
+**Microsoft Learn reference:** [Use automatic seeding to initialize an Always On availability group](https://learn.microsoft.com/sql/database-engine/availability-groups/windows/automatic-seeding-secondary-replicas) — automatic seeding requires `GRANT CREATE ANY DATABASE` on the secondary, and `SEEDING_MODE` is re-evaluated dynamically whenever a database is added to or discovered by the group rather than fixed at AG/replica creation; changing seeding mode "cancels any replicas that are currently seeding."
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger Summary | Severity |
@@ -1036,3 +1149,5 @@ WHERE is_conformant = 0;
 | F33 | Distributed/Advanced | Cross-database dependencies on non-AG databases | Info |
 | F34 | Monitoring | No XE session for AG diagnostics | Info |
 | F35 | Monitoring | Listener IP is_conformant = 0 | Warning |
+| F36 | Monitoring | AG database count exceeds Microsoft's tested scale ceiling (>100) | Warning |
+| F37 | Monitoring | seeding_mode_desc = AUTOMATIC during a manual-restore workflow | Warning |
