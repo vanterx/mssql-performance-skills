@@ -108,6 +108,7 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 | [mcp-server/src/prompts.ts](mcp-server/src/prompts.ts) | MCP prompts: one per skill, accepts `{ input }` and returns analysis prompt via shared `buildAnalysisPrompt` |
 | [mcp-server/src/prompt-builder.ts](mcp-server/src/prompt-builder.ts) | Shared `buildAnalysisPrompt(skillName, skillContent, input)` helper used by both `tools.ts` and `prompts.ts` |
 | [.github/workflows/deploy-mcp.yml](.github/workflows/deploy-mcp.yml) | GitHub Actions CD — auto-deploys to Cloudflare Workers on push when `mcp-server/`, `skills/`, or `PERFORMANCE_TUNING_GUIDE.md` changes |
+| [.mcp.json](.mcp.json) | Project-scoped MCP server config — registers the `microsoft-learn` HTTP server (`https://learn.microsoft.com/api/mcp`) so every contributor gets Microsoft Learn validation tools without per-machine setup; see [.claude/docs/ms-learn-validation.md](.claude/docs/ms-learn-validation.md) |
 
 ### Examples
 

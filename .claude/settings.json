@@ -39,9 +39,6 @@
       "Bash(rm -rf *)",
       "Bash(sudo *)",
       "Bash(chmod 777 *)"
-    ],
-    "additionalDirectories": [
-      "C:\\Users\\tsx11\\.claude"
     ]
   },
   "hooks": {

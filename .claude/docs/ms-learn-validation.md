@@ -57,7 +57,7 @@ A skill, check, script, query, or architectural pattern is not considered comple
 
 ## How to Use the MS Learn MCP Tools
 
-Three tools are available (already whitelisted in `.claude/settings.json`):
+The server is registered project-wide in [`.mcp.json`](../../.mcp.json) (`microsoft-learn`, `https://learn.microsoft.com/api/mcp`), so every contributor gets it automatically — no per-machine global config needed. The three tools it exposes are whitelisted in `.claude/settings.json` so they don't prompt for permission:
 
 | Tool | Use When |
 |------|----------|
@@ -94,4 +94,4 @@ During a June 2026 audit of all 19 skills against Microsoft Learn MCP, ~25 inacc
 
 These errors were all catchable by a single `microsoft_docs_search` call. The policy prevents this class of regression from re-entering the repo.
 
-A second repo-wide pass (2026-06-10, all 20 skills / 697 checks) found and corrected ~57 further inaccuracies and added 7 `[Unverified]` markers — full audit trail with sources in [docs/ms-learn-validation-2026-06.md](../../docs/ms-learn-validation-2026-06.md). Highlights: BPE falsely declared removed in SQL 2022; a mathematically degenerate stall-ratio formula; auto-grow trace Duration units (ms, not µs); swapped resource-semaphore IDs; a nonexistent database-scoped configuration option (`PARALLEL_REDO_WORKER_POOL_SIZE`); wrong USE HINT names for disabling memory grant feedback; online index operations attributed to Standard edition.
+A second repo-wide pass (2026-06-10, all 20 skills / 697 checks) found and corrected ~57 further inaccuracies and added 7 `[Unverified]` markers — full audit trail with sources in [backlog/ms-learn-validation-2026-06.md](../../backlog/ms-learn-validation-2026-06.md). Highlights: BPE falsely declared removed in SQL 2022; a mathematically degenerate stall-ratio formula; auto-grow trace Duration units (ms, not µs); swapped resource-semaphore IDs; a nonexistent database-scoped configuration option (`PARALLEL_REDO_WORKER_POOL_SIZE`); wrong USE HINT names for disabling memory grant feedback; online index operations attributed to Standard edition.
