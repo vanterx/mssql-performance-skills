@@ -1,6 +1,6 @@
 ---
 name: sqlmigration-review
-description: Audits a SQL Server migration plan for version, edition, platform, and source-topology compatibility, then dispatches to sqlmigration-security-review, sqlmigration-objects-review, and other specialised skills for overlap areas. Use this skill when a user is planning, mid-flight on, or validating a SQL Server migration via backup/restore or log shipping/Always On seeding, mentions moving databases between instances/editions/versions, off a Failover Cluster Instance, or to Azure SQL, or asks "what breaks if I migrate to X". Trigger whenever migration readiness, cross-version compatibility, or cutover risk is the topic.
+description: Audits a SQL Server migration plan with 15 checks (Y1-Y15) for version, edition, platform, and source-topology compatibility, then dispatches to sqlmigration-security-review, sqlmigration-objects-review, and other specialised skills for overlap areas. Use this skill when a user is planning, mid-flight on, or validating a SQL Server migration via backup/restore or log shipping/Always On seeding, mentions moving databases between instances/editions/versions, off a Failover Cluster Instance, or to Azure SQL, or asks "what breaks if I migrate to X". Trigger whenever migration readiness, cross-version compatibility, or cutover risk is the topic.
 triggers:
   - /sqlmigration-review
   - /migration-review

@@ -214,6 +214,9 @@ Rules discovered during development that must be respected in every session.
 ### Skill authoring standard
 All new and modified skills must conform to the Anthropic skill-creator best practices. Reference: [`.claude/docs/skill-creator-best-practices.md`](.claude/docs/skill-creator-best-practices.md). Automated checks run in `scripts/verify-docs.sh` (Checks 21–25): line count ≤ 900 guideline (hard fail at 1000), description ≥ 30 words with trigger phrases, `triggers:` field present, no bare ALWAYS/NEVER/MUST in body.
 
+### Branch policy
+Every change must be made on a new branch — never commit directly to `main`. Before starting work, create a branch (e.g. `git checkout -b <type>/<short-description>`), commit there, and open a PR to merge into `main`. This keeps `main` clean and ensures all changes go through review. Branch names follow the commit `<type>` vocabulary (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`).
+
 ### Before committing
 Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
 
