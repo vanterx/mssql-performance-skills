@@ -1,6 +1,6 @@
 ---
 name: sqlmigration-objects-review
-description: Audits the operational-object migration plan for a SQL Server move — SQL Agent jobs/operators/alerts/proxies, linked servers, Database Mail, backup devices, custom error messages, server-level triggers, Extended Events sessions, and endpoints. Use this skill when a user is migrating a SQL Server instance and needs to carry over scheduled jobs, linked servers, mail profiles, or other instance-level objects, or asks "what instance objects do I need to recreate after migration." Trigger whenever operational-object portability during a migration is the topic; dispatched here from /sqlmigration-review for the operational-object family.
+description: Audits the operational-object migration plan for a SQL Server move with 16 checks (M1-M16) — SQL Agent jobs/operators/alerts/proxies, linked servers, Database Mail, backup devices, custom error messages, server-level triggers, Extended Events sessions, and endpoints. Use this skill when a user is migrating a SQL Server instance and needs to carry over scheduled jobs, linked servers, mail profiles, or other instance-level objects, or asks "what instance objects do I need to recreate after migration." Trigger whenever operational-object portability during a migration is the topic; dispatched here from /sqlmigration-review for the operational-object family.
 triggers:
   - /sqlmigration-objects-review
   - /migration-objects-review
