@@ -310,7 +310,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║         │ cluster stable, AG unhealthy?                      ║
 ║         ▼                                                    ║
 ║  /sqlhadr-review                                         ║
-║  28 checks — replica connectivity, redo queue, data loss     ║
+║  27 checks — replica connectivity, redo queue, data loss     ║
 ║  risk, log send rate, Contained AG, parallel redo            ║
 ║         │ AG config drift suspected?                         ║
 ║         ▼                                                    ║
@@ -1199,11 +1199,11 @@ Analyzes `sys.dm_hadr_*` DMV output to assess Always On Availability Group repli
 
 **Input:** Paste output from the `sys.dm_hadr_*` capture query in `SKILL.md` (run on the primary replica), a file path to saved query output, or describe the symptom ("secondary is 90 seconds behind", "replica shows NOT_HEALTHY").
 
-**Checks:** 28 total —
+**Checks:** 27 total (H1–H28, H21 retired) —
 - H1–H6 Replica connectivity and role: disconnected, resolving state, sync unhealthy, not synchronizing, last connect error, manual failover on sync-commit
 - H7–H11 Data loss and recovery time: estimated data loss, estimated recovery time, secondary lag, redo queue buildup, log send queue buildup
 - H12–H16 Throughput: zero redo/send rate, redo/send rate mismatch, multiple databases lagging, commit latency signal
-- H17–H22 Configuration: async replica in sync-expected position, no automatic failover replica, single replica AG, listener not configured, read-only routing not configured, automatic seeding active
+- H17–H20, H22 Configuration: async replica in sync-expected position, no automatic failover replica, single replica AG, listener not configured, automatic seeding active (H21 retired — read-only routing absence is now `sqlag-review` F15)
 - H23–H27 Modern AG features: Contained AG misrouted DML, Cloud Witness inaccessible, parallel redo worker saturation, read-scale secondary missing RCSI, AG without database-level health detection
 - H28 Seeding and initialization integrity: database stuck in INITIALIZING synchronization state, particularly after a failover
 
@@ -1226,14 +1226,14 @@ Audits Always On Availability Group configuration correctness across all layers 
 
 **Input:** Paste output from the catalog-view capture queries in `SKILL.md` (run on the primary replica), a file path, or a natural language description of the AG topology and any known issues.
 
-**Checks:** 35 total —
+**Checks:** 37 total —
 - F1–F6 Prerequisites: AlwaysOn feature disabled, database not in FULL recovery, endpoint missing/not started, endpoint encryption disabled, failure condition level at extremes, version mismatch
 - F7–F13 Replica design: excessive sync-commit replicas, WAN session timeout too low, aggressive health check timeout, backup priority ties, incomplete replica join, missing databases after join, no readable secondary
 - F14–F18 Listener/network: multi-subnet listener missing IP, read-only routing URL/list absent, non-default port, multi-subnet OFFLINE IP guidance
 - F19–F23 Backup strategy: automated backup preference NONE, backup jobs not preferred-replica-guarded, log backups not scheduled, backup compression disabled, PRIMARY preference with 3+ replicas
 - F24–F27 Endpoint security: Windows auth cross-domain, certificate expiring within 90 days, RC4 encryption, port documented as blocked
 - F28–F33 Distributed AG / advanced: instance name instead of listener URL, Basic AG with multiple databases or readable secondary, Contained AG Windows endpoint auth, distributed AG stuck sync-commit, cross-database dependencies
-- F34–F35 Operational monitoring: no Extended Events session for AG diagnostics, listener IP not conformant with Windows cluster
+- F34–F37 Operational monitoring: no Extended Events session for AG diagnostics, listener IP not conformant with Windows cluster, AG database-count scale ceiling exceeded, automatic seeding left active during a manual-restore workflow
 
 **Usage:**
 
@@ -1604,11 +1604,12 @@ Audits SQL Server migration compatibility — edition-gated features, version an
 
 **Input:** Pasted source/target server facts, output from [`skills/sqlmigration-review/scripts/capture-migration-facts.sql`](skills/sqlmigration-review/scripts/capture-migration-facts.sql), a natural-language description of the migration, or a file path to exported artifacts. Supports backup & restore and log shipping/Always On AG seeding as migration mechanisms; covers SQL Server 2008 R2 through 2022 plus Azure SQL Database/Managed Instance.
 
-**Checks:** 14 total —
+**Checks:** 15 total —
 - Y1–Y4 Version & edition compatibility: edition-gated feature in use on source, target version below source's compatibility-level floor, discontinued feature still referenced, collation mismatch between source database and target instance
 - Y5–Y7 Platform compatibility / Azure SQL: unsupported cross-database/instance-level feature targeting Azure SQL Database, Managed Instance feature gap, In-Memory OLTP without Azure SQL DB tier support
 - Y8–Y13 Migration mechanism readiness: backup chain gap blocking restore, recovery model mismatch for log shipping, AG seeding into a database already in an AG, distributed AG topology gap, Basic AG database-count/readable-secondary cap exceeded, Contained AG constraint violation
 - Y14 Lifecycle: source SQL Server version past Microsoft's end-of-support date
+- Y15 Source topology transition: Failover Cluster Instance source retired without a client redirect plan
 
 **Usage:**
 

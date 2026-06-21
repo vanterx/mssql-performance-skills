@@ -1,10 +1,17 @@
-[
-  {
-    "prompt": "We're migrating SalesDB to a new instance via backup/restore. After restoring, I ran sp_help_revlogin... actually we just manually re-created the 12 logins with CREATE LOGIN ... WITH PASSWORD on the new server using the same names and passwords. The app is now throwing permission errors for half the users. Review with /sqlmigration-security-review.",
-    "expected_behavior": "Should fire: J2 (manually typed CREATE LOGIN ... WITH PASSWORD generates new SIDs even with matching names/passwords) as root cause, and J1 (the resulting orphaned database users explain the permission errors). Should provide the sp_help_revlogin-based fix and explain that role membership (J6/J7) must also be re-applied after orphan repair, not assumed to carry over."
-  },
-  {
-    "prompt": "Migrating to Azure SQL Database. We have 8 SQL logins, 3 Windows-authenticated logins (DOMAIN\\reporting_svc, DOMAIN\\etl_svc, DOMAIN\\DBAdmins group), a SQL Server Credential for an Azure Storage SAS token used by a backup job, and a Service Broker certificate. Review with /sqlmigration-security-review.",
-    "expected_behavior": "Should fire: J3 (Windows logins have no Azure SQL Database equivalent — need Entra ID mapping), J10 (the credential's SAS token secret cannot be migrated via any system view — must be re-entered from the original secret store), J13 (Service Broker certificate must be backed up with private key and restored before dependent objects are created). Should note Service Broker itself has platform constraints on Azure SQL Database worth flagging separately. Should not assume the SQL logins (J1/J2) are problematic without more detail on how they'll be recreated."
-  }
-]
+{
+  "skill_name": "sqlmigration-security-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We're migrating SalesDB to a new instance via backup/restore. After restoring, I ran sp_help_revlogin... actually we just manually re-created the 12 logins with CREATE LOGIN ... WITH PASSWORD on the new server using the same names and passwords. The app is now throwing permission errors for half the users. Review with /sqlmigration-security-review.",
+      "expected_output": "Should fire: J2 (manually typed CREATE LOGIN ... WITH PASSWORD generates new SIDs even with matching names/passwords) as root cause, and J1 (the resulting orphaned database users explain the permission errors). Should provide the sp_help_revlogin-based fix and explain that role membership (J6/J7) must also be re-applied after orphan repair, not assumed to carry over.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Migrating to Azure SQL Database. We have 8 SQL logins, 3 Windows-authenticated logins (DOMAIN\\reporting_svc, DOMAIN\\etl_svc, DOMAIN\\DBAdmins group), a SQL Server Credential for an Azure Storage SAS token used by a backup job, and a Service Broker certificate. Review with /sqlmigration-security-review.",
+      "expected_output": "Should fire: J3 (Windows logins have no Azure SQL Database equivalent — need Entra ID mapping), J10 (the credential's SAS token secret cannot be migrated via any system view — must be re-entered from the original secret store), J13 (Service Broker certificate must be backed up with private key and restored before dependent objects are created). Should note Service Broker itself has platform constraints on Azure SQL Database worth flagging separately. Should not assume the SQL logins (J1/J2) are problematic without more detail on how they'll be recreated.",
+      "files": []
+    }
+  ]
+}
