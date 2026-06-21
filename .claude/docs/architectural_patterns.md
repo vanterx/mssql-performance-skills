@@ -66,7 +66,12 @@ triggers:
 | `skills/sqlencryption-review/` | `/sqlencryption-review` | A |
 | `skills/sqldbconfig-review/` | `/sqldbconfig-review` | B |
 | `skills/ssrstracelog-review/` | `/ssrstracelog-review` | G |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 21) |
+| `skills/sqlag-review/` | `/sqlag-review` | F |
+| `skills/sqlbootstraplog-review/` | `/sqlbootstraplog-review` | U |
+| `skills/sqlmigration-review/` | `/sqlmigration-review` | Y (dispatcher with own checks) |
+| `skills/sqlmigration-security-review/` | `/sqlmigration-security-review` | J |
+| `skills/sqlmigration-objects-review/` | `/sqlmigration-objects-review` | M |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 25 specialised skills) |
 
 ---
 
@@ -113,10 +118,15 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
 | `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B28 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
+| `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
+| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
+| `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
+| `J` | `sqlmigration-security-review` | Migration security-object portability | J1–J15 |
+| `M` | `sqlmigration-objects-review` | Migration operational-object portability | M1–M16 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 21 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to all 25 specialised skills | n/a |
 
-**Available prefixes for new skills:** F, J, M, Y.
+**Available prefixes for new skills:** see `CLAUDE.md`'s "Check ID prefixes — currently taken" table for the canonical, up-to-date list — choose any unused single uppercase letter not in that table.
 
 ---
 
