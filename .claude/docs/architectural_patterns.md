@@ -71,7 +71,7 @@ triggers:
 | `skills/sqlmigration-review/` | `/sqlmigration-review` | Y (dispatcher with own checks) |
 | `skills/sqlmigration-security-review/` | `/sqlmigration-security-review` | J |
 | `skills/sqlmigration-objects-review/` | `/sqlmigration-objects-review` | M |
-| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to all 25 specialised skills) |
+| `skills/mssql-performance-review/` | `/mssql-performance-review`, `/sql-triage` | (dispatcher — delegates to the 22 performance specialised skills; does not route to the 3 migration skills) |
 
 ---
 
@@ -124,7 +124,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `J` | `sqlmigration-security-review` | Migration security-object portability | J1–J15 |
 | `M` | `sqlmigration-objects-review` | Migration operational-object portability | M1–M16 |
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
-| (none) | `mssql-performance-review` | Dispatcher — delegates to all 25 specialised skills | n/a |
+| (none) | `mssql-performance-review` | Dispatcher — delegates to the 22 performance specialised skills (not the 3 migration skills — see `sqlmigration-review`'s Notes) | n/a |
 
 **Available prefixes for new skills:** see `CLAUDE.md`'s "Check ID prefixes — currently taken" table for the canonical, up-to-date list — choose any unused single uppercase letter not in that table.
 
