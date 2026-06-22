@@ -2586,10 +2586,10 @@ WHERE OrderDate >= '20240115'
 ### T72 — Missing SET NOCOUNT ON in Stored Procedure or Trigger
 
 **What it means**
-Without `SET NOCOUNT ON`, SQL Server sends a DONE_IN_PROC message to the client after every DML statement, reporting the number of rows affected. For procedures executing DML in loops or batches, this produces a stream of row-count messages.
+Without `SET NOCOUNT ON`, SQL Server sends a DONEINPROC message to the client after every DML statement, reporting the number of rows affected. For procedures executing DML in loops or batches, this produces a stream of row-count messages.
 
 **Why it matters**
-Some ADO and ODBC client libraries misinterpret these DONE_IN_PROC messages as empty result sets, causing "there is already an open DataReader" errors or unexpected result-set handling. For very high-frequency procedures the accumulated network traffic of row-count messages is measurable.
+Some ADO and ODBC client libraries misinterpret these DONEINPROC messages as empty result sets, causing "there is already an open DataReader" errors or unexpected result-set handling. For very high-frequency procedures the accumulated network traffic of row-count messages is measurable.
 
 **How to spot it**
 ```sql
@@ -2598,7 +2598,7 @@ CREATE PROCEDURE dbo.ProcessOrders
 AS
 BEGIN
     UPDATE dbo.Orders SET Status = 'Processing' WHERE Status = 'Queued';
-    -- Sends a row-count DONE_IN_PROC message to client after the UPDATE
+    -- Sends a row-count DONEINPROC message to client after the UPDATE
 END
 ```
 

@@ -352,12 +352,15 @@ participates at the AG level but is not protecting the missing databases.
 
 **How to spot it:**
 ```sql
--- Run on primary; compare database count per replica vs primary
-SELECT ar.replica_server_name, COUNT(adc.database_id) AS db_count
-FROM sys.availability_replicas ar
-LEFT JOIN sys.availability_databases_cluster adc ON ar.group_id = adc.ag_id
-GROUP BY ar.replica_server_name;
--- Lower count on a secondary = missing databases
+-- Run ON THE SECONDARY replica. is_database_joined = 0 means the database is not
+-- yet joined to the AG on this replica.
+SELECT database_name, is_database_joined
+FROM sys.dm_hadr_database_replica_cluster_states drcs
+JOIN sys.dm_hadr_availability_replica_states ars ON drcs.replica_id = ars.replica_id
+WHERE ars.is_local = 1 AND drcs.is_database_joined = 0;
+-- Do NOT compare sys.availability_databases_cluster row counts between replicas —
+-- that view returns the same cluster-wide list on every replica and cannot detect
+-- a database that is unjoined on one specific replica.
 ```
 
 **Fix options:**
@@ -814,12 +817,12 @@ existing databases to be removed.
 
 **How to spot it:**
 ```sql
-SELECT ag.name, ag.basic_features, COUNT(adc.database_id) AS db_count
+SELECT ag.name, ag.basic_features, COUNT(adc.group_database_id) AS db_count
 FROM sys.availability_groups ag
-JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.ag_id
+JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
 WHERE ag.basic_features = 1
 GROUP BY ag.name, ag.basic_features
-HAVING COUNT(adc.database_id) > 1;
+HAVING COUNT(adc.group_database_id) > 1;
 ```
 
 **Fix options:**
@@ -1016,11 +1019,19 @@ having load-tested that specific shape.
 
 **How to spot it:**
 ```sql
-SELECT ag.name AS ag_name, COUNT(*) AS database_count
-FROM sys.availability_groups ag
-JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
-GROUP BY ag.name
-HAVING COUNT(*) > 100;
+-- Per PHYSICAL MACHINE aggregate, NOT per-AG. Run on the instance.
+-- AG databases this instance hosts across ALL availability groups:
+SELECT COUNT(*) AS local_ag_database_count
+FROM sys.dm_hadr_database_replica_cluster_states drcs
+JOIN sys.dm_hadr_availability_replica_states ars ON drcs.replica_id = ars.replica_id
+WHERE ars.is_local = 1;
+
+-- AGs this instance participates in:
+SELECT COUNT(DISTINCT group_id) AS local_ag_count
+FROM sys.dm_hadr_availability_replica_states
+WHERE is_local = 1;
+-- > 100 databases OR > 10 AGs on one physical machine = past Microsoft's tested ceiling.
+-- A per-AG count (GROUP BY ag.name) is the wrong scope — the limit is per machine.
 ```
 
 **Example:**

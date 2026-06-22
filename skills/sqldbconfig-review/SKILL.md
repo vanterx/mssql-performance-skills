@@ -187,7 +187,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'awe enabled' config_value = 1`
 - **Severity:** Warning
-- **Fix:** The `awe enabled` **configuration option** is a SQL Server 2005/2008-era, 32-bit-only switch for addressing memory above 4 GB via Address Windowing Extensions; on 64-bit instances the *option* is ignored (no effect), and it was removed entirely in SQL Server 2012 (16.x and later don't expose it). So `config_value = 1` means the instance is SQL Server 2008 R2 or earlier — set it off and, more importantly, plan to upgrade off an out-of-support version: `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`. Note: do not confuse this option with the AWE **API**, which *is* still used by 64-bit SQL Server as the "locked pages" mechanism when Lock Pages in Memory is granted (see B8) — this check targets only the obsolete config switch.
+- **Fix:** The `awe enabled` **configuration option** is a SQL Server 2005/2008-era, 32-bit-only switch for addressing memory above 4 GB via Address Windowing Extensions; on 64-bit instances the *option* is ignored (no effect), and it was removed entirely in SQL Server 2012 (11.x) — the option is absent from the `sp_configure` list in all later versions. So `config_value = 1` means the instance is SQL Server 2008 R2 or earlier — set it off and, more importantly, plan to upgrade off an out-of-support version: `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`. Note: do not confuse this option with the AWE **API**, which *is* still used by 64-bit SQL Server as the "locked pages" mechanism when Lock Pages in Memory is granted (see B8) — this check targets only the obsolete config switch.
 
 ### B10 — Auto-Shrink Enabled
 
