@@ -680,7 +680,7 @@ Query Store tracks three execution types (the `execution_type` column in `sys.qu
 **What it means:** Query Store is not capturing query data. This could be because it was explicitly disabled, or because it hit the size cap and switched to READ_ONLY mode.
 
 **How to spot it:**
-- From Query C: `actual_state_desc = 'READ_ONLY'` OR `capture_mode_desc = 'NONE'` OR `actual_state_desc = 'OFF'`
+- From Query C: `actual_state_desc = 'READ_ONLY'` OR `query_capture_mode_desc = 'NONE'` OR `actual_state_desc = 'OFF'`
 
 **Example (problem + fix):**
 ```

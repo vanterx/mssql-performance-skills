@@ -67,7 +67,7 @@ Key components:
 | Pending state duration | >120 sec → Critical; >30 sec → Warning | L12 |
 | Lease timeout | 20 sec (SQL Server default LeaseTimeout — distinct from HealthCheckTimeout) | L1 |
 | Health check timeout | 30 sec (SQL Server default HealthCheckTimeout for sp_server_diagnostics) | L2 |
-| Heartbeat timeout | 5 missed heartbeats (WSFC default SameSubnetThreshold and CrossSubnetThreshold both default to 5) | L20 |
+| Heartbeat timeout | Missed heartbeats reach the threshold — WSFC default SameSubnetThreshold/CrossSubnetThreshold is **version-dependent**: 20 (Windows Server 2019), 10 (WS2016), 5 (WS2008–2012 R2) | L20 |
 
 ---
 
@@ -163,7 +163,7 @@ These checks fire on SQL Server AG-specific resource events within the WSFC log 
 ### L20 — Heartbeat Timeout
 - **Trigger:** Log contains `missed heartbeats`, `heartbeat timeout`, `node is not responding`, or `connectivity timeout between nodes` in `[NODE]` or `[NM]` context — particularly when the count of missed heartbeats reaches or exceeds the CrossSubnetThreshold or SameSubnetThreshold (see Thresholds Reference)
 - **Severity:** Critical if the node is subsequently evicted; Warning if heartbeats resume before eviction
-- **Fix:** Node heartbeats are the cluster's mechanism for detecting node failures. Missed heartbeats are caused by: (1) network congestion or latency spike on the heartbeat network; (2) node CPU starvation (100% CPU prevents the heartbeat thread from running); (3) memory pressure causing paging on the heartbeat buffer. Tune `CrossSubnetDelay` and `CrossSubnetThreshold` for geographically distributed clusters (higher latency = higher threshold needed). Do not tune same-subnet thresholds unless explicitly recommended by Microsoft — reducing them increases false evictions.
+- **Fix:** Node heartbeats are the cluster's mechanism for detecting node failures. The default `SameSubnetThreshold`/`CrossSubnetThreshold` depends on the Windows Server version — **20** heartbeats on Windows Server 2019, **10** on WS2016, **5** on WS2008–2012 R2 (with default 1 s delay). Missed heartbeats are caused by: (1) network congestion or latency spike on the heartbeat network; (2) node CPU starvation (100% CPU prevents the heartbeat thread from running); (3) memory pressure causing paging on the heartbeat buffer. Tune `CrossSubnetDelay` and `CrossSubnetThreshold` for geographically distributed clusters (higher latency = higher threshold needed). Do not tune same-subnet thresholds unless explicitly recommended by Microsoft — reducing them increases false evictions.
 ### L21 — Witness Access Failure
 - **Trigger:** Log contains disk witness, file share witness, or cloud witness failure — phrases such as `witness resource failed`, `disk witness offline`, `cannot access file share witness`, or `cloud witness` errors in `[RES]` or `[RCM]`
 - **Severity:** Critical — without the witness, an even-node cluster cannot achieve quorum after any single node failure
@@ -199,7 +199,7 @@ These checks fire on SQL Server AG-specific resource events within the WSFC log 
 ### L27 — Azure Arc-Managed Cluster Agent Disconnect
 - **Trigger:** Log contains `ArcSqlExtension` or `HybridConnectivity` entries with `disconnected` or `heartbeat failure` — any SQL Server version with Azure Arc agent installed on cluster nodes
 - **Severity:** Warning — the Azure Arc agent on one or more cluster nodes has lost contact with the Azure control plane; Arc-based management features (policy, Defender, automated backups) are not functioning on those nodes
-- **Fix:** On each cluster node: `Get-Service -Name 'himds','ArcSqlInstanceExtension'`. Check for service restarts in the Windows Event Log. Verify outbound connectivity to `*.arc.azure.com:443`. Re-run `azcmagent connect` if the MSI certificate has expired.
+- **Fix:** On each cluster node check the Arc agent (`himds`) and the SQL Server extension service. The extension's Windows service display name is **Microsoft SQL Server Extension Service** and it runs as `NT SERVICE\SqlServerExtension` (on Linux the service is named `SqlServerExtension`) — there is no `ArcSqlInstanceExtension` service. Example: `Get-Service -Name 'himds'; Get-Service -DisplayName 'Microsoft SQL Server Extension Service'`. Check for service restarts in the Windows Event Log. Verify outbound connectivity to `*.arc.azure.com:443` and `*.<region>.arcdataservices.com:443`. Re-run `azcmagent connect` if the managed-identity certificate has expired.
 
 ### L28 — Contained AG: Contained System Database Offline
 - **Trigger:** Log contains entries showing a Contained AG's contained system database resource (typically named `<ag_name>_master`) in `FAILED` or `OFFLINE` state — SQL 2022+ only

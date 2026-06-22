@@ -58,8 +58,11 @@ WHERE dp.type IN ('S','U','G');
 
 SELECT name, credential_identity FROM sys.credentials;
 
-SELECT name, certificate_id, expiry_date, pvt_key_encryption_type_desc
-FROM sys.certificates WHERE is_active_for_begin_dialog = 0;
+-- TDE encryptor certs also have is_active_for_begin_dialog = 0, so anti-join the DEK view to drop them
+SELECT c.name, c.certificate_id, c.expiry_date, c.pvt_key_encryption_type_desc
+FROM sys.certificates c
+WHERE NOT EXISTS (SELECT 1 FROM sys.dm_database_encryption_keys dek
+                  WHERE dek.encryptor_thumbprint = c.thumbprint);
 ```
 
 ## Category 1 — Login Portability

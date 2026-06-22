@@ -1085,8 +1085,9 @@ Test-NetConnection -ComputerName myclusterwitness.blob.core.windows.net -Port 44
 **What it means:**
 Azure Arc extends Azure management capabilities (Defender for SQL, automated backups, Azure
 Policy, monitoring) to SQL Server instances running outside of Azure. The Arc agent (himds)
-and its extensions (ArcSqlInstanceExtension, HybridConnectivity) run as Windows services on
-each cluster node. When CLUSTER.LOG records Arc agent disconnection or heartbeat failure
+and the SQL extension — Windows service display name **Microsoft SQL Server Extension Service**,
+running as `NT SERVICE\SqlServerExtension` (named `SqlServerExtension` on Linux); there is no
+`ArcSqlInstanceExtension` service — run as Windows services on each cluster node. When CLUSTER.LOG records Arc agent disconnection or heartbeat failure
 events, the node has lost contact with the Azure control plane. While Arc disconnect does not
 directly cause SQL Server or AG outages, it means Defender for SQL threat detection, automated
 backup policies, and compliance enforcement are silently not functioning.
@@ -1113,16 +1114,17 @@ Problem — Arc agent services stopped after Windows update reboot:
 Fix — check Arc service status and outbound connectivity:
 ```powershell
 # Check service health on each node:
-Get-Service -Name 'himds','ArcSqlInstanceExtension' | Select Name, Status, StartType
+Get-Service -Name 'himds' | Select Name, Status, StartType
+Get-Service -DisplayName 'Microsoft SQL Server Extension Service' | Select Name, Status, StartType
 # Restart if stopped:
-Start-Service himds; Start-Service ArcSqlInstanceExtension
+Start-Service himds; Start-Service (Get-Service -DisplayName 'Microsoft SQL Server Extension Service').Name
 # Verify outbound HTTPS to Arc endpoints:
 Test-NetConnection -ComputerName management.azure.com -Port 443
 Test-NetConnection -ComputerName eas.his.arc.azure.com -Port 443
 ```
 
 **Fix options:**
-1. Check service status for `himds` and `ArcSqlInstanceExtension` on each node — services may have failed to restart after a Windows update reboot.
+1. Check service status for `himds` and the **Microsoft SQL Server Extension Service** (`NT SERVICE\SqlServerExtension`) on each node — services may have failed to restart after a Windows update reboot.
 2. Review Windows Event Log (Application) for Arc extension crash events or installation errors.
 3. Verify outbound connectivity to `*.arc.azure.com:443` and `*.his.arc.azure.com:443` — proxy settings or firewall rules may block Arc endpoints.
 4. If the agent is repeatedly disconnecting, review the Arc extension version and apply available updates via Azure Portal > Arc-enabled SQL Server > Extensions.

@@ -161,7 +161,7 @@ SELECT
     start_date,
     expiry_date,
     DATEDIFF(DAY, GETDATE(), expiry_date) AS days_until_expiry,
-    CERTPROPERTY(name, 'Algorithm')       AS sig_algorithm
+    NULL                                  AS sig_algorithm  -- CERTPROPERTY has no 'Algorithm' property; verify via certutil / Get-ChildItem Cert:\ | Select SignatureAlgorithm
 FROM sys.certificates
 WHERE name NOT LIKE '##%'
 ORDER BY expiry_date;

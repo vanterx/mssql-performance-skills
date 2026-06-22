@@ -14,7 +14,7 @@ SalesDB        SELECT d.DepartmentId, d.Name, SUM(e.Salary)  dbo.DeptSalaryR  52
 SalesDB        DELETE FROM dbo.SessionLog WHERE LastAccess   NULL             6872      0xE1B4D7F   1           48000             0                 0           1                   0                   0                   0                    1                  0                0           0           2025-05-03 14:22:00.0000000 +00:00  0              0                    NULL                            0              0                 0
 
 -- Query Store Configuration (Query C)
-database_name  desired_state_desc  actual_state_desc  readonly_reason  current_storage_size_mb  max_storage_size_mb  flush_interval_seconds  interval_length_minutes  max_plans_per_query  stale_query_threshold_days  size_based_cleanup_mode_desc  wait_stats_capture_mode_desc  capture_mode_desc  query_capture_mode_desc
-SalesDB        READ_WRITE          READ_WRITE          0                892                      1024                 900                      60                       200                  30                          AUTO                          OFF                           AUTO               ALL
+database_name  desired_state_desc  actual_state_desc  readonly_reason  current_storage_size_mb  max_storage_size_mb  flush_interval_seconds  interval_length_minutes  max_plans_per_query  stale_query_threshold_days  size_based_cleanup_mode_desc  wait_stats_capture_mode_desc  query_capture_mode_desc
+SalesDB        READ_WRITE          READ_WRITE          0                892                      1024                 900                      60                       200                  30                          AUTO                          OFF                           ALL
 
 -- Note: sys.query_store_wait_stats returns empty — WAIT_STATS_CAPTURE_MODE = OFF

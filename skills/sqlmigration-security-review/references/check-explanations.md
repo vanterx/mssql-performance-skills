@@ -398,8 +398,11 @@ leaves that dependency unsatisfiable on the target.
 
 **How to spot it:**
 ```sql
-SELECT name, expiry_date, pvt_key_encryption_type_desc FROM sys.certificates
-WHERE is_active_for_begin_dialog = 0; -- excludes TDE-only certs typically flagged elsewhere
+-- is_active_for_begin_dialog = 0 does NOT exclude TDE certs (they share that value);
+-- anti-join sys.dm_database_encryption_keys on the thumbprint to drop the DEK encryptor cert.
+SELECT c.name, c.expiry_date, c.pvt_key_encryption_type_desc FROM sys.certificates c
+WHERE NOT EXISTS (SELECT 1 FROM sys.dm_database_encryption_keys dek
+                  WHERE dek.encryptor_thumbprint = c.thumbprint);
 ```
 
 **Example:**

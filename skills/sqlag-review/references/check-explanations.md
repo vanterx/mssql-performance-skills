@@ -96,7 +96,7 @@ exchange log blocks. Without it, or if it is stopped, replicas cannot communicat
 
 **How to spot it:**
 ```sql
-SELECT name, state_desc, port, encryption_desc
+SELECT name, state_desc, port, is_encryption_enabled, encryption_algorithm_desc
 FROM sys.database_mirroring_endpoints;
 -- No rows = endpoint missing; state_desc != 'STARTED' = stopped
 ```
@@ -136,14 +136,16 @@ interception.
 
 **How to spot it:**
 ```sql
-SELECT encryption_desc, encryption_algorithm_desc
+SELECT is_encryption_enabled, encryption_algorithm_desc
 FROM sys.database_mirroring_endpoints;
--- 'DISABLED' = Critical; 'SUPPORTED' = Warning
+-- is_encryption_enabled = 0 = DISABLED (Critical)
+-- is_encryption_enabled = 1 AND encryption_algorithm_desc lists NONE (e.g. 'NONE, AES') = SUPPORTED/negotiable (Warning)
+-- there is no encryption_desc column; SUPPORTED vs REQUIRED is encoded by whether NONE appears in the algorithm desc
 ```
 
 **Example:**
 ```sql
--- Problem: encryption_desc = 'SUPPORTED'
+-- Problem: is_encryption_enabled = 1, encryption_algorithm_desc = 'NONE, AES' (SUPPORTED/negotiable)
 -- Fix: Enforce AES on all replicas (change all replicas before enforcement takes effect)
 ALTER ENDPOINT [Hadr_endpoint]
   FOR DATABASE_MIRRORING (ENCRYPTION = REQUIRED ALGORITHM AES);
@@ -151,7 +153,7 @@ ALTER ENDPOINT [Hadr_endpoint]
 
 **Fix options:**
 1. Set `ENCRYPTION = REQUIRED ALGORITHM AES` on every replica endpoint — must be applied to all before enforcement works (both sides must agree on REQUIRED)
-2. After changing all replicas, verify: `SELECT encryption_desc FROM sys.database_mirroring_endpoints` should show `REQUIRED`
+2. After changing all replicas, verify: `SELECT is_encryption_enabled, encryption_algorithm_desc FROM sys.database_mirroring_endpoints` should show `1` and `AES` (with no `NONE`)
 
 **Related checks:** F26 (RC4 algorithm), F3 (endpoint must be started for this change)
 

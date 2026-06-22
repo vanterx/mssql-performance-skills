@@ -29,7 +29,7 @@ SELECT name, email_address, pager_address FROM msdb.dbo.sysoperators;
 SELECT name, message_id, severity FROM msdb.dbo.sysalerts;
 
 -- Query 7: Linked servers
-SELECT name, product, provider, data_source, is_linked, collation_compatible
+SELECT name, product, provider, data_source, is_linked, is_collation_compatible
 FROM sys.servers WHERE is_linked = 1;
 
 -- Query 8: Database Mail profile and account
@@ -51,6 +51,8 @@ FROM sys.server_triggers;
 SELECT name FROM sys.server_event_sessions
 WHERE name NOT IN ('system_health', 'AlwaysOn_health', 'telemetry_xevents');
 
--- Query 13: Non-AG endpoints
+-- Query 13: Non-AG, user-defined endpoints
+-- endpoint_id > 65535 excludes the built-in system endpoints (TSQL Default TCP/Named Pipes/VIA,
+-- Dedicated Admin Connection) so only endpoints an admin actually created are reported.
 SELECT name, type_desc, state_desc FROM sys.endpoints
-WHERE type_desc NOT IN ('DATABASE_MIRRORING');
+WHERE type_desc NOT IN ('DATABASE_MIRRORING') AND endpoint_id > 65535;

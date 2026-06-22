@@ -148,10 +148,15 @@ Evaluate these first. A disconnected or resolving replica supersedes all other f
 - **Trigger:** `synchronization_state_desc = NOT SYNCHRONIZING` AND `availability_mode_desc
   = SYNCHRONOUS_COMMIT`
 - **Severity:** Critical
-- **Fix:** A synchronous-commit secondary that is not synchronizing blocks commits on the
-  primary (the primary waits for acknowledgement). Restart HADR transport if the secondary
-  is otherwise healthy: `ALTER DATABASE [db] SET HADR RESUME`. Check for full transaction
-  log on the secondary — a full log halts redo and breaks synchronization.
+- **Fix:** Clarify the behaviour: while a sync-commit secondary is *connected but lagging*
+  (`SYNCHRONIZING`), commits on the primary incur added latency waiting for the secondary to
+  harden the log. Once the secondary disconnects or its session times out and it moves to
+  `NOT SYNCHRONIZING`/`NOT SYNCHRONIZED`, the primary **stops waiting** and commits proceed —
+  per MS Learn, "the primary stops waiting for confirmation… so a failed synchronous-commit
+  secondary doesn't prevent log hardening on the primary." The real exposure is loss of
+  synchronous HA: a primary failure now risks data loss until sync is restored. Resume the
+  secondary if otherwise healthy: `ALTER DATABASE [db] SET HADR RESUME`. Check for a full
+  transaction log on the secondary — a full log halts redo and breaks synchronization.
 ### H5 — Last Connect Error Present
 - **Trigger:** `last_connect_error_number != 0`
 - **Severity:** Warning
@@ -328,7 +333,7 @@ These checks surface AG topology gaps that may not cause immediate problems but 
 ### H23 — Contained AG Misrouted DML
 - **Trigger:** AG has `is_contained = 1` in `sys.availability_groups` AND a contained system database (e.g., `master`, `msdb` within the AG) shows `synchronization_state_desc != SYNCHRONIZED` — SQL 2022+ only; skip if SQL version < 2022
 - **Severity:** Warning — Contained AG system databases are not synchronized; DML operations that depend on contained system objects (logins, jobs, agent alerts) may fail on the secondary or after failover
-- **Fix:** Investigate why the contained system database is not synchronized: `SELECT * FROM sys.dm_hadr_database_replica_states WHERE database_id = DB_ID('master')`. Resolve blocking transactions and confirm redo queue size. Review `sys.availability_groups` for `contained_system_databases` column to confirm the configuration is intentional.
+- **Fix:** Investigate why the contained system database is not synchronized: `SELECT * FROM sys.dm_hadr_database_replica_states WHERE database_id = DB_ID('master')`. Resolve blocking transactions and confirm redo queue size. Confirm the contained-AG configuration is intentional via the `is_contained` column in `sys.availability_groups` (= 1 for a contained AG) — there is no `contained_system_databases` column.
 
 ### H24 — Cloud Witness Inaccessible
 - **Trigger:** `sys.dm_hadr_cluster` shows `quorum_type_desc = CLOUD_WITNESS` AND `quorum_state_desc != 'NORMAL_QUORUM'` — Windows Server 2016+ (Cloud Witness requires WS2016 or later); valid `quorum_state_desc` values are `UNKNOWN_QUORUM_STATE`, `NORMAL_QUORUM`, `FORCED_QUORUM`
@@ -336,7 +341,7 @@ These checks surface AG topology gaps that may not cause immediate problems but 
 - **Fix:** Verify connectivity to the Azure Blob Storage endpoint used as the Cloud Witness: `Test-NetConnection -ComputerName <storageaccount>.blob.core.windows.net -Port 443`. Check the Storage Account access key has not been rotated. Validate the Failover Cluster Manager shows the Cloud Witness online. If the witness is permanently unavailable, switch to a File Share Witness or another Cloud Witness account.
 
 ### H25 — Parallel Redo Worker Saturation
-- **Trigger:** `sys.dm_hadr_physical_seeding_stats` or `sys.dm_exec_requests` shows redo threads at max AND `log_send_queue_size` continues growing on any secondary — SQL 2016+ parallel redo; skip if SQL version < 2016
+- **Trigger:** On the secondary, `sys.dm_exec_requests` shows redo workers (`command` IN ('PARALLEL REDO TASK', 'DB STARTUP')) busy/blocked AND `redo_queue_size` / `log_send_queue_size` continues growing — SQL 2016+ parallel redo; skip if SQL version < 2016. (Do **not** use `sys.dm_hadr_physical_seeding_stats` here — that DMV reports automatic-seeding progress, not redo threads.) Corroborate with the `sqlserver.lock_redo_blocked` XE and the `Redo blocked/sec` counter.
 - **Severity:** Warning — Parallel Redo workers on the secondary are saturated; the redo queue will grow until the primary throttles log send, increasing recovery time and secondary lag
 - **Fix:** Parallel redo threads are allocated automatically (up to 100 instance-wide on SQL 2016-2019; workload-based on SQL 2022+) - confirm the database is not stuck in single-threaded redo and that redo is not blocked by readers (sqlserver.lock_redo_blocked XE, Redo blocked/sec counter). Trace flag 3459 disables parallel redo if serial redo proves faster under contention. Check for lock contention on the secondary: `SELECT * FROM sys.dm_exec_requests WHERE command LIKE '%REDO%'`. Review large transactions on the primary that generate disproportionate redo workload and consider breaking them into smaller batches.
 

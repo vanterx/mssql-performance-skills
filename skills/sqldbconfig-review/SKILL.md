@@ -187,7 +187,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'awe enabled' config_value = 1`
 - **Severity:** Warning
-- **Fix:** AWE (Address Windowing Extensions) is a legacy 32-bit mechanism for accessing memory above 4 GB. It has no effect on 64-bit SQL Server and is deprecated. `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`
+- **Fix:** The `awe enabled` **configuration option** is a SQL Server 2005/2008-era, 32-bit-only switch for addressing memory above 4 GB via Address Windowing Extensions; on 64-bit instances the *option* is ignored (no effect), and it was removed entirely in SQL Server 2012 (16.x and later don't expose it). So `config_value = 1` means the instance is SQL Server 2008 R2 or earlier — set it off and, more importantly, plan to upgrade off an out-of-support version: `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`. Note: do not confuse this option with the AWE **API**, which *is* still used by 64-bit SQL Server as the "locked pages" mechanism when Lock Pages in Memory is granted (see B8) — this check targets only the obsolete config switch.
 
 ### B10 — Auto-Shrink Enabled
 
@@ -265,7 +265,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sys.dm_server_services.instant_file_initialization_enabled = 'N'` for the SQL Server service (column is nvarchar(1): 'Y' = enabled, 'N' = disabled; applies SQL 2012 SP4, SQL 2014 SP3, SQL 2016 SP1+)
 - **Severity:** Warning
-- **Fix:** Without IFI, SQL Server must zero-initialise new data file space before use, causing multi-second or multi-minute stalls during auto-growth events and `RESTORE DATABASE`. Grant the SQL Server service account the `SE_MANAGE_VOLUME_NAME` Windows privilege ("Perform volume maintenance tasks" in Local Security Policy), then restart the SQL Server service. IFI does not apply to log files (they always require zeroing). Verify after restart: `SELECT instant_file_initialization_enabled FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';`
+- **Fix:** Without IFI, SQL Server must zero-initialise new data file space before use, causing multi-second or multi-minute stalls during auto-growth events and `RESTORE DATABASE`. Grant the SQL Server service account the `SE_MANAGE_VOLUME_NAME` Windows privilege ("Perform volume maintenance tasks" in Local Security Policy), then restart the SQL Server service. IFI applies to data files at any version; for **transaction log** files it historically did not apply (logs were always zeroed), but starting with SQL Server 2022 (16.x) — all editions, plus Azure SQL Database/MI — transaction log autogrowth events **up to 64 MB** also benefit from IFI (growth events larger than 64 MB still zero, and the 64 MB log benefit does not require the `SE_MANAGE_VOLUME_NAME` privilege). Verify after restart: `SELECT instant_file_initialization_enabled FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';`
 
 ### B23 — TempDB File Count Below Recommended
 

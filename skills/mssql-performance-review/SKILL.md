@@ -64,7 +64,7 @@ Content-based, not extension-reliant:
 | `query_store_*` table refs, plan_id / runtime_stats columns | sqlquerystore-review |
 | `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | sqlprocstats-review |
 | `replica_id`, `synchronization_state` columns | sqlhadr-review |
-| `sys.availability_groups` columns (`failure_condition_level`, `health_check_timeout`, `automated_backup_preference_desc`, `basic_features`, `is_contained`), `sys.availability_replicas` with `backup_priority` / `session_timeout` / `seeding_mode_desc`, `sys.database_mirroring_endpoints`, `sys.availability_group_listener_ip_addresses` with `is_conformant` | sqlag-review |
+| `sys.availability_groups` columns (`failure_condition_level`, `health_check_timeout`, `automated_backup_preference_desc`, `basic_features`, `is_contained`), `sys.availability_replicas` with `backup_priority` / `session_timeout` / `seeding_mode_desc`, `sys.database_mirroring_endpoints`, `sys.availability_group_listeners` with `is_conformant` (the per-IP `sys.availability_group_listener_ip_addresses` view carries IP/state, not `is_conformant`) | sqlag-review |
 | `RES_EVENT`, `00000a1c` GUID prefixes, `Cluster.Resource` lines | sqlclusterlog-review |
 | `spid` prefixes with `Logon`, `Server`, `Backup` markers | sqlerrorlog-review |
 | `MSSQLSvc/`, `setspn` output, `Existing SPN found for` | sqlspn-review |

@@ -117,8 +117,8 @@ SELECT
     state_desc,
     role_desc,
     connection_auth_desc,
+    is_encryption_enabled,
     encryption_algorithm_desc,
-    encryption_desc,
     port
 FROM sys.database_mirroring_endpoints;
 ```
@@ -163,7 +163,7 @@ ORDER BY expiry_date;
 | Certificate expiry — near | < 90 days → Warning | F25 |
 | Certificate expiry — imminent | < 30 days → Critical | F25 |
 | Backup priority tie | All eligible secondaries at 50 with SECONDARY preference → Warning | F10 |
-| AG database count | > 100 databases in one AG → Warning | F36 |
+| AG database count | > 100 databases per physical machine (all AGs aggregated) → Warning | F36 |
 
 ---
 
@@ -198,10 +198,13 @@ Evaluate these first. Missing prerequisites prevent AG operation entirely.
   If the endpoint exists but is stopped: `ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED;`
 
 ### F4 — Endpoint Encryption Disabled or Downgrade-Permitted
-- **Trigger:** `sys.database_mirroring_endpoints.encryption_desc = 'DISABLED'` (Critical) or
-  `encryption_desc = 'SUPPORTED'` (Warning — allows plaintext if the peer does not enforce
-  encryption)
-- **Severity:** Critical for DISABLED; Warning for SUPPORTED
+- **Trigger:** `sys.database_mirroring_endpoints.is_encryption_enabled = 0` (Critical — encryption
+  DISABLED) or `is_encryption_enabled = 1` with `encryption_algorithm_desc` containing `NONE`
+  (e.g. `'NONE, AES'` — the SUPPORTED/negotiable mode that permits plaintext if the peer does not
+  enforce encryption → Warning), or `encryption_algorithm_desc` containing `RC4` (Warning — weak
+  cipher). There is no `encryption_desc` column; the SUPPORTED-vs-REQUIRED state is encoded by
+  whether `encryption_algorithm_desc` lists `NONE`.
+- **Severity:** Critical for DISABLED; Warning for SUPPORTED/negotiable or RC4
 - **Fix:** Enforce encryption on all replicas:
   `ALTER ENDPOINT [Hadr_endpoint] FOR DATABASE_MIRRORING`
   `(ENCRYPTION = REQUIRED ALGORITHM AES);`
@@ -284,8 +287,10 @@ or leave databases unjoinable.
   `ALTER DATABASE [db] SET HADR AVAILABILITY GROUP = [ag];`
 
 ### F12 — AG Databases Missing from Secondary After Replica Join
-- **Trigger:** Replica `join_state_desc = 'JOINED'` but fewer database rows appear in
-  `sys.availability_databases_cluster` on the secondary than on the primary for this AG
+- **Trigger:** On the secondary replica, `sys.dm_hadr_database_replica_cluster_states` shows
+  `is_database_joined = 0` for one or more AG databases (run locally on the secondary). Do **not**
+  compare `sys.availability_databases_cluster` counts between replicas — that view returns the same
+  cluster-wide list on every replica and cannot detect a database that is unjoined on one replica.
 - **Severity:** Warning
 - **Fix:** Databases were not restored and joined after the replica joined. For each missing
   database: restore with `RESTORE DATABASE [db] FROM DISK = '...' WITH NORECOVERY, REPLACE;`
@@ -551,8 +556,9 @@ or leave databases unjoinable.
   Failover Cluster Manager to match the SQL Server listener definition.
 
 ### F36 — AG Database Count Exceeds Microsoft's Tested Scale Ceiling
-- **Trigger:** COUNT of databases in `sys.availability_databases_cluster` for a single AG
-  exceeds 100
+- **Trigger:** COUNT of availability databases across **all** AGs on the physical machine
+  (aggregate, not per-AG) exceeds 100, or the AG count on the machine exceeds 10 — Microsoft's
+  tested scale ceiling is expressed per physical machine, not per AG
 - **Severity:** Warning
 - **Fix:** Microsoft has tested up to 10 availability groups and 100 availability databases
   per physical machine; this is not an enforced limit, but going meaningfully beyond it is

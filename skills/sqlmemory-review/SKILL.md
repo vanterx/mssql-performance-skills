@@ -96,8 +96,8 @@ FROM sys.dm_os_sys_memory;
 
 | Metric | Info | Warning | Critical |
 |--------|------|---------|----------|
-| PLE (single NUMA node) | ≥ 300 s | < 300 s | < 60 s |
-| PLE (multi-NUMA, per node) | ≥ 300 s | < 300 s | < 60 s |
+| PLE (single NUMA node) | ≥ scaled floor `(GB/4)×300` | < scaled floor | < 25% of floor (or < 60 s) |
+| PLE (multi-NUMA, per node) | ≥ scaled floor `(GB/4)×300` | < scaled floor | < 25% of floor (or < 60 s) |
 | PLE decline rate (trend) | < 10 s/min | ≥ 10 s/min | ≥ 60 s/min |
 | Single-use plan cache as % of total plan cache | < 30% | ≥ 30% | ≥ 60% |
 | RESOURCE_SEMAPHORE wait (from sqlwait-review) | 0 sessions | 1–5 queued | > 5 queued |
@@ -114,9 +114,9 @@ FROM sys.dm_os_sys_memory;
 Run these first to determine if SQL Server is under immediate memory pressure.
 
 ### O1 — Low Page Life Expectancy
-- **Trigger:** Any `cntr_value` for `Page life expectancy` in `sys.dm_os_performance_counters` (object `Buffer Manager` or `Buffer Node`) < 300 seconds
-- **Severity:** Warning if < 300 s; Critical if < 60 s
-- **Fix:** PLE below 300 means pages cycle out of the buffer pool faster than expected (the traditional rule of thumb: 300 s per 4 GB of buffer pool, so a 128 GB server warrants PLE > ~9,600 s). Investigate: (1) run O4 to check if one database dominates the pool; (2) check if a scan-heavy query is flooding the pool — run `/sqltrace-review` to identify full-scan workloads; (3) check if total committed memory is near Max Server Memory — run O20 to verify the setting.
+- **Trigger:** `Page life expectancy` `cntr_value` in `sys.dm_os_performance_counters` (object `Buffer Manager`, or per-node `Buffer Node`) below a **buffer-pool-scaled** floor — roughly `(buffer pool GB / 4) × 300` seconds (so ~9,600 s on a 128 GB pool), **or** a sudden/sustained dip (see O2). Microsoft does **not** endorse a fixed value: per MS Learn, "a higher, growing value is best; a sudden dip indicates a significant churn." Use 300 s only as an absolute floor on small (≤4 GB) pools.
+- **Severity:** Warning when below the scaled floor; Critical when PLE is below ~25% of the scaled floor (or < 60 s on a small server)
+- **Fix:** Low PLE means pages cycle out of the buffer pool faster than the working set needs (scaling rule of thumb: 300 s per 4 GB of buffer pool, so a 128 GB server warrants PLE > ~9,600 s — a flat 300 s would hide pressure here). Investigate: (1) run O4 to check if one database dominates the pool; (2) check if a scan-heavy query is flooding the pool — run `/sqltrace-review` to identify full-scan workloads; (3) check if total committed memory is near Max Server Memory — run O20 to verify the setting.
 
 ### O2 — PLE Declining Trend
 - **Trigger:** Multiple PLE snapshots show a monotonically decreasing pattern over ≥ 3 data points, with a rate of decline ≥ 10 s per minute
@@ -163,9 +163,9 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 - **Fix:** SQL Server allocates a lock structure per row/page/object lock held. Excessive lock memory means: (1) row-level locking on very large result sets — review transactions holding locks and add appropriate WHERE clauses; (2) lock escalation is disabled or failing — check `sys.dm_tran_locks` for escalation events; (3) long-running transactions holding many locks — pair with `/sqlwait-review` for LCK_ wait analysis.
 
 ### O10 — Plan Cache Churn (Low Hit Rate)
-- **Trigger:** Plan cache hit rate (= `Cache Hit Ratio` counter from the `Plan Cache` performance object) < 90% over a sustained period
-- **Severity:** Warning if 80–89%; Critical if < 80%
-- **Fix:** A cache hit rate below 90% means SQL Server is recompiling more than 10% of queries. Pair with O6 (single-use bloat) and O7 (compile rate) to determine whether the cause is ad-hoc queries or forced recompiles. Enabling `optimize for ad hoc workloads` is the first mitigation; review for parameterization improvements next.
+- **Trigger:** Sustained plan-cache churn evidenced primarily by O6 (single-use plan bloat) and O7 (high compiles/sec). The `Plan Cache : Cache Hit Ratio` counter can corroborate, but treat a threshold on it as a **heuristic only** — MS Learn documents "90 or higher is desirable" for the **Buffer Cache Hit Ratio** (Buffer Manager object), *not* for Plan Cache Hit Ratio, which is just "the ratio between cache hits and lookups for plans" with no documented healthy floor and is often misleadingly near 100% even under ad-hoc bloat.
+- **Severity:** Warning when O6/O7 show churn (low plan reuse, elevated compiles/sec); escalate with corroborating signals
+- **Fix:** Diagnose with O6 (single-use bloat) and O7 (compile rate) — and `SQL Statistics : SQL Compilations/sec` vs `Re-Compilations/sec` — rather than the Plan Cache Hit Ratio counter alone. Enabling `optimize for ad hoc workloads` is the first mitigation; review parameterization next. (If you want a documented hit-ratio health check, use Buffer Cache Hit Ratio ≥ 90% from the Buffer Manager object.)
 
 ---
 

@@ -317,7 +317,7 @@ WHERE name = 'max server memory (MB)';
 ### B9 — AWE Enabled on 64-Bit Instance
 
 **What it means**
-Address Windowing Extensions (AWE) was a 32-bit Windows mechanism allowing a 32-bit process to access more than 4 GB of physical RAM by mapping memory windows. On 64-bit SQL Server, AWE has no effect and is completely ignored by the engine. Leaving it enabled is a configuration artefact — often from an upgrade from 32-bit — that creates confusion.
+This check targets the `awe enabled` **sp_configure option** — a SQL Server 2005/2008-era, 32-bit-only switch that let a 32-bit process address more than 4 GB of physical RAM via Address Windowing Extensions (AWE) memory windows. On 64-bit SQL Server the *option* has no effect and is ignored by the engine, and it was removed entirely in SQL Server 2012. So `config_value = 1` indicates a SQL Server 2008 R2 or earlier instance (the bigger issue is running out-of-support). Don't confuse this option with the AWE **API**: 64-bit SQL Server still uses the AWE API as the "locked pages" mechanism when Lock Pages in Memory is granted — so AWE allocations do happen on 64-bit; it's only the config switch that is obsolete.
 
 **How to spot it**
 ```sql
@@ -935,7 +935,7 @@ ALTER DATABASE [TransactionDB] MODIFY FILE (
 2. Also pre-size the log to avoid growth events during peak hours
 3. Monitor `sys.dm_io_virtual_file_stats` io_stall_write_ms for log file stall reduction
 
-**Related checks:** B19 (VLF count — percent growth is the root cause), B22 (IFI — log files cannot use IFI regardless)
+**Related checks:** B19 (VLF count — percent growth is the root cause), B22 (IFI — log growths ≤64 MB can use IFI on SQL 2022+, larger ones still zero)
 
 ---
 
@@ -984,7 +984,7 @@ ALTER DATABASE [SalesDB] MODIFY FILE (
 ### B22 — Instant File Initialization Not Enabled
 
 **What it means**
-When SQL Server creates or expands a data file, it must initialise the new space. Without IFI, this means writing zeros to every byte of the new space — a process that can take seconds for small files and minutes for large ones, during which the triggering session (or recovery) is blocked. With IFI enabled, SQL Server skips the zeroing and marks the space as unallocated, which is instant. IFI applies only to data files; log files always require zeroing for security reasons.
+When SQL Server creates or expands a data file, it must initialise the new space. Without IFI, this means writing zeros to every byte of the new space — a process that can take seconds for small files and minutes for large ones, during which the triggering session (or recovery) is blocked. With IFI enabled, SQL Server skips the zeroing and marks the space as unallocated, which is instant. IFI applies to data files at any version. For **transaction log** files it historically did not apply (always zeroed), but starting with SQL Server 2022 (16.x), all editions — plus Azure SQL Database/MI — log autogrowth events **up to 64 MB** also benefit from IFI (larger log growths still zero, and the 64 MB log benefit does not need `SE_MANAGE_VOLUME_NAME`).
 
 **How to spot it**
 ```sql

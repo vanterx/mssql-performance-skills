@@ -682,9 +682,9 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 - **Fix:** Configure automatic digest storage: `EXEC sp_generate_database_ledger_digest @digest_storage_endpoint = 'https://<account>.blob.core.windows.net/<container>'` to an Azure Storage account or an Azure Confidential Ledger instance; configure a SQL Agent job to run `sp_generate_database_ledger_digest` on a schedule (e.g., daily); test verification using `EXEC sys.sp_verify_database_ledger_from_digest_storage` after enabling `ALLOW_SNAPSHOT_ISOLATION` on the database
 
 ### A75 — Ledger table hash algorithm not SHA-256
-- **Trigger:** Ledger database exists AND the ledger hash algorithm is not SHA-256 (check via `sys.database_ledger_configurations` or the `CREATE DATABASE ... LEDGER = ON` documentation confirming the default) — only SHA-256 is available in SQL Server 2022, so this check serves as a future-proofing and documentation check
-- **Severity:** Info — SHA-256 is the minimum acceptable hash algorithm for cryptographic ledger integrity; if a future SQL Server version allows weaker algorithms, they must be avoided; SHA-384 provides a higher security margin for long-lived financial data
-- **Fix:** Verify the ledger hash algorithm: `SELECT hash_algorithm_desc FROM sys.database_ledger_configurations WHERE database_id = DB_ID()`; SHA-256 is the only supported algorithm in SQL Server 2022 — accept this for now; document the hash algorithm used for audit evidence; plan migration to SHA-384 when available for 10+ year retention workloads
+- **Trigger:** Ledger database or ledger tables exist — this is a documentation/audit-evidence check. The ledger hash algorithm is **not** configurable and is **not** exposed by any catalog view (there is no `sys.database_ledger_configurations` view); per MS Learn, ledger always uses SHA-256 (Merkle tree over rows, transactions, and blocks)
+- **Severity:** Info — SHA-256 is the fixed hash algorithm for ledger integrity in SQL Server 2022; if a future SQL Server version introduces a configurable or weaker algorithm, re-evaluate this check
+- **Fix:** Record SHA-256 as the ledger hash algorithm for audit evidence (confirmed by [Ledger overview](https://learn.microsoft.com/sql/relational-databases/security/ledger/ledger-overview) — "cryptographically SHA-256 hashed using a Merkle tree"); confirm blocks are forming via `SELECT * FROM sys.database_ledger_blocks` and digests are generated/stored; there is no algorithm setting to change
 
 ### A76 — Ledger verification not scheduled on a recurring basis
 - **Trigger:** Ledger database exists AND no SQL Agent job or Azure Automation runbook is configured to run `sp_verify_database_ledger` or `sp_verify_database_ledger_from_digest_storage` on a recurring schedule (at least monthly) — SQL 2022+ only
@@ -795,7 +795,7 @@ The `sp_control_dbmasterkey_password` mechanism stores a database DMK password a
 - **Fix:** Create an annual rotation schedule in SQL Agent; use year-suffixed key naming (`CLE_PAN_2026`); document rotation history in the PCI key management policy
 
 ### A94 — GDPR Art. 17: PII in append-only ledger table without crypto-shredding strategy
-- **Trigger:** `sys.tables` with `ledger_type = 2` (append-only) AND columns matching PII patterns exist AND no per-subject encryption key column is present — SQL 2022+
+- **Trigger:** `sys.tables` with `ledger_type = 3` (`APPEND_ONLY_LEDGER_TABLE`) AND columns matching PII patterns exist AND no per-subject encryption key column is present — SQL 2022+ (note: `ledger_type = 2` is `UPDATABLE_LEDGER_TABLE`, which retains a history table but does permit logical DELETE)
 - **Severity:** Warning — append-only ledger tables are cryptographically immutable; GDPR Article 17 right-to-erasure cannot be honoured without a crypto-shredding strategy (per-subject encryption key deleted on erasure request)
 - **Fix:** Use updatable ledger tables for PII (support DELETE with history audit); OR implement per-subject CLE keys and document the shredding procedure in `howto-crypto-shredding.md`; OR store only pseudonymous identifiers in append-only ledger
 

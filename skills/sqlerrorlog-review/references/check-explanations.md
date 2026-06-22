@@ -439,8 +439,10 @@ ALTER RESOURCE GOVERNOR RECONFIGURE;
 **What it means**
 SQL Server uses a pool of worker threads to process requests. When all threads are in use
 (each serving a query, waiting for a lock, or sleeping in a connection pool), new requests
-queue on `THREADPOOL` waits. If the pool is exhausted, new connections receive error 17189
-("SQL Server is not ready to accept new client connections").
+queue on `THREADPOOL` waits. If the pool is exhausted, a new login can fail with error **17189**
+("SQL Server failed with error code … to spawn a thread to process a new login or connection").
+Don't confuse this with error **17187** ("SQL Server is not ready to accept new client connections.
+Wait a few minutes…"), which is a *startup/not-ready* condition, not thread-pool exhaustion.
 
 **How to spot it**
 ```
@@ -1214,7 +1216,7 @@ Arc SQL extension disconnected. Last heartbeat: <timestamp>. Unable to reach Azu
 - MSI token renewal failure (managed identity certificate expired)
 
 **Fix options**
-1. Check agent status: `Get-Service -Name 'himds','ArcSqlInstanceExtension'` (Windows); `systemctl status himds` (Linux)
+1. Check agent status: `Get-Service -Name 'himds'` and `Get-Service -DisplayName 'Microsoft SQL Server Extension Service'` (Windows — runs as `NT SERVICE\SqlServerExtension`; there is no `ArcSqlInstanceExtension` service); `systemctl status himds` (Linux, where the extension service is `SqlServerExtension`)
 2. Verify connectivity: `Test-NetConnection -ComputerName guestnotificationservice.azure.com -Port 443`
 3. Restart the extension service if stopped; review `%ProgramData%\GuestConfig\arc_policy_logs\` for error details
 4. Re-onboard the machine if the MSI certificate is expired: `azcmagent disconnect && azcmagent connect`

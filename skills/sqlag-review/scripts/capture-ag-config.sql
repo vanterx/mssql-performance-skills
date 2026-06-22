@@ -68,8 +68,8 @@ SELECT
     state_desc,
     role_desc,
     connection_auth_desc,
+    is_encryption_enabled,
     encryption_algorithm_desc,
-    encryption_desc,
     port
 FROM sys.database_mirroring_endpoints;
 

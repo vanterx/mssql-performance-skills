@@ -1981,11 +1981,13 @@ Check if `sp_generate_database_ledger_digest` is scheduled with `@digest_storage
 ### A75 — Ledger hash algorithm not SHA-256
 
 **What it means**
-SHA-256 is the minimum acceptable hash for cryptographic ledger integrity. Currently only SHA-256 is available in SQL Server 2022 — this check is future-proofing for when weaker algorithms might become available.
+SHA-256 is the fixed hash algorithm ledger uses for cryptographic integrity in SQL Server 2022. It is not configurable, and no catalog view exposes it (there is no `sys.database_ledger_configurations` view). This check is documentation/audit evidence only — record SHA-256 and confirm the ledger chain is forming.
 
 **How to spot it**
 ```sql
-SELECT hash_algorithm_desc FROM sys.database_ledger_configurations WHERE database_id = DB_ID();
+-- No algorithm setting exists. Confirm the ledger blockchain is being built instead:
+SELECT block_id, transactions_root_hash, previous_block_hash
+FROM sys.database_ledger_blocks;
 ```
 
 **Fix options**
@@ -2468,7 +2470,7 @@ WHERE name NOT LIKE '##%'
 ### A94 — GDPR Art. 17: PII in append-only ledger without crypto-shredding strategy
 
 **What it means**
-Append-only ledger tables (`ledger_type = 2`) are cryptographically immutable — rows can never be deleted, updated, or truncated; the hash chain would be broken. GDPR Article 17 grants data subjects the right to erasure ("right to be forgotten"). For PII in append-only ledger tables, the only technically sound erasure method is crypto-shredding: encrypting data with a per-subject key, then deleting that key. Without a per-subject key architecture, erasure is impossible.
+Append-only ledger tables (`ledger_type = 3`, `APPEND_ONLY_LEDGER_TABLE`; `ledger_type = 2` is the updatable kind) are cryptographically immutable — rows can never be deleted, updated, or truncated; the hash chain would be broken. GDPR Article 17 grants data subjects the right to erasure ("right to be forgotten"). For PII in append-only ledger tables, the only technically sound erasure method is crypto-shredding: encrypting data with a per-subject key, then deleting that key. Without a per-subject key architecture, erasure is impossible.
 
 **How to spot it**
 ```sql
@@ -2476,7 +2478,7 @@ Append-only ledger tables (`ledger_type = 2`) are cryptographically immutable �
 SELECT t.name AS table_name, c.name AS column_name
 FROM sys.tables t
 JOIN sys.columns c ON t.object_id = c.object_id
-WHERE t.ledger_type = 2  -- append-only
+WHERE t.ledger_type = 3  -- 3 = APPEND_ONLY_LEDGER_TABLE
   AND (c.name LIKE '%ssn%' OR c.name LIKE '%email%' OR c.name LIKE '%name%'
     OR c.name LIKE '%address%' OR c.name LIKE '%phone%' OR c.name LIKE '%dob%')
   AND NOT EXISTS (
