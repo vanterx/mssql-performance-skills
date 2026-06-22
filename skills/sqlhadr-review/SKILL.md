@@ -370,11 +370,12 @@ These checks surface AG topology gaps that may not cause immediate problems but 
   `INITIALIZING`. If a database is already stuck in this state post-failover, check
   `sys.dm_hadr_database_replica_states.last_redone_lsn` for any progress, then either let it
   reconnect to a healthy primary to resume normal log streaming, or restore from a log-backup
-  chain to bring it current. Also check whether this database was originally onboarded with
-  `seeding_mode_desc = AUTOMATIC` left active alongside a manual
-  backup/restore workflow — `SEEDING_MODE` is evaluated dynamically at join time, and an
-  automatic seed attempt racing a manual restore can leave exactly this kind of latent,
-  inconsistent secondary that only surfaces at the next failover (see `sqlag-review` F37).
+  chain to bring it current. Also check whether this database was onboarded with
+  `seeding_mode_desc = AUTOMATIC` left active alongside a manual backup/restore workflow:
+  `SEEDING_MODE` is evaluated dynamically at join time, so both paths can target the same
+  database and conflict. (Microsoft Learn does not document this combination as producing a
+  corrupt secondary — combining the methods is supported — but a conflicting/failed seed can
+  leave a database that never cleanly reaches `SYNCHRONIZED`; see `sqlag-review` F37.)
 
 ---
 

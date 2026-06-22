@@ -141,7 +141,8 @@ different database via ownership chaining, and that second database is not in th
 scope or `TRUSTWORTHY`/ownership chaining settings differ on the target.
 **Severity:** Warning
 **Fix:** Identify cross-database ownership chains before migrating (`sys.sql_expression_dependencies`
-filtered to cross-database references); either migrate both databases together or replace the
+filtered to cross-database references — `capture-security-facts.sql` Query 11 collects these per
+database); either migrate both databases together or replace the
 chain with an explicit permission grant plus a module signing certificate — do not enable
 `TRUSTWORTHY ON` as a substitute, since it is a documented security risk.
 

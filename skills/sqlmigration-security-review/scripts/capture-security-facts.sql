@@ -68,3 +68,16 @@ WHERE NOT EXISTS (
 
 -- Query 10: Database master key presence -- run per database
 SELECT name FROM sys.symmetric_keys WHERE name = '##MS_DatabaseMasterKey##';
+
+-- Query 11: Cross-database dependencies (J9 ownership-chain candidates) -- run per database
+-- referenced_database_name is populated only for 3-/4-part references; NULL = same-database.
+-- referenced_server_name IS NULL keeps cross-database (not cross-server) references.
+SELECT OBJECT_SCHEMA_NAME(d.referencing_id) AS referencing_schema,
+       OBJECT_NAME(d.referencing_id)        AS referencing_object,
+       d.referenced_database_name,
+       d.referenced_schema_name,
+       d.referenced_entity_name
+FROM sys.sql_expression_dependencies d
+WHERE d.referenced_database_name IS NOT NULL
+  AND d.referenced_database_name <> DB_NAME()
+  AND d.referenced_server_name IS NULL;

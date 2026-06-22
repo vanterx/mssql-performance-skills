@@ -578,12 +578,14 @@ or leave databases unjoinable.
 - **Severity:** Warning
 - **Fix:** `SEEDING_MODE` is evaluated dynamically at the moment a database is added to or
   discovered by the AG, not fixed once at AG creation. If a replica is left at `AUTOMATIC`
-  while databases are being restored manually, SQL Server can initiate its own seed attempt
-  in parallel with the manual restore — the two can race, and whichever loses can leave the
-  secondary database with a hybrid or corrupt restore chain (see `sqlhadr-review` H28 for the
-  resulting `INITIALIZING`/stuck-redo symptom, which per Microsoft's documented behavior
-  surfaces only if a failover later forces a full redo/undo pass, not necessarily at join time).
-  Before any manual-restore operation, explicitly set every
+  while databases are being restored manually, both onboarding paths target the same secondary
+  database at once. **Note:** Microsoft Learn does **not** document this as causing a "hybrid or
+  corrupt restore chain" — combining seeding methods is supported, and the documented outcome is
+  that one path conflicts with the other (for example, an automatic seed aborts because the
+  database already exists from the manual restore, or the manual restore is redundant), producing
+  failed-seed errors and an ambiguous onboarding state rather than corruption. The practical risk
+  is operational confusion and a database that doesn't reach `SYNCHRONIZED` cleanly. To avoid it,
+  pick one method: before any manual-restore operation, explicitly set every
   target replica to manual seeding: `ALTER AVAILABILITY GROUP [ag] MODIFY REPLICA ON
   N'server' WITH (SEEDING_MODE = MANUAL)`. Confirm with `SELECT replica_server_name,
   seeding_mode_desc FROM sys.availability_replicas`. If `GRANT CREATE ANY DATABASE` was issued

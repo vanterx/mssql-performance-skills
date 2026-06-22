@@ -145,7 +145,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'cost threshold for parallelism' config_value = 5`
 - **Severity:** Warning
-- **Fix:** Increase to 25–50 for OLTP workloads, 45–75 for mixed. Default of 5 causes excessive parallelism on trivial queries. Start at 50 and tune down if needed: `EXEC sp_configure 'cost threshold for parallelism', 50; RECONFIGURE;`
+- **Fix:** Per MS Learn the default of 5 is "a starting point, not a recommendation" and Microsoft does **not** publish a specific target value — raising it helps keep CPU-light OLTP queries on serial plans. The 25–50 (OLTP) / 45–75 (mixed) ranges below are **community/operational heuristics, not MS-documented values**. Increase in small increments and observe a full business cycle; e.g. start at 50 and tune down if needed: `EXEC sp_configure 'cost threshold for parallelism', 50; RECONFIGURE;`. Confirm direction with waits — `CXPACKET`/`CXCONSUMER` dominating suggests it's too low; `SOS_SCHEDULER_YIELD` dominating with under-parallelized heavy queries suggests too high.
 
 ### B3 — MAXDOP Exceeds Per-NUMA CPU Count
 
@@ -245,8 +245,8 @@ WHERE servicename LIKE 'SQL Server (%';
 
 ### B19 — Excessive VLF Count
 
-- **Trigger:** VLF count > 1000 per database (via `sys.dm_db_log_info` or `DBCC LOGINFO`)
-- **Severity:** Warning — VLF count > 1000; Critical — VLF count > 5000
+- **Trigger:** High VLF count per database (via `sys.dm_db_log_info` or `DBCC LOGINFO`). MS Learn's own `sys.dm_db_log_info` example flags **> 100** VLFs as worth investigating ("can affect database startup, restore, and recovery time"), and severe symptoms appear at "several hundred thousand." The 1,000 / 5,000 cutoffs below are **operational severity heuristics, not MS-documented thresholds** — treat > 100 as the documented review point.
+- **Severity:** Info/Warning — VLF count > 100 (MS Learn review point) rising to Warning > 1000; Critical — VLF count > 5000 (heuristic)
 - **Fix:** Excessive VLFs slow log backups, database recovery, and replication log reader. Shrink and regrow the log in one large step: (1) Take a log backup, (2) `DBCC SHRINKFILE (logfilename, 1)`, (3) Expand to the correct size in one operation using `ALTER DATABASE … MODIFY FILE (SIZE = target_mb MB, FILEGROWTH = 512 MB)`. A single growth of 8 GB creates 16 VLFs of 512 MB each.
 
 ### B20 — Log File Using Percent Auto-Growth

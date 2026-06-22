@@ -64,7 +64,7 @@ RECONFIGURE;
 ### B2 — Cost Threshold for Parallelism at Default
 
 **What it means**
-The Cost Threshold for Parallelism (CTP) is the estimated cost (in abstract units) at which SQL Server considers using a parallel plan. The default of 5 was set in the 1990s for hardware of that era. On modern multi-core servers it is far too low — queries costing 6, 10, or 20 units trigger parallel plans unnecessarily, consuming threads and causing CXPACKET waits.
+The Cost Threshold for Parallelism (CTP) is the estimated cost (in abstract units) at which SQL Server considers using a parallel plan. The default of 5 was set in the 1990s for hardware of that era; MS Learn calls 5 "a starting point, not a recommendation" and does **not** publish a specific target value. On modern multi-core servers it is often too low — queries costing 6, 10, or 20 units can trigger parallel plans unnecessarily, consuming threads and causing CXPACKET waits. The 25–50 / 45–75 ranges used by this check are **community/operational heuristics, not MS-documented values**; raise CTP in small steps and confirm direction from waits (`CXPACKET`/`CXCONSUMER` = too low; `SOS_SCHEDULER_YIELD` with under-parallelized heavy queries = too high).
 
 **How to spot it**
 ```sql
@@ -851,7 +851,7 @@ Cross-database chaining only works for **static SQL**. As soon as dynamic SQL (`
 ### B19 — Excessive VLF Count
 
 **What it means**
-The transaction log is divided into Virtual Log Files (VLFs). SQL Server manages VLF creation internally: small, frequent auto-grow events create many tiny VLFs; one large initial allocation creates fewer, larger VLFs. Thousands of VLFs slow database startup (SQL Server scans all VLFs during recovery), log backup, and replication log reader. SQL Server itself logs error 9017 when a database starts with > 1000 VLFs (SQL 2008 R2) or > 10,000 VLFs (SQL 2012+).
+The transaction log is divided into Virtual Log Files (VLFs). SQL Server manages VLF creation internally: small, frequent auto-grow events create many tiny VLFs; one large initial allocation creates fewer, larger VLFs. Thousands of VLFs slow database startup (SQL Server scans all VLFs during recovery), log backup, and replication log reader. SQL Server itself logs error 9017 when a database starts with an excessive VLF count, and MS Learn's own `sys.dm_db_log_info` example query flags **> 100** VLFs as worth investigating. The **> 1000 / > 5000** cutoffs this check uses are **operational severity heuristics, not MS-documented thresholds** — treat > 100 as the documented review point and the higher numbers as escalating concern.
 
 **How to spot it**
 ```sql

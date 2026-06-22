@@ -107,6 +107,8 @@ FROM sys.dm_os_sys_memory;
 | ColumnStore pool (COLUMNSTORE_OBJECT_POOL) | — | > 25% | > 50% |
 | In-Memory OLTP (XTP) memory | — | > 25% | > 50% |
 
+> **Threshold provenance:** O1 (PLE, scaled by buffer pool) and O10 (hit-ratio direction) are grounded in Microsoft Learn. The remaining cutoffs — **O2–O9, O11, and O13** (single-use plan %, RESOURCE_SEMAPHORE queue depth, stolen-memory %, buffer-pool concentration, ColumnStore/XTP pool %, grant timeout/decline rates) — are **reasonable operational heuristics, not Microsoft-documented values.** Treat them as starting points and calibrate to your workload's baseline; a value crossing a line is a prompt to investigate, not proof of a problem.
+
 ---
 
 ## Buffer Pool and PLE Checks (O1–O5)
