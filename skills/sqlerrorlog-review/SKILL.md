@@ -361,7 +361,8 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
 - **Severity:** Info — extract and evaluate: (1) is this build on extended support, mainstream
   support, or past end-of-support? (2) is this the latest CU for this major version?
 - **Fix:** Compare the build number in the log against the Microsoft SQL Server build list.
-  If past end-of-support (e.g., SQL 2014 EOL 2019-07-09, SQL 2016 EOL 2026-07-14), plan
+  If past end-of-support (e.g., SQL 2014 Extended Support ended 2024-07-09 — 2019 was only its
+  *mainstream* support end; SQL 2016 Extended Support ends 2026-07-14), plan
   upgrade. If not on the latest CU, evaluate whether open bugs fixed in later CUs are relevant
   to the observed issues. Report the version string verbatim in the Output Summary.
 
@@ -390,7 +391,7 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
 ### E33 — Azure Arc–Enabled SQL: Agent Disconnect
 - **Trigger:** Log contains `Arc SQL extension` with `disconnected` or `heartbeat` failure message — any SQL Server version with Azure Arc agent installed
 - **Severity:** Warning — The Arc SQL extension agent has lost contact with the Azure control plane; Arc-based features (Microsoft Defender, automated backups, best practice assessments) are not functioning
-- **Fix:** Check Arc agent health: `Get-Service -Name 'himds','ArcSqlInstanceExtension'` (Windows) or equivalent systemctl commands (Linux). Verify outbound connectivity to `*.arc.azure.com` on port 443. Restart the `ArcSqlInstanceExtension` service if it is stopped. Review Arc agent logs at `%ProgramData%\GuestConfig\arc_policy_logs\` for detailed error messages.
+- **Fix:** Check Arc agent health: `Get-Service -Name 'himds'` and the SQL extension `Get-Service -DisplayName 'Microsoft SQL Server Extension Service'` (Windows; the service runs as `NT SERVICE\SqlServerExtension` — on Linux the service is named `SqlServerExtension`). There is no `ArcSqlInstanceExtension` service. Verify outbound connectivity to `*.arc.azure.com` and `*.<region>.arcdataservices.com` on port 443. Restart the extension service if it is stopped. Review Arc agent logs at `%ProgramData%\GuestConfig\arc_policy_logs\` for detailed error messages.
 
 ---
 

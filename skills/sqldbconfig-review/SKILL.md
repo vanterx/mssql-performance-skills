@@ -145,7 +145,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'cost threshold for parallelism' config_value = 5`
 - **Severity:** Warning
-- **Fix:** Increase to 25–50 for OLTP workloads, 45–75 for mixed. Default of 5 causes excessive parallelism on trivial queries. Start at 50 and tune down if needed: `EXEC sp_configure 'cost threshold for parallelism', 50; RECONFIGURE;`
+- **Fix:** Per MS Learn the default of 5 is "a starting point, not a recommendation" and Microsoft does **not** publish a specific target value — raising it helps keep CPU-light OLTP queries on serial plans. The 25–50 (OLTP) / 45–75 (mixed) ranges below are **community/operational heuristics, not MS-documented values**. Increase in small increments and observe a full business cycle; e.g. start at 50 and tune down if needed: `EXEC sp_configure 'cost threshold for parallelism', 50; RECONFIGURE;`. Confirm direction with waits — `CXPACKET`/`CXCONSUMER` dominating suggests it's too low; `SOS_SCHEDULER_YIELD` dominating with under-parallelized heavy queries suggests too high.
 
 ### B3 — MAXDOP Exceeds Per-NUMA CPU Count
 
@@ -187,7 +187,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'awe enabled' config_value = 1`
 - **Severity:** Warning
-- **Fix:** AWE (Address Windowing Extensions) is a legacy 32-bit mechanism for accessing memory above 4 GB. It has no effect on 64-bit SQL Server and is deprecated. `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`
+- **Fix:** The `awe enabled` **configuration option** is a SQL Server 2005/2008-era, 32-bit-only switch for addressing memory above 4 GB via Address Windowing Extensions; on 64-bit instances the *option* is ignored (no effect), and it was removed entirely in SQL Server 2012 (11.x) — the option is absent from the `sp_configure` list in all later versions. So `config_value = 1` means the instance is SQL Server 2008 R2 or earlier — set it off and, more importantly, plan to upgrade off an out-of-support version: `EXEC sp_configure 'awe enabled', 0; RECONFIGURE;`. Note: do not confuse this option with the AWE **API**, which *is* still used by 64-bit SQL Server as the "locked pages" mechanism when Lock Pages in Memory is granted (see B8) — this check targets only the obsolete config switch.
 
 ### B10 — Auto-Shrink Enabled
 
@@ -245,8 +245,8 @@ WHERE servicename LIKE 'SQL Server (%';
 
 ### B19 — Excessive VLF Count
 
-- **Trigger:** VLF count > 1000 per database (via `sys.dm_db_log_info` or `DBCC LOGINFO`)
-- **Severity:** Warning — VLF count > 1000; Critical — VLF count > 5000
+- **Trigger:** High VLF count per database (via `sys.dm_db_log_info` or `DBCC LOGINFO`). MS Learn's own `sys.dm_db_log_info` example flags **> 100** VLFs as worth investigating ("can affect database startup, restore, and recovery time"), and severe symptoms appear at "several hundred thousand." The 1,000 / 5,000 cutoffs below are **operational severity heuristics, not MS-documented thresholds** — treat > 100 as the documented review point.
+- **Severity:** Info/Warning — VLF count > 100 (MS Learn review point) rising to Warning > 1000; Critical — VLF count > 5000 (heuristic)
 - **Fix:** Excessive VLFs slow log backups, database recovery, and replication log reader. Shrink and regrow the log in one large step: (1) Take a log backup, (2) `DBCC SHRINKFILE (logfilename, 1)`, (3) Expand to the correct size in one operation using `ALTER DATABASE … MODIFY FILE (SIZE = target_mb MB, FILEGROWTH = 512 MB)`. A single growth of 8 GB creates 16 VLFs of 512 MB each.
 
 ### B20 — Log File Using Percent Auto-Growth
@@ -265,7 +265,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sys.dm_server_services.instant_file_initialization_enabled = 'N'` for the SQL Server service (column is nvarchar(1): 'Y' = enabled, 'N' = disabled; applies SQL 2012 SP4, SQL 2014 SP3, SQL 2016 SP1+)
 - **Severity:** Warning
-- **Fix:** Without IFI, SQL Server must zero-initialise new data file space before use, causing multi-second or multi-minute stalls during auto-growth events and `RESTORE DATABASE`. Grant the SQL Server service account the `SE_MANAGE_VOLUME_NAME` Windows privilege ("Perform volume maintenance tasks" in Local Security Policy), then restart the SQL Server service. IFI does not apply to log files (they always require zeroing). Verify after restart: `SELECT instant_file_initialization_enabled FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';`
+- **Fix:** Without IFI, SQL Server must zero-initialise new data file space before use, causing multi-second or multi-minute stalls during auto-growth events and `RESTORE DATABASE`. Grant the SQL Server service account the `SE_MANAGE_VOLUME_NAME` Windows privilege ("Perform volume maintenance tasks" in Local Security Policy), then restart the SQL Server service. IFI applies to data files at any version; for **transaction log** files it historically did not apply (logs were always zeroed), but starting with SQL Server 2022 (16.x) — all editions, plus Azure SQL Database/MI — transaction log autogrowth events **up to 64 MB** also benefit from IFI (growth events larger than 64 MB still zero, and the 64 MB log benefit does not require the `SE_MANAGE_VOLUME_NAME` privilege). Verify after restart: `SELECT instant_file_initialization_enabled FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';`
 
 ### B23 — TempDB File Count Below Recommended
 

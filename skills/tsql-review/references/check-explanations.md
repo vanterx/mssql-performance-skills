@@ -1599,7 +1599,7 @@ VALUES (42, '2024-01-15', 'Open', 250.00);
 ### T44 — SET ANSI_NULLS OFF or SET QUOTED_IDENTIFIER OFF
 
 **What it means**
-These settings change fundamental T-SQL semantics. `SET ANSI_NULLS OFF` makes `= NULL` work (compare T16). `SET QUOTED_IDENTIFIER OFF` makes double-quotes behave as string delimiters instead of identifier quotes. Both are required to be ON for indexes on views, filtered indexes, and natively compiled objects.
+These settings change fundamental T-SQL semantics. `SET ANSI_NULLS OFF` makes `= NULL` work (compare T16) and is **deprecated** — it appears on Microsoft's deprecated-features list, and from SQL Server 2017 ANSI_NULLS is always ON. `SET QUOTED_IDENTIFIER OFF` makes double-quotes behave as string delimiters instead of identifier quotes; it is **not** on the deprecated list, but it is non-ISO and strongly discouraged. Both `ANSI_NULLS` and `QUOTED_IDENTIFIER` must be ON for indexed views, indexes on computed columns, filtered indexes, and natively compiled objects.
 
 **How to spot it**
 ```sql
@@ -1654,7 +1654,7 @@ SELECT OrderId, CustomerId, Status FROM dbo.Orders WHERE Status = 'Open';
 ### T46 — Table Variable Used for Potentially Large Data
 
 **What it means**
-A `DECLARE @table TABLE (...)` has no statistics. The optimizer always estimates exactly 1 row from a table variable, regardless of how many rows are actually inserted. When a table variable with 100,000 rows is joined to another table, the optimizer picks a join strategy optimized for 1 row — usually Nested Loops — which is catastrophically wrong.
+A `DECLARE @table TABLE (...)` has no column statistics. Before SQL Server 2019 the optimizer estimated exactly 1 row from a table variable regardless of how many rows were inserted, so joining a 100,000-row table variable picked a 1-row join strategy (usually Nested Loops) that is catastrophically wrong. **From SQL Server 2019 (compatibility level 150), Table Variable Deferred Compilation** defers the first compile until the table variable is populated and then uses the **actual** row count — so the 1-row trap is largely gone on 2019+, though the table variable still has no column-level statistics (so heavy skew can still mislead the optimizer). This check is most impactful below compat 150.
 
 **Why it matters**
 A Nested Loops join with 100,000 rows on the inner side (instead of the estimated 1) causes 100,000× more work than planned. This is a classic parameter sniffing look-alike but for table variables.
@@ -2586,10 +2586,10 @@ WHERE OrderDate >= '20240115'
 ### T72 — Missing SET NOCOUNT ON in Stored Procedure or Trigger
 
 **What it means**
-Without `SET NOCOUNT ON`, SQL Server sends a DONE_IN_PROC message to the client after every DML statement, reporting the number of rows affected. For procedures executing DML in loops or batches, this produces a stream of row-count messages.
+Without `SET NOCOUNT ON`, SQL Server sends a DONEINPROC message to the client after every DML statement, reporting the number of rows affected. For procedures executing DML in loops or batches, this produces a stream of row-count messages.
 
 **Why it matters**
-Some ADO and ODBC client libraries misinterpret these DONE_IN_PROC messages as empty result sets, causing "there is already an open DataReader" errors or unexpected result-set handling. For very high-frequency procedures the accumulated network traffic of row-count messages is measurable.
+Some ADO and ODBC client libraries misinterpret these DONEINPROC messages as empty result sets, causing "there is already an open DataReader" errors or unexpected result-set handling. For very high-frequency procedures the accumulated network traffic of row-count messages is measurable.
 
 **How to spot it**
 ```sql
@@ -2598,7 +2598,7 @@ CREATE PROCEDURE dbo.ProcessOrders
 AS
 BEGIN
     UPDATE dbo.Orders SET Status = 'Processing' WHERE Status = 'Queued';
-    -- Sends a row-count DONE_IN_PROC message to client after the UPDATE
+    -- Sends a row-count DONEINPROC message to client after the UPDATE
 END
 ```
 

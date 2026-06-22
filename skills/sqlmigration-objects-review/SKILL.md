@@ -52,12 +52,12 @@ SELECT j.name, j.enabled, c.name AS category_name, j.owner_sid
 FROM msdb.dbo.sysjobs j
 LEFT JOIN msdb.dbo.syscategories c ON j.category_id = c.category_id;
 
-SELECT name, product, provider, data_source, is_linked, collation_compatible
+SELECT name, product, provider, data_source, is_linked, is_collation_compatible
 FROM sys.servers WHERE is_linked = 1;
 
 SELECT name, description FROM msdb.dbo.sysmail_profile;
 
-SELECT physical_device_name, type_desc FROM msdb.dbo.backupmediafamily;
+SELECT name, physical_name, type_desc FROM sys.backup_devices;
 
 SELECT message_id, language_id, severity, text FROM sys.messages
 WHERE message_id >= 50000;
@@ -144,7 +144,7 @@ targets) from the target to each linked server's data source before relying on i
 update firewall rules to include the target's IP/subnet.
 
 ### M9 — Linked Server Collation-Compatible Setting Mismatched
-**Trigger:** A linked server's `collation_compatible` setting does not match the actual collation
+**Trigger:** A linked server's `is_collation_compatible` setting does not match the actual collation
 relationship between the local and remote instance after migration (target's collation differs
 from what the source had, per `/sqlmigration-review` Y4).
 **Severity:** Info
@@ -175,9 +175,10 @@ relying on Database Mail for production alerting after cutover; test with
 ## Category 4 — Backup Infrastructure
 
 ### M12 — Backup Device Path Unreachable From Target
-**Trigger:** A logical backup device (`msdb.dbo.backupmediafamily`/`sys.backup_devices`) points
-to a UNC path or local path that is not reachable, or does not exist, from the target instance's
-service account context.
+**Trigger:** A logical backup device (`sys.backup_devices` — the catalog of named devices created
+by `sp_addumpdevice`; note `msdb.dbo.backupmediafamily` is backup *history*, not the device list and
+has no `type_desc` column) points to a UNC path or local path that is not reachable, or does not
+exist, from the target instance's service account context.
 **Severity:** Warning
 **Fix:** Recreate the backup device pointing at a path reachable from the target, granting the
 target's SQL Server service account write access to that path; test with a trivial backup before

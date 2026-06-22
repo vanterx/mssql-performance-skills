@@ -239,7 +239,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 ### T44 — SET ANSI_NULLS OFF or SET QUOTED_IDENTIFIER OFF
 - **Trigger:** `SET ANSI_NULLS OFF` or `SET QUOTED_IDENTIFIER OFF` statement
 - **Severity:** Warning
-- **Fix:** Both settings are deprecated in modern compatibility levels. `SET ANSI_NULLS OFF` changes `= NULL` comparison semantics (T16). `SET QUOTED_IDENTIFIER OFF` changes double-quote string literal semantics. Both are required to be ON for: indexed views, computed columns with indexes, filtered indexes, and natively compiled objects. Remove these SET statements and fix any code that depended on them.
+- **Fix:** `SET ANSI_NULLS OFF` is **deprecated** (it is on Microsoft's deprecated-features list, and starting with SQL Server 2017 ANSI_NULLS is always ON); it changes `= NULL` comparison semantics (T16). `SET QUOTED_IDENTIFIER OFF` is **not** on the deprecated list, but it is strongly discouraged: it disables standard double-quote identifier delimiting (treating `"..."` as a string literal) and is non-ISO. Both `QUOTED_IDENTIFIER` and `ANSI_NULLS` must be ON for indexed views, indexes on computed columns, filtered indexes, and natively compiled objects. Remove these SET statements and fix any code that depended on them.
 ### T45 — Temporary Table Created Without Explicit Column Definition
 - **Trigger:** `SELECT ... INTO #tempTable FROM ...` (implicit column definition) rather than `CREATE TABLE #tempTable (col1 TYPE, ...)` followed by `INSERT INTO`
 - **Severity:** Info
@@ -253,7 +253,7 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 ### T46 — Table Variable Used for Potentially Large Data
 - **Trigger:** `DECLARE @table TABLE (...)` used in contexts suggesting large row counts: populated from a join across large tables, used as a parameter accumulator in a loop, referenced in a query without cardinality hints, or when the surrounding code suggests > 1,000 rows
 - **Severity:** Warning
-- **Fix:** Table variables have no statistics — the optimizer always estimates 1 row regardless of actual content. This causes bad join plans for large table variables. Use a `#temp` table instead: it has statistics (auto-updated after the INSERT), supports indexes, and can participate in parallel plans. Exception: table variables are appropriate for small lookup sets (< 100 rows) or when the variable is passed to a stored procedure as a TVP.
+- **Fix:** Table variables have no column statistics. Before SQL Server 2019, the optimizer estimated **1 row** regardless of actual content, causing bad join plans for large table variables. **Starting with SQL Server 2019 (compatibility level 150), Table Variable Deferred Compilation** defers the first compile until the table variable is populated, so the optimizer uses the **actual** row count for cardinality (it still lacks column-level statistics, so skew can still mislead it). So this check is most impactful below compat 150; on 2019+ the 1-row trap is mitigated but column-stat blindness remains. Use a `#temp` table when you need real statistics, indexes, or parallel plans. Exception: table variables are appropriate for small lookup sets (< 100 rows) or as a TVP.
 ### T47 — String Functions on Potentially Large Rowsets
 - **Trigger:** `STRING_SPLIT`, `CHARINDEX`, `SUBSTRING`, `PATINDEX`, `REPLACE`, or `STUFF` called in a `FROM` clause, `WHERE` clause, or `SELECT` list against a large table (inferred from table names or surrounding joins)
 - **Severity:** Info
@@ -301,7 +301,7 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 ### T57 — @@ROWCOUNT Read After Statement That Resets It
 - **Trigger:** A `@@ROWCOUNT` check that is not the statement immediately following the DML whose count is needed — any `SET`, `DECLARE`, `IF`, `SELECT @var = ...`, `PRINT`, or other non-DML statement appears between the DML and the `@@ROWCOUNT` read
 - **Severity:** Warning
-- **Fix:** Capture `@@ROWCOUNT` immediately after the DML: `SET @rowsAffected = @@ROWCOUNT;`. Every T-SQL statement — including `IF` evaluations and `SET @var = val` — resets `@@ROWCOUNT` to its own row count.
+- **Fix:** Capture `@@ROWCOUNT` immediately after the DML: `SET @rowsAffected = @@ROWCOUNT;`. Intervening statements change it in different ways — a scalar assignment such as `SET @v = 1` or `SELECT @v = <constant>` (no FROM) sets `@@ROWCOUNT` to **1**, a `SELECT @v = col FROM t` sets it to **that query's row count**, and statements like `USE`/`SET <option>` reset it to **0** — so never read it after anything but the DML whose count you need.
 ### T58 — Recursive CTE Without MAXRECURSION
 - **Trigger:** A recursive CTE (a `WITH` clause where the CTE references itself in its recursive member) without `OPTION (MAXRECURSION n)` on the outermost SELECT
 - **Severity:** Warning
@@ -367,7 +367,7 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 ### T72 — Missing SET NOCOUNT ON in Stored Procedure or Trigger
 - **Trigger:** A stored procedure or trigger body that does not include `SET NOCOUNT ON` before the first DML statement
 - **Severity:** Info
-- **Fix:** Add `SET NOCOUNT ON;` as the first statement in the procedure or trigger body. Without it, SQL Server sends a DONE_IN_PROC network message after every DML statement. Some ADO/ODBC clients misinterpret these as result sets; for high-frequency procedures executing DML in loops, the accumulated message traffic is measurable.
+- **Fix:** Add `SET NOCOUNT ON;` as the first statement in the procedure or trigger body. Without it, SQL Server sends a `DONEINPROC` (rows-affected) message after every statement. Per MS Learn (SET NOCOUNT), for procedures with several statements that return little data, or procedures with T-SQL loops, turning NOCOUNT ON "can provide a significant performance boost, because network traffic is greatly reduced." It also avoids some ADO/ODBC/ORM clients misinterpreting the "n rows affected" messages. Note `@@ROWCOUNT` is still updated when NOCOUNT is ON.
 ### T73 — Variable-Length Type of Size 1 or 2
 - **Trigger:** Column, variable, or parameter declarations using `VARCHAR(1)`, `VARCHAR(2)`, `NVARCHAR(1)`, `NVARCHAR(2)`, `VARBINARY(1)`, `VARBINARY(2)`, or `VARCHAR`/`NVARCHAR`/`VARBINARY` with no length specified (defaults to 1 per the thresholds table)
 - **Severity:** Info

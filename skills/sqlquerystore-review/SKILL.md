@@ -119,7 +119,6 @@ SELECT
     stale_query_threshold_days,
     size_based_cleanup_mode_desc,
     wait_stats_capture_mode_desc,
-    capture_mode_desc,
     query_capture_mode_desc
 FROM sys.database_query_store_options;
 ```
@@ -280,7 +279,7 @@ Evaluate Query Store configuration health.
 - **Severity:** Warning
 - **Fix:** Query Store is approaching its maximum size. When it hits the limit, it will switch to READ_ONLY mode and stop collecting new data. Increase `max_storage_size_mb` (the default 1 GB is often insufficient for busy servers). Alternatively: reduce the data collection window by lowering `stale_query_threshold_days`, change `capture_mode` to AUTO or CUSTOM, or purge old data with `sp_query_store_flush_db` followed by `sp_query_store_remove_query`.
 ### Q24 — Query Store Capture Disabled
-- **Trigger:** `actual_state_desc = 'READ_ONLY'` OR `capture_mode_desc = 'NONE'`
+- **Trigger:** `actual_state_desc = 'READ_ONLY'` OR `query_capture_mode_desc = 'NONE'`
 - **Severity:** Critical
 - **Fix:** Query Store is not capturing new query data. If READ_ONLY: the size cap was reached — increase `max_storage_size_mb`, then run `ALTER DATABASE CURRENT SET QUERY_STORE = ON (SIZE_BASED_CLEANUP_MODE = AUTO)` to resume capture. If capture_mode = NONE: run `ALTER DATABASE CURRENT SET QUERY_STORE = ON (QUERY_CAPTURE_MODE = AUTO)` to start collecting.
 ### Q25 — No Wait Stats Collection
@@ -352,7 +351,7 @@ Structure your report as follows:
 |---------|-------|--------|
 | Current mode | [actual_state_desc] | OK |
 | Storage | [current_mb] / [max_mb] MB ([pct]%) | OK/Warning |
-| Capture mode | [capture_mode_desc] | OK/Warning |
+| Capture mode | [query_capture_mode_desc] | OK/Warning |
 | Wait stats capture | [ON/OFF] | OK/Info |
 
 ---

@@ -105,6 +105,8 @@ ORDER BY StartTime DESC;
 | Auto-growth events in last 24 h | 0 | 1–3 | > 3 |
 | Auto-growth fixed-size increment | ≥ 256 MB | 64–255 MB | < 64 MB |
 
+> **Threshold provenance:** The data/log avg-latency bands (Z1–Z3) reflect widely-cited storage-latency guidance. The remaining cutoffs — **Z4 (stall ratio), Z5 (hot-file share), and Z11–Z15 (auto-growth event count and increment sizing)** — are **reasonable operational heuristics, not Microsoft-documented values.** Use them to prioritize where to look; confirm an actual problem against the workload's own baseline rather than the number alone.
+
 ---
 
 ## Latency and Stall Checks (Z1–Z5)

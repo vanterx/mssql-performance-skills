@@ -20,8 +20,8 @@ FinanceAG  finance-ag-l       1433  1              10.0.1.200      255.255.255.0
 FinanceAG  finance-ag-l       1433  1              10.1.1.200      255.255.255.0    OFFLINE
 
 --- Query 4: Mirroring Endpoint ---
-name                state_desc  role_desc  connection_auth_desc      encryption_algorithm_desc  encryption_desc  port
-Hadr_endpoint_FIN   STARTED     ALL        WINDOWS NEGOTIATE          AES                        SUPPORTED        5022
+name                state_desc  role_desc  connection_auth_desc      is_encryption_enabled  encryption_algorithm_desc  port
+Hadr_endpoint_FIN   STARTED     ALL        WINDOWS NEGOTIATE          1                      NONE, AES                  5022
 
 --- Query 5: AG Database Recovery Models ---
 ag_database_id                         database_name  recovery_model_desc  is_read_committed_snapshot_on  state_desc

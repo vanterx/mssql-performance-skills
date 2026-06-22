@@ -96,7 +96,7 @@ exchange log blocks. Without it, or if it is stopped, replicas cannot communicat
 
 **How to spot it:**
 ```sql
-SELECT name, state_desc, port, encryption_desc
+SELECT name, state_desc, port, is_encryption_enabled, encryption_algorithm_desc
 FROM sys.database_mirroring_endpoints;
 -- No rows = endpoint missing; state_desc != 'STARTED' = stopped
 ```
@@ -136,14 +136,16 @@ interception.
 
 **How to spot it:**
 ```sql
-SELECT encryption_desc, encryption_algorithm_desc
+SELECT is_encryption_enabled, encryption_algorithm_desc
 FROM sys.database_mirroring_endpoints;
--- 'DISABLED' = Critical; 'SUPPORTED' = Warning
+-- is_encryption_enabled = 0 = DISABLED (Critical)
+-- is_encryption_enabled = 1 AND encryption_algorithm_desc lists NONE (e.g. 'NONE, AES') = SUPPORTED/negotiable (Warning)
+-- there is no encryption_desc column; SUPPORTED vs REQUIRED is encoded by whether NONE appears in the algorithm desc
 ```
 
 **Example:**
 ```sql
--- Problem: encryption_desc = 'SUPPORTED'
+-- Problem: is_encryption_enabled = 1, encryption_algorithm_desc = 'NONE, AES' (SUPPORTED/negotiable)
 -- Fix: Enforce AES on all replicas (change all replicas before enforcement takes effect)
 ALTER ENDPOINT [Hadr_endpoint]
   FOR DATABASE_MIRRORING (ENCRYPTION = REQUIRED ALGORITHM AES);
@@ -151,7 +153,7 @@ ALTER ENDPOINT [Hadr_endpoint]
 
 **Fix options:**
 1. Set `ENCRYPTION = REQUIRED ALGORITHM AES` on every replica endpoint — must be applied to all before enforcement works (both sides must agree on REQUIRED)
-2. After changing all replicas, verify: `SELECT encryption_desc FROM sys.database_mirroring_endpoints` should show `REQUIRED`
+2. After changing all replicas, verify: `SELECT is_encryption_enabled, encryption_algorithm_desc FROM sys.database_mirroring_endpoints` should show `1` and `AES` (with no `NONE`)
 
 **Related checks:** F26 (RC4 algorithm), F3 (endpoint must be started for this change)
 
@@ -350,12 +352,15 @@ participates at the AG level but is not protecting the missing databases.
 
 **How to spot it:**
 ```sql
--- Run on primary; compare database count per replica vs primary
-SELECT ar.replica_server_name, COUNT(adc.database_id) AS db_count
-FROM sys.availability_replicas ar
-LEFT JOIN sys.availability_databases_cluster adc ON ar.group_id = adc.ag_id
-GROUP BY ar.replica_server_name;
--- Lower count on a secondary = missing databases
+-- Run ON THE SECONDARY replica. is_database_joined = 0 means the database is not
+-- yet joined to the AG on this replica.
+SELECT database_name, is_database_joined
+FROM sys.dm_hadr_database_replica_cluster_states drcs
+JOIN sys.dm_hadr_availability_replica_states ars ON drcs.replica_id = ars.replica_id
+WHERE ars.is_local = 1 AND drcs.is_database_joined = 0;
+-- Do NOT compare sys.availability_databases_cluster row counts between replicas —
+-- that view returns the same cluster-wide list on every replica and cannot detect
+-- a database that is unjoined on one specific replica.
 ```
 
 **Fix options:**
@@ -812,12 +817,12 @@ existing databases to be removed.
 
 **How to spot it:**
 ```sql
-SELECT ag.name, ag.basic_features, COUNT(adc.database_id) AS db_count
+SELECT ag.name, ag.basic_features, COUNT(adc.group_database_id) AS db_count
 FROM sys.availability_groups ag
-JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.ag_id
+JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
 WHERE ag.basic_features = 1
 GROUP BY ag.name, ag.basic_features
-HAVING COUNT(adc.database_id) > 1;
+HAVING COUNT(adc.group_database_id) > 1;
 ```
 
 **Fix options:**
@@ -1014,11 +1019,19 @@ having load-tested that specific shape.
 
 **How to spot it:**
 ```sql
-SELECT ag.name AS ag_name, COUNT(*) AS database_count
-FROM sys.availability_groups ag
-JOIN sys.availability_databases_cluster adc ON ag.group_id = adc.group_id
-GROUP BY ag.name
-HAVING COUNT(*) > 100;
+-- Per PHYSICAL MACHINE aggregate, NOT per-AG. Run on the instance.
+-- AG databases this instance hosts across ALL availability groups:
+SELECT COUNT(*) AS local_ag_database_count
+FROM sys.dm_hadr_database_replica_cluster_states drcs
+JOIN sys.dm_hadr_availability_replica_states ars ON drcs.replica_id = ars.replica_id
+WHERE ars.is_local = 1;
+
+-- AGs this instance participates in:
+SELECT COUNT(DISTINCT group_id) AS local_ag_count
+FROM sys.dm_hadr_availability_replica_states
+WHERE is_local = 1;
+-- > 100 databases OR > 10 AGs on one physical machine = past Microsoft's tested ceiling.
+-- A per-AG count (GROUP BY ag.name) is the wrong scope — the limit is per machine.
 ```
 
 **Example:**

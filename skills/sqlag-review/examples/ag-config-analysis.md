@@ -32,7 +32,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 ### Warnings
 
 ### [W1 — F4] Endpoint Encryption Set to SUPPORTED (Downgrade Permitted)
-- **Observed:** `encryption_desc = 'SUPPORTED'` on `Hadr_endpoint_FIN` — allows plaintext if the remote endpoint does not enforce encryption
+- **Observed:** `encryption_algorithm_desc = 'NONE, AES'` (SUPPORTED/negotiable — `NONE` in the list) with `is_encryption_enabled = 1` on `Hadr_endpoint_FIN` — allows plaintext if the remote endpoint does not enforce encryption
 - **Impact:** A misconfigured remote replica or a man-in-the-middle scenario could negotiate a plaintext connection, exposing unencrypted transaction log data in transit (including financial data in PayrollDB and GeneralLedger).
 - **Fix:**
   ```sql

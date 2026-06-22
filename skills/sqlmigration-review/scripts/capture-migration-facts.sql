@@ -43,7 +43,7 @@ FROM sys.server_principals
 WHERE type_desc IN ('WINDOWS_LOGIN', 'WINDOWS_GROUP');
 
 -- Query 8: Linked servers (relevant when target is Azure SQL Database, not Managed Instance)
--- For the full linked-server portability detail (provider, collation_compatible), run
+-- For the full linked-server portability detail (provider, is_collation_compatible), run
 -- /sqlmigration-objects-review's capture-objects-facts.sql Query 7 instead of duplicating here.
 SELECT name, product, data_source, is_linked
 FROM sys.servers

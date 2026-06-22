@@ -13,7 +13,7 @@
 
 ### O1 — Low Page Life Expectancy
 
-**What it means:** Page Life Expectancy (PLE) measures how long a data page stays in the buffer pool before being evicted. When PLE drops below 300 seconds, the buffer pool is recycling pages faster than the traditional benchmark suggests is healthy. This means queries are reading pages from disk more often instead of cache, causing PAGEIOLATCH waits.
+**What it means:** Page Life Expectancy (PLE) measures how long a data page stays in the buffer pool before being evicted. Microsoft does not publish a fixed healthy value — per MS Learn, "a higher, growing value is best; a sudden dip indicates a significant churn." The old "300 seconds" rule is only meaningful on a ~4 GB pool; scale it as `(buffer pool GB / 4) × 300` (so ~9,600 s on 128 GB). When PLE falls below that scaled floor, or dips sharply, the buffer pool is recycling pages faster than the working set needs and queries read from disk more often, causing PAGEIOLATCH waits.
 
 **How to spot it:**
 ```sql
@@ -22,7 +22,7 @@ FROM sys.dm_os_performance_counters
 WHERE object_name LIKE '%Buffer Manager%'
   AND counter_name = 'Page life expectancy';
 ```
-A value < 300 triggers Warning; < 60 triggers Critical.
+A value below the scaled floor `(GB/4)×300` triggers Warning; below ~25% of the floor (or < 60 s on a small server) triggers Critical. Compare against the buffer pool size (`Buffer Manager : Database pages` × 8 KB) and against O2's trend, not a flat number.
 
 **Example:**
 ```
@@ -254,7 +254,7 @@ WHERE type = 'OBJECTSTORE_LOCK_MANAGER';
 
 ### O10 — Plan Cache Hit Rate
 
-**What it means:** A plan cache hit rate below 90% means SQL Server is spending significant CPU time recompiling queries instead of reusing cached plans. This wastes CPU and causes plan cache churn.
+**What it means:** Plan cache churn wastes CPU on recompiles instead of reusing cached plans. Diagnose it from O6 (single-use plan bloat) and O7 (compiles/sec) — **not** from a 90% threshold on the `Plan Cache : Cache Hit Ratio` counter. Per MS Learn the documented "90 or higher is desirable" applies to the **Buffer Cache Hit Ratio** (Buffer Manager object); Plan Cache Hit Ratio is just "the ratio between cache hits and lookups for plans," has no documented healthy floor, and frequently reads near 100% even when ad-hoc bloat is severe. Use it only as a soft corroborating signal.
 
 **Fix options:**
 1. **Enable `optimize for ad hoc workloads`** (see O6).
@@ -455,7 +455,7 @@ sp_configure 'max server memory (MB)', 220160; RECONFIGURE;
 
 | Check | Category | Trigger | Severity |
 |-------|----------|---------|----------|
-| O1 | PLE | PLE < 300 s | Warn; < 60 s = Critical |
+| O1 | PLE | PLE < scaled floor `(GB/4)×300` or sudden dip | Warn; < 25% of floor (or < 60 s) = Critical |
 | O2 | PLE | PLE declining ≥ 10 s/min | Warn; ≥ 60 s/min = Critical |
 | O3 | NUMA | NUMA node PLE < 50% of max node | Warning |
 | O4 | Buffer Pool | Single DB ≥ 60% of pool | Warn; ≥ 80% = Critical |
@@ -464,7 +464,7 @@ sp_configure 'max server memory (MB)', 220160; RECONFIGURE;
 | O7 | Plan Cache | Compilations/sec > 500 | Warn; > 1,000 = Critical |
 | O8 | Plan Cache | Single plan > 10 MB | Warn; > 50 MB = Critical |
 | O9 | Clerk | OBJECTSTORE_LOCK_MANAGER > 100 MB | Warn; > 500 MB = Critical |
-| O10 | Plan Cache | Cache hit rate < 90% | Warn; < 80% = Critical |
+| O10 | Plan Cache | Churn via O6/O7 (Plan Cache Hit Ratio is a soft signal, no MS 90% floor) | Warn on low reuse + high compiles/sec |
 | O11 | Grants | Any session waiting for grant | Warn (1–5); Critical (> 5) |
 | O12 | Grants | Grant timeout (error 8645) / error 701 | Critical |
 | O13 | Grants | Used/granted ratio < 25% | Warning |

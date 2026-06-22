@@ -20,11 +20,13 @@ Y##", requests deeper fix options, or wants to understand why a threshold was ch
 
 ### Y1 — Target Edition Cannot Support Source Feature In Use
 
-**What it means:** The source database persists evidence of using an edition-gated feature
-(Always Encrypted with secure enclaves, partitioning on pre-2016 SP1 Standard, Online/Resumable
-Online Index Rebuild, Change Data Capture). Several of these features are recorded by SQL
-Server itself in `sys.dm_db_persisted_sku_features` so the engine can refuse to start the
-database on an edition that no longer supports the feature it was built with.
+**What it means:** The source database persists evidence of an edition-gated feature that SQL
+Server records in `sys.dm_db_persisted_sku_features` so the engine can refuse to attach/restore
+the database on an edition that doesn't support it. This DMV reports exactly seven features:
+`ChangeCapture`, `ColumnStoreIndex`, `Compression`, `MultipleFSContainers`, `InMemoryOLTP`,
+`Partitioning`, `TransparentDataEncryption`. Other edition-gated features (Always Encrypted secure
+enclaves, Online/Resumable Index Rebuild, Resource Governor) are real migration blockers but are
+**not** reported by this DMV — check them against the target edition's feature matrix separately.
 
 **How to spot it:**
 ```sql
@@ -246,10 +248,13 @@ root cause: Azure SQL Database is not "SQL Server in the cloud," it is a differe
 
 ### Y8 — Windows-Authenticated Logins Have No Migration Path to Azure SQL Database
 
-**What it means:** Azure SQL Database does not support Windows Authentication at all. Every
-Windows-authenticated login and the database users mapped to it need an explicit migration
-target — either a Microsoft Entra ID (formerly Azure AD) identity or a converted SQL
-authentication user — or the application cannot connect after cutover.
+**What it means:** Azure SQL Database does not accept on-premises AD Windows authentication
+(NTLM/Kerberos) directly. It **does** support Microsoft Entra Integrated authentication — the
+modern "Windows Authentication" — for Entra hybrid identities, giving seamless SSO to users whose
+AD domain is federated/synced with Microsoft Entra ID. So each Windows-authenticated login and its
+mapped database users need a migration target: a synced Microsoft Entra ID (formerly Azure AD)
+identity (preferred, preserves SSO) or a converted contained SQL authentication user — otherwise
+the application cannot connect after cutover.
 
 **How to spot it:** Source has logins with `type_desc = 'WINDOWS_LOGIN'` or
 `'WINDOWS_GROUP'` that map to database users the application actually uses.

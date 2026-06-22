@@ -72,7 +72,7 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 ## Category 1 — Version & Edition Compatibility
 
 ### Y1 — Target Edition Cannot Support Source Feature In Use
-**Trigger:** Source database uses an edition-gated feature (Always Encrypted with secure enclaves, table/index partitioning pre-2016 SP1 Standard, Online Index Rebuild, Resumable Online Index Rebuild, Change Data Capture) per `sys.dm_db_persisted_sku_features`, and the stated target edition does not support it at the target version.
+**Trigger:** `sys.dm_db_persisted_sku_features` on the source returns one or more rows, and the stated target edition does not support that feature. This DMV reports exactly seven persisted, edition-gated features: `ChangeCapture`, `ColumnStoreIndex`, `Compression`, `MultipleFSContainers`, `InMemoryOLTP`, `Partitioning`, `TransparentDataEncryption`. (Features such as Always Encrypted secure enclaves, Online/Resumable Index Rebuild, and Resource Governor are edition-gated but are **not** reported by this DMV — verify those against the target's [Editions and supported features] page separately.)
 **Severity:** Critical
 **Fix:** Cross-reference `sys.dm_db_persisted_sku_features` on the source against the target edition's documented feature set before cutover; upgrade the target edition or redesign the dependent objects.
 
@@ -92,7 +92,7 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 **Fix:** Database-level restore preserves the database's own collation, but cross-database joins against the new instance's `tempdb`/system databases can raise collation conflict errors; test cross-database queries explicitly and add `COLLATE` clauses where comparisons cross the boundary.
 
 ### Y5 — Source Uses a Feature Discontinued in the Target Version
-**Trigger:** Source uses a feature already removed by the target SQL Server version's Database Engine, per `sys.dm_db_persisted_sku_features` or deprecated-feature-usage Extended Events captured on the source.
+**Trigger:** Source uses a feature already removed (discontinued) by the target SQL Server version's Database Engine. Detect via the **SQL Server, Deprecated Features** performance-counter object or the `deprecation_announcement` / `deprecation_final_support` Extended Events captured on the source — `sys.dm_db_persisted_sku_features` does **not** report discontinued/deprecated features and cannot be used for this check.
 **Severity:** Critical
 **Fix:** Identify the discontinued feature before migrating and rebuild the dependent functionality with the modern equivalent — do not discover this during cutover.
 
@@ -109,9 +109,9 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 **Fix:** Re-platform instance-scoped dependencies before migrating: replace linked servers with Elastic Query or external tables, and cross-database queries with Elastic Query or database consolidation. Azure SQL Managed Instance retains these features and does not require this change.
 
 ### Y8 — Windows-Authenticated Logins Have No Migration Path to Azure SQL Database
-**Trigger:** Target platform is Azure SQL Database and the source has Windows Authentication logins/users with no corresponding Microsoft Entra ID identity plan.
+**Trigger:** Target platform is Azure SQL Database and the source has on-premises Windows (AD NTLM/Kerberos) logins/users with no corresponding Microsoft Entra ID identity plan.
 **Severity:** Critical
-**Fix:** Azure SQL Database does not support Windows Authentication; map each Windows login to a Microsoft Entra ID user/group or a contained SQL authentication user before cutover, and update connection strings.
+**Fix:** Azure SQL Database does not accept on-premises AD Windows authentication (NTLM/Kerberos) directly. It **does** support **Microsoft Entra Integrated** authentication (the modern "Windows Authentication") for Entra hybrid identities — members of an AD domain federated/synced with Microsoft Entra ID get seamless SSO. Sync the source Windows accounts to Microsoft Entra ID (Entra Connect) and create contained Entra users, or map to contained SQL authentication users; then update connection strings to use Entra auth.
 
 ### Y9 — Source Relies on SQL Server Agent but Target Has No Agent Service
 **Trigger:** Target platform is Azure SQL Database (no Agent service) and the source has active SQL Server Agent jobs the application depends on.
@@ -130,10 +130,10 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 **Severity:** Critical
 **Fix:** Take a fresh full backup immediately before cutover, or repair the chain with a differential backup against the current base, before relying on the restore sequence.
 
-### Y12 — Source Database Not in FULL Recovery Model for Log-Based Migration
-**Trigger:** Migration mechanism is log shipping or Always On AG seeding, and the source database's `recovery_model_desc` is not `FULL`.
+### Y12 — Source Database Recovery Model Incompatible With Log-Based Migration
+**Trigger:** Migration mechanism is log shipping or Always On AG seeding, and the source database's `recovery_model_desc` is `SIMPLE`. Note the two mechanisms differ: **log shipping** supports `FULL` *or* `BULK_LOGGED`; **Always On AG** requires `FULL`. `SIMPLE` breaks both.
 **Severity:** Critical
-**Fix:** `ALTER DATABASE ... SET RECOVERY FULL` and take a new full backup to start the log chain — both mechanisms require an unbroken FULL-recovery log chain from the initialization point forward.
+**Fix:** `ALTER DATABASE ... SET RECOVERY FULL` (required for AG; for log shipping `BULK_LOGGED` is also acceptable but switching to `SIMPLE` at any point breaks the chain) and take a new full backup to start the log chain — both mechanisms need an unbroken log chain from the initialization point forward.
 
 ### Y13 — Target Edition or Platform Cannot Support Always On AG Seeding
 **Trigger:** Migration mechanism is Always On AG seeding, and either the target platform is Azure SQL Database (which cannot participate in an Always On Availability Group as a replica at all — it is not a clusterable instance), or the target edition is below Standard Edition, or the source's requirements (more than one database per AG, readable secondary) exceed Basic Availability Groups' limits.
