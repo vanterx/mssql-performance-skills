@@ -169,7 +169,7 @@ WHERE servicename LIKE 'SQL Server (%';
 
 - **Trigger:** `sp_configure 'max server memory (MB)' config_value = 0`
 - **Severity:** Critical
-- **Fix:** Set Max Server Memory to leave 10–15% of RAM (or at least 4 GB) for the OS. On a 64 GB server: `EXEC sp_configure 'max server memory (MB)', 57344; RECONFIGURE;` An unconfigured instance will consume all available RAM, causing OS paging.
+- **Fix:** Set Max Server Memory so the OS and other processes retain headroom. The "leave 10–15% of RAM (or at least 4 GB)" rule used here is a **simplified operational heuristic**, not MS-documented — MS Learn gives more detailed, tiered guidance (reserve ~1 GB per 4 GB up to 16 GB, then ~1 GB per 8 GB beyond, plus allowances for thread stacks, other instances/services, and any LPIM/columnstore/XTP footprint). Example on a 64 GB single-instance box: `EXEC sp_configure 'max server memory (MB)', 57344; RECONFIGURE;`. An unconfigured instance will consume essentially all available RAM, causing OS paging (error 17890).
 
 ### B7 — Min Server Memory Greater Than Zero
 

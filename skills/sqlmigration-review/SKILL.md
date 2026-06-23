@@ -104,9 +104,9 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 ## Category 2 — Platform Compatibility (Azure SQL)
 
 ### Y7 — Azure SQL Database Target Cannot Host Source's Instance-Scoped Objects
-**Trigger:** Target platform is Azure SQL Database (not Managed Instance) and the source relies on linked servers, cross-database three-part-name queries, FILESTREAM, or CLR with file system access.
+**Trigger:** Target platform is Azure SQL Database (not Managed Instance) and the source relies on linked servers, cross-database three-part-name queries, FILESTREAM, or CLR with file system access. Detect FILESTREAM via `SERVERPROPERTY('FilestreamConfiguredLevel')` and `sys.master_files` (`type_desc = 'FILESTREAM'`), and user CLR via `sys.assemblies` (`is_user_defined = 1`) — both collected by `capture-migration-facts.sql` Query 10.
 **Severity:** Critical
-**Fix:** Re-platform instance-scoped dependencies before migrating: replace linked servers with Elastic Query or external tables, and cross-database queries with Elastic Query or database consolidation. Azure SQL Managed Instance retains these features and does not require this change.
+**Fix:** Re-platform instance-scoped dependencies before migrating: replace linked servers with Elastic Query or external tables, and cross-database queries with Elastic Query or database consolidation. FILESTREAM is not supported on Azure SQL Database (or Managed Instance); migrate BLOBs to `varbinary(max)` or external blob storage. Azure SQL Managed Instance retains linked servers/cross-database queries and SAFE CLR, so it does not require those changes.
 
 ### Y8 — Windows-Authenticated Logins Have No Migration Path to Azure SQL Database
 **Trigger:** Target platform is Azure SQL Database and the source has on-premises Windows (AD NTLM/Kerberos) logins/users with no corresponding Microsoft Entra ID identity plan.
@@ -143,14 +143,14 @@ When a user pastes mixed input that includes AG configuration, encryption DMV ou
 ## Category 4 — Lifecycle
 
 ### Y14 — Source SQL Server Version Is Out of Support or Nearing End of Extended Security Updates
-**Trigger:** Source product version corresponds to a SQL Server release whose mainstream or extended support end date has passed or is within 12 months, per the Microsoft SQL Server servicing lifecycle for the detected major version.
+**Trigger:** Source product version corresponds to a SQL Server release whose mainstream or extended support end date has passed or is within 12 months, per the Microsoft SQL Server servicing lifecycle for the detected major version. (The support end *dates* are MS-documented in the [SQL Server lifecycle](https://learn.microsoft.com/sql/sql-server/end-of-support/sql-server-end-of-support-overview); the **12-month** warning window is an operational planning heuristic, not an MS-documented threshold — adjust it to your organization's migration lead time.)
 **Severity:** Warning
 **Fix:** Treat the migration as time-sensitive — schedule the cutover ahead of the support end date, or enroll in Extended Security Updates (on-premises or via Azure Arc) as a bridge if the migration cannot complete in time.
 
 ## Category 5 — Source Topology Transition
 
 ### Y15 — Failover Cluster Instance Source Retired Without a Client Redirect Plan
-**Trigger:** Source instance is a SQL Server Failover Cluster Instance (FCI — clients connect via its Virtual Network Name/Client Access Point) and the target is not also that same FCI (e.g., target is a standalone instance or an Always On AG), and the migration plan has no documented step to repoint client connection strings, DNS, or load-balancer/listener configuration from the FCI's VNN to the new target's connection endpoint.
+**Trigger:** Source instance is a SQL Server Failover Cluster Instance (FCI — detected via `SERVERPROPERTY('IsClustered') = 1` and a non-empty `sys.dm_os_cluster_nodes`, collected by `capture-migration-facts.sql` Query 9; clients connect via its Virtual Network Name/Client Access Point) and the target is not also that same FCI (e.g., target is a standalone instance or an Always On AG), and the migration plan has no documented step to repoint client connection strings, DNS, or load-balancer/listener configuration from the FCI's VNN to the new target's connection endpoint.
 **Severity:** Critical
 **Fix:** Inventory every application, linked server, reporting subscription, and ETL job connection string that references the FCI's VNN before cutover. For an AG target, repoint to the new AG listener DNS name (not a specific replica's hostname) — see `/sqlag-review` F14–F18 for listener/multi-subnet design. Where the number of call sites is large or undocumented, consider a DNS CNAME swap (retire the old VNN as an alias pointing to the new endpoint with a short TTL) to make the cutover atomic and the rollback fast, rather than chasing every connection string individually. Test resolution (`Resolve-DnsName`/`nslookup`) from each application tier before the go/no-go decision, not after.
 
