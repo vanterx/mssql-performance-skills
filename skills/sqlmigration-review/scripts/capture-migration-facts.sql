@@ -1,5 +1,5 @@
 -- capture-migration-facts.sql
--- Run on the SOURCE instance to collect facts needed by /sqlmigration-review (Y1-Y14).
+-- Run on the SOURCE instance to collect facts needed by /sqlmigration-review (Y1-Y15).
 -- Native T-SQL only -- no third-party tooling required.
 
 -- Query 1: Instance version, edition, engine edition
@@ -48,3 +48,24 @@ WHERE type_desc IN ('WINDOWS_LOGIN', 'WINDOWS_GROUP');
 SELECT name, product, data_source, is_linked
 FROM sys.servers
 WHERE is_linked = 1;
+
+-- Query 9: Failover Cluster Instance (FCI) detection (Y15)
+-- IsClustered = 1 means the source engine is an FCI; sys.dm_os_cluster_nodes lists the
+-- WSFC nodes (empty result set on a standalone instance).
+SELECT SERVERPROPERTY('IsClustered')          AS is_clustered,
+       SERVERPROPERTY('ComputerNamePhysicalNetBIOS') AS physical_node;
+SELECT NodeName, status_description, is_current_owner
+FROM sys.dm_os_cluster_nodes;
+
+-- Query 10: FILESTREAM and CLR assembly usage (Y7) -- run per database for assemblies
+-- FILESTREAM does not exist on Azure SQL Database; SAFE-only CLR is unsupported there and
+-- EXTERNAL_ACCESS/UNSAFE CLR is unsupported on Managed Instance.
+SELECT SERVERPROPERTY('FilestreamConfiguredLevel') AS filestream_configured_level,
+       SERVERPROPERTY('FilestreamEffectiveLevel')  AS filestream_effective_level;
+SELECT name, type_desc, physical_name
+FROM sys.master_files
+WHERE type_desc = 'FILESTREAM';
+-- Per database: user CLR assemblies and their permission set
+SELECT name, permission_set_desc, clr_name
+FROM sys.assemblies
+WHERE is_user_defined = 1 AND name <> 'Microsoft.SqlServer.Types';

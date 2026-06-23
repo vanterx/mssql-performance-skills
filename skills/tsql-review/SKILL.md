@@ -227,7 +227,7 @@ Checks for syntax that is removed, deprecated, or diverges from SQL Server best 
 ### T41 — RAISERROR Instead of THROW
 - **Trigger:** `RAISERROR` statement
 - **Severity:** Info
-- **Fix:** `RAISERROR` is not deprecated but `THROW` (SQL Server 2012+) is the modern replacement. Two distinct forms: (1) Bare `THROW;` inside a CATCH block re-raises the caught exception with its original error number and severity — use this to propagate errors up the call stack. (2) `THROW error_number, message, state` raises a new exception; the severity is always 16 (the caller cannot change it). Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new application errors; in CATCH blocks, use bare `THROW;` instead of `RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState)`.
+- **Fix:** The modern `RAISERROR(msg, severity, state)` syntax is **not** on Microsoft's deprecated-features list — only the legacy comma-less integer-string form (`RAISERROR 50001 'message'`, tracked as "Oldstyle RAISERROR") is formally deprecated. That said, MS Learn recommends `THROW` (SQL Server 2012+) for new development. Two distinct forms: (1) Bare `THROW;` inside a CATCH block re-raises the caught exception with its original error number and severity — use this to propagate errors up the call stack. (2) `THROW error_number, message, state` raises a new exception; the severity is always 16 (the caller cannot change it). Replace `RAISERROR('msg', 16, 1)` with `THROW 50001, N'msg', 1` for new application errors; in CATCH blocks, use bare `THROW;` instead of `RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState)`.
 ### T42 — GETDATE() Where SYSDATETIME() Preferred
 - **Trigger:** `GETDATE()` function call in a context where higher precision or UTC time is appropriate
 - **Severity:** Info
@@ -398,17 +398,17 @@ Checks for patterns that are likely to degrade performance at scale, even when s
 
 ## SQL Server 2017–2022 Modern Syntax Checks (T79–T85)
 ### T79 — Scalar UDF Inlining Blocked — Blocking Construct Identified
-- **Trigger:** A scalar user-defined function call is detected in the query (T8) AND the function body contains a construct that prevents SQL Server 2019+ Scalar UDF Inlining: `WHILE`, `CURSOR`, `TRY/CATCH`, `@@ROWCOUNT` check after a non-trivial statement, or any external access clause — SQL 2019+ only
+- **Trigger:** A scalar user-defined function call is detected in the query (T8) AND the function body contains a construct that prevents SQL Server 2019+ Scalar UDF Inlining — common blockers include `WHILE`/loops, `CURSOR`, `TRY...CATCH`, time-dependent intrinsics, recursion, aggregates passed as parameters, and EXEC/external access. (For the authoritative, version-specific list see MS Learn "Scalar UDF Inlining — Inlineable scalar UDFs requirements"; the set has expanded across CUs, so treat the list here as indicative, not exhaustive.) — SQL 2019+ only
 - **Severity:** Warning
 - **Fix:** Identify the specific blocking construct and rewrite the UDF. `WHILE` loops can be replaced with set-based CTEs. `TRY/CATCH` for error checking can move to the caller. If inlining is not achievable, convert the scalar UDF to a multi-statement table-valued function and cross-apply it — this also enables parallelism in SQL 2019+.
 ### T80 — Ledger Table DML Without Version Column Awareness
 - **Trigger:** `INSERT`, `UPDATE`, or `DELETE` targeting a table whose DDL or user description identifies it as a ledger table (`LEDGER = ON`) — SQL 2022+ only
 - **Severity:** Warning
 - **Fix:** Ledger append-only tables reject `UPDATE` and `DELETE` by design — only `INSERT` is permitted. For updatable ledger tables, do not explicitly reference the hidden ledger columns (`ledger_start_transaction_id`, `ledger_end_transaction_id`, `ledger_start_sequence_number`) in DML — they are system-managed. Attempts to write to them raise an error.
-### T81 — JSON_OBJECT or JSON_ARRAY Used Below SQL 2022 Compat Level
-- **Trigger:** `JSON_OBJECT(...)` or `JSON_ARRAY(...)` function call detected — SQL 2022+ only; these functions require the SQL Server 2022 engine (unlike `OPENJSON`, they are not gated on database compatibility level)
+### T81 — JSON_OBJECT or JSON_ARRAY Used on a Pre-2022 Engine
+- **Trigger:** `JSON_OBJECT(...)` or `JSON_ARRAY(...)` function call detected — these functions require the **SQL Server 2022 (16.x) engine or later**. Per MS Learn they are gated on the *engine version*, **not** the database compatibility level (only `OPENJSON` is compat-level-gated, at 130). So a pre-2022 engine is the real constraint, regardless of compat level.
 - **Severity:** Warning
-- **Fix:** Verify the target database compat level: `SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()`. If the server is below SQL Server 2022, replace `JSON_OBJECT(key: value)` with `(SELECT key = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)` pattern. For JSON_ARRAY, use `(SELECT val FROM ... FOR JSON PATH)`.
+- **Fix:** Verify the engine version, not the compat level: `SELECT SERVERPROPERTY('ProductMajorVersion')` (>= 16 = SQL Server 2022+). If the server is below SQL Server 2022, replace `JSON_OBJECT(key: value)` with the `(SELECT key = value FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)` pattern. For `JSON_ARRAY`, use `(SELECT val FROM ... FOR JSON PATH)`.
 ### T82 — STRING_AGG Without Deterministic Ordering
 - **Trigger:** `STRING_AGG(col, separator)` without a `WITHIN GROUP (ORDER BY ...)` clause where the query context implies a sorted result is expected — SQL 2017+
 - **Severity:** Info
