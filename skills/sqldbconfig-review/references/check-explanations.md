@@ -1,6 +1,6 @@
-# sqldbconfig-review — Check Explanations (B1–B28)
+# sqldbconfig-review — Check Explanations (B1–B29)
 
-Plain-English explanations for all 28 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
+Plain-English explanations for all 29 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
 
 ---
 
@@ -10,7 +10,7 @@ Plain-English explanations for all 28 configuration drift checks. Each entry fol
 - [B6–B9 — Memory Configuration](#b6b9--memory-configuration)
 - [B10–B18 — Database-Level Settings](#b10b18--database-level-settings)
 - [B19–B23 — File and Storage Configuration](#b19b23--file-and-storage-configuration)
-- [B24–B28 — Surface Area and Feature Exposure](#b24b28--surface-area-and-feature-exposure)
+- [B24–B29 — Surface Area and Feature Exposure](#b24b29--surface-area-and-feature-exposure)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -1068,7 +1068,7 @@ ALTER DATABASE [tempdb] ADD FILE (
 
 ---
 
-## B24–B28 — Surface Area and Feature Exposure
+## B24–B29 — Surface Area and Feature Exposure
 
 ### B24 — CLR Enabled
 
@@ -1232,6 +1232,66 @@ RECONFIGURE;
 
 ---
 
+### B29 — Service-SID Login Missing from sysadmin
+
+**What it means**
+When SQL Server is installed, Setup creates a set of Windows logins for its own *per-service SIDs* and adds them to the `sysadmin` fixed server role. These are how the services connect back to the Database Engine — `NT SERVICE\MSSQLSERVER` is the login the Database Engine service uses to connect to itself, and `NT SERVICE\SQLSERVERAGENT` is how SQL Agent connects to read `msdb` and run jobs. The per-service SID for the VSS Writer (`NT SERVICE\SQLWriter`) and the WMI provider (`NT SERVICE\Winmgmt`) are provisioned the same way. They are service SIDs, not user accounts — they have a security identifier in Windows but no password a human can use, and they are created and set to `sysadmin` *regardless* of whether the service actually runs under a virtual account, a domain account, or a gMSA.
+
+This check is the **inverse polarity** of the other surface-area checks (B24–B28), which flag *excess* exposure to be reduced. B29 flags *broken hardening*: a well-meaning security review that finds `NT SERVICE\*` in `sysadmin` and removes or downgrades it. MS Learn documents the consequences directly — "SQL Server Agent cannot start or connect to a SQL Server service" and "SQL Server Setup programs encounter [a] problem." The correct response to a flagged row is to **restore** the login, never to remove it.
+
+**Background — service account type vs. service SID (why removing them never helps)**
+The *startup account* you assign to a service (virtual account, domain account, MSA, or gMSA) governs how the process accesses resources *outside* the local machine (file shares, linked servers, network backups). The *service SID* login governs the *internal* self-connection to the Database Engine. They are separate mechanisms, so switching the startup account to a domain user or gMSA does not remove the need for the `NT SERVICE\*` login — Setup provisions it either way. Notes:
+- Virtual accounts (`NT SERVICE\<ServiceName>`) are auto-managed local accounts; they access the network as `domain\computer$` and **cannot** be used for a failover cluster instance (the SID differs per node).
+- **A gMSA is a supported FCI startup account since SQL Server 2016** (standalone MSAs and virtual accounts are not). This corrects older SQL 2012-era guidance that MSAs were categorically unsupported on clusters.
+- Always change a startup account with **SQL Server Configuration Manager**, not the Windows Services applet — Configuration Manager maintains the service-SID ACLs, local-group membership, and the local security store that protects the service master key.
+- To grant a service file-system rights (e.g. a backup folder), grant them to the **per-service SID** (`NT SERVICE\MSSQLSERVER`), not to the startup account.
+
+**How to spot it**
+```sql
+-- List the NT SERVICE logins and whether each is in sysadmin
+SELECT sp.name, sp.type_desc,
+       IS_SRVROLEMEMBER('sysadmin', sp.name) AS is_sysadmin
+FROM sys.server_principals AS sp
+WHERE sp.name LIKE 'NT SERVICE\%'
+ORDER BY sp.name;
+-- A required login missing from the result set → it was dropped.
+-- A required login present with is_sysadmin = 0 → it was removed from sysadmin.
+```
+`IS_SRVROLEMEMBER` returns NULL if the login is not present in `sys.server_principals` or the caller lacks VIEW DEFINITION on the role, so scope the query from `sys.server_principals` (as above) and run it as a sysadmin/securityadmin. A NULL-safe catalog-view alternative:
+```sql
+SELECT sp.name,
+       CASE WHEN rm.member_principal_id IS NULL THEN 0 ELSE 1 END AS in_sysadmin
+FROM sys.server_principals AS sp
+LEFT JOIN sys.server_role_members AS rm
+       ON rm.member_principal_id = sp.principal_id
+      AND rm.role_principal_id = (SELECT principal_id FROM sys.server_principals
+                                  WHERE name = 'sysadmin' AND type = 'R')
+WHERE sp.name LIKE 'NT SERVICE\%';
+```
+
+**Example (problem → fix)**
+```sql
+-- Problem: a hardening script removed NT SERVICE\SQLSERVERAGENT from sysadmin.
+-- SQL Agent now fails to start; jobs do not run.
+
+-- Fix: recreate the login if it was dropped, then re-add to sysadmin.
+IF SUSER_ID('NT SERVICE\SQLSERVERAGENT') IS NULL
+    CREATE LOGIN [NT SERVICE\SQLSERVERAGENT] FROM WINDOWS
+        WITH DEFAULT_DATABASE = [master];
+ALTER SERVER ROLE sysadmin ADD MEMBER [NT SERVICE\SQLSERVERAGENT];
+-- Restart the SQL Server Agent service to confirm it connects.
+```
+
+**Fix options**
+1. Restore every required service-SID login to `sysadmin` (default instance: `MSSQLSERVER`, `SQLSERVERAGENT`, `SQLWriter`, `Winmgmt`; named instance `X`: `MSSQL$X`, `SQLAgent$X`, plus `SQLWriter`, `Winmgmt`).
+2. Recreate with `CREATE LOGIN [NT SERVICE\…] FROM WINDOWS` first if the login was dropped, then `ALTER SERVER ROLE sysadmin ADD MEMBER`.
+3. Do **not** attempt least-privilege by removing these — they are an internal engine dependency, not an over-grant. If a security baseline flags them, document them as required exceptions.
+4. If the startup account itself must change, use SQL Server Configuration Manager so the service SID and its ACLs are preserved.
+
+**Related checks:** B17 (Trustworthy — the *other* direction, where sysadmin-owned dbo enables escalation); `sqlbootstraplog-review` U19 (service-account *type* selection at install time — virtual vs domain vs gMSA); `sqlspn-review` K11/K34 (gMSA SPN auto-registration and password-rollover drift)
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger | Severity |
@@ -1264,3 +1324,4 @@ RECONFIGURE;
 | B26 | Surface Area | Ad Hoc Distributed Queries = 1 | Warning |
 | B27 | Surface Area | cross db ownership chaining = 1 (instance) | Warning |
 | B28 | Surface Area | remote admin connections = 0 | Info |
+| B29 | Surface Area | Service-SID login missing from sysadmin | Critical |

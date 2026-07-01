@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 828 checks in this library apply to your SQL Server version.
+Which of the 829 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -58,7 +58,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqltrace-review` on Azure: Extended Events are available but some event classes (XE trace capture mechanics) differ from on-premises.
 - `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Azure AD–only auth; K32–K33 are Azure-specific.
 - `sqlencryption-review` on SQL 2008 R2: A9–A16 (AE, SQL 2016+), A22–A25 (backup enc, SQL 2014+), A82 (SSISDB, SQL 2012+), A87/A88 (DDM, SQL 2016+) not applicable. On SQL 2012: A82 applicable, A87/A88 still skipped. On SQL 2016: A9–A16, A87/A88 applicable; A10/A12 (enclave), A63–A67 (AE Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76, A94 (TLS 1.3, Ledger, GDPR append-only, SQL 2022+) skipped. Azure SQL DB/MI: A50, A51, A77–A80, A101, A112 are Azure-specific; A53 (`sys.sensitivity_classifications`) available SQL 2019+/Azure.
-- `sqldbconfig-review` on SQL 2008 R2–SQL 2016 (pre-SP2): B8 (`sql_memory_model_desc` — SQL 2012 SP4+), B22 (`sys.dm_server_services.instant_file_initialization_enabled` — SQL 2012 SP4+), and B19 via `sys.dm_db_log_info` (SQL 2016 SP2+) fall back to ERRORLOG or `DBCC LOGINFO` — mark as [Unverified] if those sources are not included in the input. B1/B3 `numa_node_count` in `sys.dm_os_sys_info` requires SQL 2016 SP2+; use `cpu_count` as a proxy on older versions. All B10–B18 checks (sys.databases columns) are available SQL 2005+. Azure SQL DB: most instance-level sp_configure checks (B1–B9, B24–B28) are not user-configurable and should be skipped; B10–B18 database-level checks apply.
+- `sqldbconfig-review` on SQL 2008 R2–SQL 2016 (pre-SP2): B8 (`sql_memory_model_desc` — SQL 2012 SP4+), B22 (`sys.dm_server_services.instant_file_initialization_enabled` — SQL 2012 SP4+), and B19 via `sys.dm_db_log_info` (SQL 2016 SP2+) fall back to ERRORLOG or `DBCC LOGINFO` — mark as [Unverified] if those sources are not included in the input. B1/B3 `numa_node_count` in `sys.dm_os_sys_info` requires SQL 2016 SP2+; use `cpu_count` as a proxy on older versions. All B10–B18 checks (sys.databases columns) are available SQL 2005+. B29 (service-SID `NT SERVICE\*` sysadmin membership) applies SQL 2012+ (per-service-SID/virtual-account era), Windows only. Azure SQL DB: most instance-level sp_configure checks (B1–B9, B24–B28) are not user-configurable and should be skipped, as is B29 (no Windows service accounts on the managed platform); B10–B18 database-level checks apply.
 - `sqlmemory-review`: O3 (per-NUMA-node PLE) requires SQL 2012+. O15 (Buffer Pool Extension) applies SQL 2014+ (Enterprise/Standard editions only). O16 (ColumnStore clerk) and O17 (XTP clerk) require SQL 2014+. On Azure SQL DB: O3, O15, O18 (OS-level pressure) do not apply, and O19 (LPIM)/O20 (Max Server Memory) are platform-managed.
 - `sqlbootstraplog-review`: analyzes the Windows Setup Bootstrap log layout — applies to SQL Server on Windows only. U20 (`SQLSVCINSTANTFILEINIT`) and U21 (setup-time TempDB parameters) require SQL 2016+ setup; U1–U19/U22–U24 apply to all on-premises versions. Azure SQL DB/MI have no user-visible setup: ✗.
 - `ssrstracelog-review`: analyzes SQL Server Reporting Services report server trace logs, configuration, and `ExecutionLog3` — applies to on-premises SSRS (SQL 2008 R2–2022) on Windows Server only. G15 (legacy `ProcessingEngine=1` setting) applies to SSRS 2014/2016 only — removed in SSRS 2017+ and self-skips on later versions. Azure SQL DB/MI: ✗ — SSRS does not run as a service on Azure-managed platforms (only the report server catalog database can be hosted on Azure SQL MI for an SSRS instance running on a VM).
@@ -69,17 +69,17 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 828 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
+These cumulative counts show how many of the 829 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **756** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **725** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
-| SQL Server 2017 | **703** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **690** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **653** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
-| SQL Server 2012 | **647** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **552** | −95 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), I16, X23 unavailable |
+| SQL Server 2022 | **757** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **726** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
+| SQL Server 2017 | **704** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **691** | −13 SQL 2017-only checks unavailable |
+| SQL Server 2014 | **654** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
+| SQL Server 2012 | **648** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **552** | −96 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), I16, X23, B29 (service-SID sysadmin membership, SQL 2012+) unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -106,6 +106,7 @@ These checks require features introduced in SQL Server 2012.
 **Entire skills at SQL 2012+:** `sqlhadr-review` (H1–H28, H21 retired), `sqlclusterlog-review` (L1–L30), `sqlag-review` (F1–F37, except F32 SQL 2016+ and F31 SQL 2022+). Always On AG was introduced in SQL 2012; these skills have no applicable checks on SQL 2008 R2.
 
 | A82 | `sqlencryption-review` | SSISDB DMK Password Not Registered | SSISDB catalog (SQL Server Integration Services, SQL 2012+) |
+| B29 | `sqldbconfig-review` | Service-SID Login Missing from sysadmin | Per-service SID `NT SERVICE\*` logins / virtual accounts (SQL 2012+, Windows only) |
 
 ### SQL Server 2014+
 
@@ -276,7 +277,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**550 of 828 checks (66.4%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**550 of 829 checks (66.3%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 

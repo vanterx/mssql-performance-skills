@@ -116,7 +116,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `O` | `sqlmemory-review` | Memory pressure: PLE, plan cache, grants, clerks | O1–O20 |
 | `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
-| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B28 |
+| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B29 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
 | `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
 | `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
