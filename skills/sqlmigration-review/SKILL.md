@@ -65,7 +65,7 @@ ORDER BY backup_start_date DESC;
 | AG replica health during/after migration cutover | `sqlhadr-review` (H1–H28, H21 retired) | Runtime health DMVs, not a configuration audit |
 | Cross-domain authentication, SPN/Kerberos for the new instance name | `sqlspn-review` (K1–K40) | SPN/delegation is a complete domain of its own |
 | TDE, certificate-protected backups, transport encryption | `sqlencryption-review` (A1–A112) | Encryption posture is a complete domain of its own |
-| MAXDOP/Max Server Memory/TempDB sizing drift between source and target instance | `sqldbconfig-review` (B1–B28) | Instance configuration drift is a complete domain of its own |
+| MAXDOP/Max Server Memory/TempDB sizing drift between source and target instance | `sqldbconfig-review` (B1–B29) | Instance configuration drift is a complete domain of its own |
 
 When a user pastes mixed input that includes AG configuration, encryption DMV output, or SPN data alongside migration facts, note in the findings report which companion skill should be run on that slice rather than attempting to re-derive those checks here.
 

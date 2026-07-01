@@ -1,6 +1,6 @@
 ---
 name: sqldbconfig-review
-description: Analyze SQL Server instance and database configuration drift against proven DBA best practices. Applies 28 checks (B1–B28) across five categories: parallelism tuning (MAXDOP, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads), memory configuration (Max Server Memory, Lock Pages in Memory), database-level settings (auto-shrink, auto-close, compatibility level, RCSI, page verification, statistics, Trustworthy, cross-DB chaining), file and storage configuration (VLF count, percent auto-growth, Instant File Initialization, TempDB file count), and surface area exposure (CLR, OLE Automation, Ad Hoc Distributed Queries). Use this skill when the server behaves erratically after changes, a new instance needs a configuration audit, or silent misconfiguration is suspected as a root cause of performance or stability problems. Trigger when pasting output from sp_configure, sys.databases, sys.master_files, sys.dm_os_sys_info, or sys.dm_db_log_info.
+description: Analyze SQL Server instance and database configuration drift against proven DBA best practices. Applies 29 checks (B1–B29) across five categories: parallelism tuning (MAXDOP, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads), memory configuration (Max Server Memory, Lock Pages in Memory), database-level settings (auto-shrink, auto-close, compatibility level, RCSI, page verification, statistics, Trustworthy, cross-DB chaining), file and storage configuration (VLF count, percent auto-growth, Instant File Initialization, TempDB file count), and surface area exposure (CLR, OLE Automation, Ad Hoc Distributed Queries, service-SID sysadmin membership). Use this skill when the server behaves erratically after changes, a new instance needs a configuration audit, or silent misconfiguration is suspected as a root cause of performance or stability problems. Trigger when pasting output from sp_configure, sys.databases, sys.master_files, sys.dm_os_sys_info, sys.dm_db_log_info, or sys.server_principals.
 triggers:
   - /sqldbconfig-review
   - /dbconfig-review
@@ -11,13 +11,13 @@ triggers:
 
 ## Purpose
 
-Detect instance and database configuration drift that degrades performance, causes instability, or creates security exposure. Applies 28 checks (B1–B28) across five categories:
+Detect instance and database configuration drift that degrades performance, causes instability, or creates security exposure. Applies 29 checks (B1–B29) across five categories:
 
 - **B1–B5** — Parallelism: MAXDOP alignment to NUMA topology, Cost Threshold for Parallelism at default, Optimize for Ad Hoc Workloads, query governor
 - **B6–B9** — Memory: Max Server Memory unconfigured, Min Server Memory, Lock Pages in Memory model, AWE (legacy 32-bit setting)
 - **B10–B18** — Database settings: auto-shrink, auto-close, compatibility level, RCSI, page verification, auto-statistics, Trustworthy, cross-DB chaining
 - **B19–B23** — File and storage: excessive VLF count, percent auto-growth on log and data files, Instant File Initialization, TempDB file count vs. scheduler count
-- **B24–B28** — Surface area: CLR, OLE Automation Procedures, Ad Hoc Distributed Queries, instance-level cross-DB chaining, remote admin connections
+- **B24–B29** — Surface area: CLR, OLE Automation Procedures, Ad Hoc Distributed Queries, instance-level cross-DB chaining, remote admin connections, service-SID sysadmin membership (broken hardening)
 
 ## Input
 
@@ -30,6 +30,7 @@ Accept any of:
 - Output from `SELECT … FROM sys.dm_os_sys_info` (CPU, NUMA, scheduler counts)
 - Output from `SELECT … FROM sys.dm_db_log_info(db_id)` or `DBCC LOGINFO` (VLF count)
 - Output from `SELECT … FROM sys.dm_server_services` (Instant File Initialization status)
+- Output from `SELECT … FROM sys.server_principals` (service-SID login presence and sysadmin membership — see capture query below)
 - Combined paste of two or more of the above — apply all applicable checks
 - A natural language description of symptoms ("auto-shrink keeps firing", "MAXDOP is 0 on a 4-NUMA server", "TempDB has 2 files on a 16-core box")
 
@@ -113,6 +114,26 @@ ORDER BY total_vlf_count DESC;
 SELECT servicename, instant_file_initialization_enabled
 FROM sys.dm_server_services
 WHERE servicename LIKE 'SQL Server (%';
+
+-- 8. Service-SID logins and their sysadmin membership (B29)
+-- Expected present AND is_sysadmin = 1 for every row SQL Server Setup provisions.
+-- Default instance: NT SERVICE\MSSQLSERVER, NT SERVICE\SQLSERVERAGENT, NT SERVICE\SQLWriter, NT SERVICE\Winmgmt
+-- Named instance X: NT SERVICE\MSSQL$X, NT SERVICE\SQLAgent$X (+ shared SQLWriter, Winmgmt)
+SELECT sp.name, sp.type_desc,
+       IS_SRVROLEMEMBER('sysadmin', sp.name) AS is_sysadmin
+FROM sys.server_principals AS sp
+WHERE sp.name LIKE 'NT SERVICE\%'
+ORDER BY sp.name;
+-- A required login missing entirely, or present with is_sysadmin = 0 → B29 fires.
+-- Catalog-view alternative (avoids IS_SRVROLEMEMBER NULL edge cases):
+--   SELECT sp.name,
+--          CASE WHEN rm.member_principal_id IS NULL THEN 0 ELSE 1 END AS in_sysadmin
+--   FROM sys.server_principals AS sp
+--   LEFT JOIN sys.server_role_members AS rm
+--          ON rm.member_principal_id = sp.principal_id
+--         AND rm.role_principal_id = (SELECT principal_id FROM sys.server_principals
+--                                     WHERE name = 'sysadmin' AND type = 'R')
+--   WHERE sp.name LIKE 'NT SERVICE\%';
 ```
 
 > **Fallback for older instances (pre-2016 SP2):** Replace queries 5/6 with `DBCC LOGINFO` per database. Replace query 7 with ERRORLOG search: look for `Database Instant File Initialization: enabled` or `disabled` near server startup.
@@ -302,6 +323,12 @@ WHERE servicename LIKE 'SQL Server (%';
 - **Trigger:** `sp_configure 'remote admin connections' config_value = 0`
 - **Severity:** Info
 - **Fix:** Without remote admin connections enabled, the Dedicated Administrator Connection (DAC) is only accessible from the server console. On named instances or clustered/containerised deployments, enable to allow remote DAC access for emergency diagnostics: `EXEC sp_configure 'remote admin connections', 1; RECONFIGURE;`
+
+### B29 — Service-SID Login Missing from sysadmin
+
+- **Trigger:** A per-service-SID login that SQL Server Setup provisions is absent from `sys.server_principals`, OR present with `IS_SRVROLEMEMBER('sysadmin', name) = 0`. Required set — default instance: `NT SERVICE\MSSQLSERVER`, `NT SERVICE\SQLSERVERAGENT`, `NT SERVICE\SQLWriter`, `NT SERVICE\Winmgmt`; named instance `X`: `NT SERVICE\MSSQL$X`, `NT SERVICE\SQLAgent$X` (note `SQLAgent$`, not `SQLSERVERAGENT`), plus the instance-unaware `NT SERVICE\SQLWriter` and `NT SERVICE\Winmgmt`. Applies SQL Server 2012+ (per-service-SID era), Windows only; N/A for Azure SQL Database / Managed Instance.
+- **Severity:** Critical
+- **Fix:** Inverse polarity from the other surface-area checks — this is a *broken hardening*, not excess exposure. These service SIDs are how the Database Engine and SQL Agent services connect to the instance itself; dropping the login or removing it from `sysadmin` breaks service startup, SQL Agent connectivity, and future Setup/patching. Do **not** "fix" a flagged row by removing the login — restore it. Recreate if missing and re-add to the role: `CREATE LOGIN [NT SERVICE\MSSQLSERVER] FROM WINDOWS;` then `ALTER SERVER ROLE sysadmin ADD MEMBER [NT SERVICE\MSSQLSERVER];` (repeat for `SQLSERVERAGENT`/`SQLWriter`/`Winmgmt`, or `MSSQL$X`/`SQLAgent$X` on a named instance). These logins are created and set to `sysadmin` by Setup regardless of whether the service runs under a virtual account, domain account, or gMSA — the assigned startup account governs *external* resource access; the service SID governs the *internal* self-connection. Always change the startup account via SQL Server Configuration Manager (not the Windows Services applet), which maintains the service-SID ACLs and local-group membership. Since SQL Server 2016, a gMSA is a supported FCI startup account (virtual accounts are not, because their SID differs per node).
 
 ---
 

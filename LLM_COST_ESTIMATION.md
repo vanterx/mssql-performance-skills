@@ -53,7 +53,7 @@ Claude Code's own instructions, tool definitions, CLAUDE.md, and conversation hi
 | `sqlmemory-review` | ~5,800 |
 | `sqldiskio-review` | ~4,600 |
 | `sqlencryption-review` | ~30,000 |
-| `sqldbconfig-review` | ~7,200 |
+| `sqldbconfig-review` | ~7,500 |
 | `sqlbootstraplog-review` | ~6,500 |
 | `ssrstracelog-review` | ~8,700 |
 | `sqlmigration-review` | ~4,500 |
