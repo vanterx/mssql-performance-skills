@@ -21,6 +21,7 @@
       "Bash(gh search *)",
       "Bash(gh api *)",
       "Bash(node .claude/hooks/pre-tool-security.js)",
+      "Bash(node .claude/hooks/ensure-gitignore.js)",
       "Bash(node .claude/hooks/stop-secret-scan.js)",
       "Bash(npm ci)",
       "Bash(npm run *)",
@@ -49,6 +50,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/pre-tool-security.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/ensure-gitignore.js"
           }
         ]
       }
