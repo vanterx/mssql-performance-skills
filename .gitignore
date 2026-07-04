@@ -21,3 +21,9 @@ output/
 
 # Generated inventory (regenerate with: bash scripts/generate-inventory.sh)
 skill-inventory.md
+
+# AgentWorks orchestration — transient files and operator-local config
+.aw-review.md
+.aw-followups.json
+.aw/
+aw.conf.local

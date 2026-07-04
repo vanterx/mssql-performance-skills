@@ -1,0 +1,36 @@
+name: reap
+
+# Cron-driven stale-claim garbage collection. No secrets beyond the default
+# GITHUB_TOKEN, no model API keys — this is pure gh/jq bookkeeping.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report only, make no changes"
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+concurrency:
+  group: aw-reap-stale-work
+  cancel-in-progress: false
+
+jobs:
+  reap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run reap.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AW_REPO: ${{ github.repository }}
+          AW_DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: ./scripts/reap.sh
