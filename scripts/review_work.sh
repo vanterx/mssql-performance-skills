@@ -265,10 +265,22 @@ review_one() {  # $1 = PR number
 
     set_check "$sha" success "$desc"
     if [ "$AUTO_MERGE" = "1" ]; then
+      # Don't trust `gh pr merge`'s exit code alone (branch protection can
+      # reject it in ways that still return misleadingly, and `|| true`
+      # patterns elsewhere in this codebase mask failures on purpose for
+      # best-effort calls) — re-query the PR's actual state afterward and
+      # only record success / flip the issue to "done" if it truly merged.
       gh pr merge "$pr" --repo "$REPO" --squash --delete-branch >/dev/null 2>&1 || true
-      audit_event "merge" "pr#$pr" "ok" "auto-merge after review pass"
+      local merged_state
+      merged_state="$(gh pr view "$pr" --repo "$REPO" --json state --jq .state 2>/dev/null || echo "")"
       local iss; iss="$(issue_for_pr "$pr")"
-      [ -n "$iss" ] && set_status_label "$iss" "done"
+      if [ "$merged_state" = "MERGED" ]; then
+        audit_event "merge" "pr#$pr" "ok" "auto-merge after review pass"
+        [ -n "$iss" ] && set_status_label "$iss" "done"
+      else
+        audit_event "merge" "pr#$pr" "blocked" "gh pr merge did not result in a merged PR (branch protection or other gate) — issue left in-review for manual merge"
+        log_warn "PR #$pr: PASS but auto-merge did not complete (PR still $merged_state) — merge manually once branch protection allows it: gh pr merge $pr --squash --delete-branch"
+      fi
     fi
     log "PR #$pr -> PASS"
   else
