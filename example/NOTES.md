@@ -2,7 +2,7 @@
 
 This file exists purely as a toolchain-free target for validating the
 agent workflow end-to-end — see `.claude/docs/aw/SETUP.md`. It has nothing to do with
-the actual project this template gets adopted into; delete this whole
+the actual project this template is adopted into; delete this whole
 `example/` directory once you've confirmed the loop works.
 
 ## What this template gives you
