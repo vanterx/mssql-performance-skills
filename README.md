@@ -282,8 +282,8 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 ║         │                                                    ║
 ║         ▼                                                    ║
 ║  /sqldeadlock-review deadlock.xdl                              ║
-║  16 patterns — lock order, RCSI bypass, MERGE, heap RID,    ║
-║  TempDB, lock escalation, DTC, ledger/temporal               ║
+║  17 patterns — lock order, RCSI bypass, MERGE, heap RID,    ║
+║  TempDB, lock escalation, DTC, ledger/temporal, optimized locking/TID ║
 ║                                                              ║
 ║  Folder of .sqlplan files (workload capture)                 ║
 ║         │                                                    ║
@@ -1827,7 +1827,7 @@ See [`skills/sqlplan-review/examples/horrible-analysis.md`](skills/sqlplan-revie
 | N1–N72 | 72 | sqlplan-review | Execution plan — node-level |
 | C1–C20 | 20 | sqlplan-compare | Plan regression checks |
 | D1–D8 | 8 | sqlindex-advisor | Index derivation rules |
-| P1–P16 | 16 | sqldeadlock-review | Deadlock patterns |
+| P1–P17 | 17 | sqldeadlock-review | Deadlock patterns |
 | Q1–Q30 | 30 | sqlquerystore-review | Query Store health + regressions + IQP/PSP/CE/DOP feedback |
 | R1–R25 | 25 | sqlprocstats-review | Procedure/trigger/function stats |
 | L1–L30 | 30 | sqlclusterlog-review | WSFC cluster log analysis |

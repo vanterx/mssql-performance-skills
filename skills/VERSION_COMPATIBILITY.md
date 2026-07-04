@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 829 checks in this library apply to your SQL Server version.
+Which of the 830 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -69,7 +69,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 829 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
+These cumulative counts show how many of the 830 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
@@ -214,6 +214,7 @@ These checks require features introduced in SQL Server 2012.
 | Q28 | `sqlquerystore-review` | DOP Feedback Applied | DOP Feedback in `sys.query_store_plan_feedback` (compat level 160) |
 | Q30 | `sqlquerystore-review` | Query Store Replica Coverage Gap | `sys.query_store_replicas` (SQL 2025+ on-premises GA; Azure SQL Database GA; SQL 2022 limited preview with TF 12606 only — not production-supported) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock (Ledger aspect) | Ledger tables (SQL 2022+); temporal aspect listed under SQL 2016+ |
+| P17 | `sqldeadlock-review` | Optimized Locking / TID Lock Deadlock | Optimized locking (SQL 2022+) |
 | Q31 | `sqlquerystore-review` | Query Store Hint Ineffective or Stale | `sys.query_store_query_hints` (SQL 2022+) |
 | Q12 | `sqlquerystore-review` | Plan Feedback Active | Automated plan feedback via `plan_feedback` column (SQL 2022+) |
 | A59 | `sqlencryption-review` | TLS 1.3 Not Enforced for Connections | TLS 1.3 support (SQL 2022+) |
@@ -277,7 +278,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**550 of 829 checks (66.3%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**550 of 830 checks (66.3%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 

@@ -1,6 +1,6 @@
 ---
 name: sqldeadlock-review
-description: Analyze SQL Server deadlock XML (from system_health XE session, SSMS deadlock graph, or trace) to identify root cause and produce a prioritized remediation plan. Applies 16 known deadlock patterns (P1–P16). Use when a deadlock monitor captures a graph or users report intermittent deadlock errors (error 1205).
+description: Analyze SQL Server deadlock XML (from system_health XE session, SSMS deadlock graph, or trace) to identify root cause and produce a prioritized remediation plan. Applies 17 known deadlock patterns (P1–P17). Use when a deadlock monitor captures a graph or users report intermittent deadlock errors (error 1205).
 triggers:
   - /sqldeadlock-review
   - /deadlock
@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Parse a SQL Server deadlock XML graph, identify the victim and winner processes, extract the queries and lock acquisition patterns involved, match against 16 known deadlock patterns (P1–P16), and produce a prioritized remediation plan.
+Parse a SQL Server deadlock XML graph, identify the victim and winner processes, extract the queries and lock acquisition patterns involved, match against 17 known deadlock patterns (P1–P17), and produce a prioritized remediation plan.
 
 ## Input
 
@@ -89,7 +89,7 @@ For each resource:
 
 ---
 
-## Pattern Library (P1–P16)
+## Pattern Library (P1–P17)
 ### P1 — Classic Forward/Reverse Access Order
 - **Signature:** Process A holds X on resource R1, waits for resource R2. Process B holds X on R2, waits for R1.
 - **Severity:** High
@@ -105,11 +105,11 @@ For each resource:
 - **Severity:** High
 - **Cause:** `UPDATE` statements taking U locks in different orders on the same table.
 - **Fix:** Add an index on the `WHERE` clause columns so each update targets exactly one row (reduces lock scope). Consider using `WITH (ROWLOCK)` hint. Consistent access order also applies.
-### P4 — Missing Index Causing Page Lock Escalation
+### P4 — Missing Index Causing Scan-Level Page or Table Lock Deadlock
 - **Signature:** `objectlock` or `pagelock` resource type (not `keylock`) in the resource list.
 - **Severity:** High
-- **Cause:** Without a row-level index, SQL Server takes page or table locks. Multiple transactions competing for the same page deadlock each other.
-- **Fix:** Add a nonclustered index on the filter column so SQL Server takes row-level (`keylock`) locks instead of page locks. Use the `sqlindex-advisor` skill if an execution plan is available.
+- **Cause:** Without a suitable index, SQL Server may scan pages and acquire page or table locks directly. Multiple transactions competing for the same page or table deadlock each other.
+- **Fix:** Add a nonclustered index on the filter column so SQL Server can seek to specific rows and take row-level (`keylock`) locks instead of page or table locks. Use the `sqlindex-advisor` skill if an execution plan is available.
 ### P5 — Bookmark Lookup Deadlock (Key Lookup)
 - **Signature:** Two `keylock` resources: one on a nonclustered index, one on the clustered index (PK). Process A holds lock on NC index, waits for PK. Process B holds lock on PK, waits for NC index.
 - **Severity:** Medium
@@ -125,11 +125,11 @@ For each resource:
 - **Severity:** Medium
 - **Cause:** Inserting into a child table takes a shared lock on the parent (FK validation). Deleting from the parent takes an exclusive lock. If done concurrently in opposite order, deadlock occurs.
 - **Fix:** Add an index on the FK column in the child table (prevents table scan during FK validation). Ensure parent deletes and child inserts do not overlap in concurrent transactions.
-### P8 — Self-Deadlock (Single Process)
-- **Signature:** `victim-list` and `process-list` contain only one process ID.
+### P8 — Self-Deadlock (Single SPID)
+- **Signature:** The deadlock graph shows the same SPID in multiple processes (different ECIDs, indicating a parallel plan) or a single process deadlocked with itself.
 - **Severity:** Medium
-- **Cause:** A single SPID is requesting a lock it already holds in an incompatible mode (rare, usually triggered by cursors or certain MERGE statements).
-- **Fix:** Rewrite the query to avoid cursor-based row-by-row processing. Review MERGE statements for self-deadlock edge cases documented in KB articles.
+- **Cause:** A single SPID is requesting a lock it already holds in an incompatible mode, or multiple execution contexts of the same SPID (parallel plan) block each other (rare; usually triggered by cursors, certain MERGE statements, or parallel query plans).
+- **Fix:** Rewrite the query to avoid cursor-based row-by-row processing. Review MERGE statements for self-deadlock edge cases documented in KB articles. For parallel plans, consider reducing MAXDOP or simplifying the query.
 ### P9 — RCSI Reader Deadlock Despite RCSI Enabled
 - **Signature:** `READ_COMMITTED_SNAPSHOT` is ON for the database yet the deadlock involves a reader (S lock) and a writer (X lock) in a cycle.
 - **Severity:** High
@@ -143,10 +143,10 @@ For each resource:
 ### P11 — Heap Table RID Lock Deadlock
 - **Signature:** Resource list contains `ridlock` entries instead of `keylock` entries.
 - **Severity:** High
-- **Cause:** The table has no clustered index (heap). SQL Server uses Row ID (RID) locks on heap pages. RID locks are coarser than key locks and more prone to conflicts because multiple rows share a page granularity boundary.
-- **Fix:** Add a clustered index to convert the heap to a B-tree table. Row-level key locks replace RID locks, reducing deadlock surface. Use `/sqlindex-advisor` to identify the best clustering key.
+- **Cause:** The table has no clustered index (heap). SQL Server uses Row ID (RID) locks to lock individual heap rows. Because heap rows have no ordering key, concurrent operations may acquire RID locks in an unpredictable order, increasing deadlock risk. Additionally, if the optimizer chooses a page lock on a heap, the coarser page-level lock can conflict with other sessions.
+- **Fix:** Add a clustered index to convert the heap to a B-tree table. Predictable key-level locks replace RID locks, reducing deadlock surface. Use `/sqlindex-advisor` to identify the best clustering key.
 ### P12 — Distributed Transaction Deadlock
-- **Signature:** One or more processes has `transactionname` containing "Distributed Transaction" or `dtcState` attribute present.
+- **Signature:** One or more processes has `transactionname` containing "Distributed Transaction".
 - **Severity:** High
 - **Cause:** MS DTC coordinates a distributed transaction spanning multiple SQL Server instances or resource managers. Distributed transactions hold locks for the full duration of the two-phase commit protocol, which is significantly longer than local transactions. The extended lock hold time dramatically increases deadlock probability.
 - **Fix:** Eliminate distributed transactions where possible by co-locating data on a single instance. If DTC is required, minimize transaction scope — commit or roll back as quickly as possible. Ensure DTC timeout settings are not artificially extended.
@@ -159,17 +159,23 @@ For each resource:
 - **Signature:** `objectname` in the resource list is a tempdb object (`tempdb.dbo.#temp` or a system page like GAM, PFS, SGAM).
 - **Severity:** High
 - **Cause:** Concurrent DDL on temp tables (CREATE/DROP) under high parallelism contends on TempDB allocation pages. Multiple sessions creating and dropping temp objects simultaneously fight over PFS and GAM pages. User temp table DML can also deadlock when two sessions update the same temp table rows.
-- **Fix:** For allocation page contention, increase TempDB file count to match CPU count (up to 8 files), enable TF 1118 (SQL 2014–), or configure TempDB appropriately for the SQL Server version. For user temp table deadlocks, apply the same lock-order fixes as P1.
+- **Fix:** For allocation page contention, increase TempDB file count to match CPU count (up to 8 files). On SQL Server 2014 and earlier, enable trace flag 1118 as a startup parameter; on SQL Server 2016 and later, uniform extent allocation is the default for TempDB and trace flag 1118 is not required. For user temp table deadlocks, apply the same lock-order fixes as P1.
 ### P15 — Lock Escalation Deadlock
 - **Signature:** Resource list contains an `objectlock` (table-level lock) alongside `keylock` or `ridlock` entries on the same table, held by different sessions.
 - **Severity:** High
-- **Cause:** SQL Server escalated row locks to a table lock for one session (threshold: 5,000 locks per table or per transaction). The table lock conflicts with row-level locks held by another concurrent session.
-- **Fix:** Prevent escalation with `ALTER TABLE ... SET (LOCK_ESCALATION = DISABLE)` if read isolation allows. Alternatively, reduce transaction size so the 5,000-lock threshold is never reached. Enable RCSI to eliminate S locks from readers, reducing total lock count.
+- **Cause:** SQL Server escalated row or page locks to a table lock for one session. Escalation is triggered when a single Transact-SQL statement acquires at least 5,000 locks on a single nonpartitioned table or index, or when lock memory exceeds the instance threshold. The escalated table lock conflicts with row-level locks held by another concurrent session.
+- **Fix:** Prevent escalation with `ALTER TABLE ... SET (LOCK_ESCALATION = DISABLE)` if read isolation allows (note: disabling escalation can cause out-of-locks errors under heavy load). Alternatively, reduce transaction size so the 5,000-lock threshold is never reached. Enable RCSI to eliminate S locks from readers, reducing total lock count.
 ### P16 — Ledger or Temporal History Table Deadlock
 - **Signature:** `objectname` in the resource list references a ledger history table (named `MSSQL_LedgerHistoryFor_...`) or a temporal history table. Applies to SQL 2016+ (temporal) and SQL 2022+ (ledger).
 - **Severity:** Medium
 - **Cause:** Ledger and temporal tables maintain hidden history rows on UPDATE/DELETE. The system inserts history rows into a separate table, acquiring locks in an order that can conflict with explicit DML on the base table from another session.
 - **Fix:** Ensure application code does not hold locks on the base table for extended periods (keep transactions short). If possible, route read queries against the history table to a secondary replica to reduce read/write contention on the primary.
+
+### P17 — Optimized Locking / TID Lock Deadlock
+- **Signature:** SQL Server 2022+ with optimized locking enabled. The resource list contains `<xactlock>` elements (transaction ID locks) alongside the underlying `keylock` or `ridlock`. Each session holds an exclusive (`X`) lock on its own TID resource and waits for a shared (`S`) lock on the other session's TID.
+- **Severity:** High
+- **Cause:** With optimized locking, writers acquire short-duration exclusive locks on row/page TIDs instead of holding locks until transaction end. Under concurrent updates on the same rows, two sessions can each hold an X lock on their own TID and wait for an S lock on the other's TID, forming a cycle.
+- **Fix:** The deadlock is inherent to the optimized locking concurrency model at high conflict rates. Reduce transaction scope, retry deadlocked transactions in the application, and ensure rows are updated in a consistent order (as in P1). Optimized locking generally reduces deadlocks, but TID deadlocks can still occur under the same forward/reverse access patterns.
 
 ---
 
@@ -180,7 +186,7 @@ For each resource:
 | S | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
 | U | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
 | X | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| IS | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| IS | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
 | IX | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
 | SIX | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
 
@@ -206,7 +212,7 @@ If the SQL Server version is known — from the `ServerVersion` attribute in the
 | **Procedure / Batch** | [proc name or first 80 chars of ad-hoc SQL, for display only] | [proc name or first 80 chars, for display only] |
 | **Started** | [timestamp] | [timestamp] |
 | **Log used** | [KB] | [KB] |
-| **Pattern detected** | [P1–P8 or Unknown] | — |
+| **Pattern detected** | [P1–P17 or Unknown] | — |
 
 ### Lock Cycle
 
@@ -297,11 +303,11 @@ When the user's request includes `--verbose`, `--trace`, or the word `verbose`:
 
 **1. Append a `## Check Evaluation Log` section** after the Passed Checks table.
 
-Include one row for every check in this skill's ruleset, in check-ID order:
+Include one row for every pattern in this skill's pattern library, in pattern-ID order:
 
-| Check | Evidence | Threshold | Result |
-|-------|----------|-----------|--------|
-| [ID — Name] | [key attribute(s) and value found, or "absent"] | [threshold or condition] | PASS / **FIRE → [severity]** / NOT ASSESSED |
+| Pattern | Evidence | Threshold | Result |
+|---------|----------|-----------|--------|
+| [P1 — Name] | [key attribute(s) and value found, or "absent"] | [threshold or condition] | PASS / **FIRE → [severity]** / NOT ASSESSED |
 
 Result conventions:
 - `PASS` — attribute present, threshold not met
