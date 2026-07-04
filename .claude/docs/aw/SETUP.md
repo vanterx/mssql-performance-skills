@@ -8,6 +8,12 @@ regardless of what your actual project is.
 Do this in a scratch or private repo first, or accept that it will create
 real issues/PRs/commits in whatever repo you run it against.
 
+> This repo's own trial already ran once and `example/NOTES.md` was
+> deleted afterward (see git history: `git log --all --diff-filter=D --
+> example/NOTES.md`). Restore it first if repeating this walkthrough:
+> `git show <commit>^:example/NOTES.md > example/NOTES.md` (use the commit
+> that deleted it).
+
 ## 1. Create example issues
 
 ```bash
