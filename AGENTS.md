@@ -22,3 +22,6 @@ A `.claude/settings.json` PostToolUse hook auto-runs this after every Write/Edit
 
 ## Full contributor guide
 `CLAUDE.md` — file map, conventions, all skills listed, install instructions, development constraints, and step-by-step workflows for adding checks and skills.
+
+## Autonomous agent workflow
+This repo also runs [AgentWorks](https://github.com/vanterx/agentworks): agents can claim `status: available` GitHub issues and work through `scripts/start_work.sh`. If you were invoked by that loop (or `review_work.sh`), see `AGENT_CONTRACT.md` for the claim/work/review/merge contract — it's separate from this file, which covers the skills-library conventions above.

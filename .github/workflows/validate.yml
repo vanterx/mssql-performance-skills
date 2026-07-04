@@ -1,0 +1,38 @@
+name: validate
+
+# Runs this repo's own documentation consistency gate (scripts/verify-docs.sh)
+# against every PR.
+#
+# NOTE: this deviates from the AgentWorks template's overlay pattern
+# (pull_request_target + checkout base scripts, overlay only PR content
+# dirs). That pattern exists for validators that check isolated content
+# directories in isolation. verify-docs.sh instead checks cross-file
+# consistency across the WHOLE repo (skills/*/SKILL.md counts against
+# PERFORMANCE_TUNING_GUIDE.md, README.md, CLAUDE.md, LLM_COST_ESTIMATION.md
+# all at once) — an overlay of just "skills/" would miss PRs that update
+# only the guide/README/CLAUDE.md side of an invariant.
+#
+# This is safe as a plain `pull_request` trigger (no secrets, no elevated
+# token, runs against the PR's own head) because verify-docs.sh only reads
+# and greps markdown — it never executes PR content, installs from it, or
+# sources it. See the same reasoning in scripts/validate.sh's header.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run verify-docs.sh
+        run: bash scripts/verify-docs.sh
