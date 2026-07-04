@@ -136,9 +136,8 @@ Adopted from [vanterx/agentworks](https://github.com/vanterx/agentworks): lets a
 | [.claude/docs/aw/AUTOMATION.md](.claude/docs/aw/AUTOMATION.md) | Status-label state machine reference |
 | [.claude/docs/aw/OPERATIONS.md](.claude/docs/aw/OPERATIONS.md) | Day-to-day operations: monitoring, troubleshooting, recipes |
 | [.claude/docs/aw/GETTING_STARTED.md](.claude/docs/aw/GETTING_STARTED.md) | Manual (non-agent-driven) setup walkthrough, kept for reference |
-| [.claude/docs/aw/SETUP.md](.claude/docs/aw/SETUP.md) | End-to-end trial-run walkthrough against `example/NOTES.md` |
+| [.claude/docs/aw/SETUP.md](.claude/docs/aw/SETUP.md) | End-to-end trial-run walkthrough (used `example/NOTES.md`, since removed after a successful trial — see git history for the original recipe if repeating it) |
 | [.claude/skills/onboard-contributor/SKILL.md](.claude/skills/onboard-contributor/SKILL.md), [.claude/skills/triage-task/SKILL.md](.claude/skills/triage-task/SKILL.md) | Contributor-facing skills for getting started and advisory issue triage |
-| [example/NOTES.md](example/NOTES.md) | Toolchain-free target for validating the loop end-to-end; delete once confirmed working |
 
 ### Examples
 
