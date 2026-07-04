@@ -23,6 +23,7 @@
       "Bash(node .claude/hooks/pre-tool-security.js)",
       "Bash(node .claude/hooks/ensure-gitignore.js)",
       "Bash(node .claude/hooks/stop-secret-scan.js)",
+      "Bash(node .claude/hooks/scoped-verify-docs.js)",
       "Bash(npm ci)",
       "Bash(npm run *)",
       "Bash(npx wrangler*)",
@@ -64,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/verify-docs.sh"
+            "command": "node .claude/hooks/scoped-verify-docs.js"
           }
         ]
       }
