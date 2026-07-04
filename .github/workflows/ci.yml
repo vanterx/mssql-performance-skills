@@ -15,6 +15,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # AgentWorks-owned scripts only — this repo also has its own pre-existing
+  # scripts/ tooling (generate-inventory.sh, install-hooks.sh,
+  # verify-docs.sh) that predates this workflow and is out of scope here.
+  AW_SCRIPTS: >-
+    scripts/doctor.sh scripts/merge_ready.sh scripts/metrics.sh
+    scripts/reap.sh scripts/render_prompt.sh scripts/review_work.sh
+    scripts/start_work.sh scripts/validate.sh scripts/lib/common.sh
+
 jobs:
   lint-shell:
     runs-on: ubuntu-latest
@@ -24,7 +33,7 @@ jobs:
       - name: bash -n (syntax)
         run: |
           set -e
-          for f in scripts/*.sh scripts/lib/*.sh; do
+          for f in $AW_SCRIPTS; do
             echo "== $f"
             bash -n "$f"
           done
@@ -33,7 +42,7 @@ jobs:
         run: |
           set -e
           # shellcheck ships preinstalled on ubuntu runners
-          shellcheck --severity=warning --external-sources scripts/*.sh scripts/lib/*.sh
+          shellcheck --severity=warning --external-sources $AW_SCRIPTS
 
   tests:
     runs-on: ubuntu-latest
