@@ -16,7 +16,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlplan-review`](#sqlplan-review) | `/sqlplan-review` | `.sqlplan` XML or description | Deep execution plan analysis — 108 checks across operators, memory, parallelism, row widths, elapsed timing, IQP/PSP/ADR/CE feedback |
 | [`sqlindex-advisor`](#sqlindex-advisor) | `/sqlindex-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
-| [`sqldeadlock-review`](#sqldeadlock-review) | `/sqldeadlock-review` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 16 patterns (P1–P16): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal |
+| [`sqldeadlock-review`](#sqldeadlock-review) | `/sqldeadlock-review` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 17 patterns (P1–P17): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal, optimized locking/TID |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`sqlquerystore-review`](#sqlquerystore-review) | `/sqlquerystore-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 32 checks for regressed queries, plan instability, resource hotspots, query-level waits, configuration health, SQL 2019/2022 IQP/PSP/DOP/CE feedback, QS hints, and auto-tuning |
 | [`sqlprocstats-review`](#sqlprocstats-review) | `/sqlprocstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 25 checks (R1–R25): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis, natively compiled proc regression, CLR ratio, trigger dominance, parallel-to-serial regression |
@@ -600,7 +600,7 @@ The query is fast for one parameter value, slow for another.
 
 Users intermittently get killed as a deadlock victim.
 
-1. **`/sqldeadlock-review`** — analyze the deadlock XML. The skill identifies which of the 8 canonical patterns applies (P1–P8) and gives a prioritized fix.
+1. **`/sqldeadlock-review`** — analyze the deadlock XML. The skill identifies which of the 17 patterns applies (P1–P17) and gives a prioritized fix.
 2. Common fixes: add a missing index (P4, P5), switch to READ_COMMITTED_SNAPSHOT isolation (P2), index the FK column in the child table (P7), enforce consistent lock order (P1).
 
 ### "This stored proc is slow but I don't know where to start"
@@ -914,7 +914,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `N1–N72` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes, low statistics sampling percent | 72 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
 | `D1–D10` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap, filtered index, hash match probe side | 10 |
-| `P1–P16` | `sqldeadlock-review` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal | 16 |
+| `P1–P17` | `sqldeadlock-review` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal, optimized locking/TID | 17 |
 | `Q1–Q32` | `sqlquerystore-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage, QS hints, auto-tuning | 32 |
 | `R1–R25` | `sqlprocstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
 | `L1–L30` | `sqlclusterlog-review` | WSFC cluster log: lease timeouts, health check failures, RHS crashes, quorum loss, node eviction, network partition, AG resource transitions, configuration signals, Cloud Witness, Azure Arc, Contained AG, cross-subnet, sp_server_diagnostics | 30 |
@@ -932,7 +932,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `J1–J15` | `sqlmigration-security-review` | Migration security objects: orphaned users, SID mismatch, login type platform support, password policy, default database, server/database role membership, explicit grants/denies, ownership chains, credentials, proxy/credential sequencing, linked server logins, certificate/key migration, DMK backup, CMS registrations | 15 |
 | `M1–M16` | `sqlmigration-objects-review` | Migration operational objects: Agent job database scope, job owner, operator notification reachability, alert message dependency, proxy/credential sequencing, schedule time zone, linked server provider/connectivity/collation, Database Mail profile/relay, backup device path, custom error messages, server triggers, XE sessions, non-AG endpoints | 16 |
 
-**Total: 829 checks across all skills.**
+**Total: 830 checks across all skills.**
 
 ---
 

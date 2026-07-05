@@ -5,8 +5,7 @@
 - [What Is a Deadlock?](#what-is-a-deadlock)
 - [How to Get the Deadlock XML](#how-to-get-the-deadlock-xml)
 - [Lock Concepts](#lock-concepts)
-- [Deadlock Patterns (P1–P8)](#deadlock-patterns-p1p8)
-- [Extended Patterns (P9–P16)](#extended-patterns-p9p16)
+- [Deadlock Patterns (P1–P17)](#deadlock-patterns-p1p17)
 - [Reading the Output](#reading-the-output)
 
 ---
@@ -25,7 +24,7 @@ Transaction (Process ID 52) was deadlocked on lock resources with another proces
 and has been chosen as the deadlock victim. Rerun the transaction.
 ```
 
-**Victim selection:** SQL Server picks the victim that minimises work lost — typically the transaction with the lowest `@@TRANCOUNT` and least log written (`logused` attribute in the XML). You can influence this with `SET DEADLOCK_PRIORITY LOW/HIGH/NORMAL`.
+**Victim selection:** SQL Server picks the victim that minimises work lost — typically the transaction with the least log written (`logused` attribute in the XML), unless a deadlock priority has been set. You can influence this with `SET DEADLOCK_PRIORITY LOW/HIGH/NORMAL`.
 
 **The right response in application code:** Catch error 1205 and retry the transaction. This is necessary but not sufficient — retrying a deadlock-prone pattern just retries the deadlock. Fix the root cause.
 
@@ -109,7 +108,7 @@ A ✗ means the two modes conflict — one session must wait for the other to re
 | **S** | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
 | **U** | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
 | **X** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **IS** | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| **IS** | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
 | **IX** | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
 | **SIX** | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
 
@@ -130,7 +129,7 @@ RCSI and SNAPSHOT both use **row versioning** — readers don't take shared lock
 
 ---
 
-## Deadlock Patterns (P1–P8)
+## Deadlock Patterns (P1–P17)
 
 ### P1 — Classic Forward/Reverse Access Order
 
@@ -187,7 +186,7 @@ Session B: holds U on Orders row 1002 → waiting for U on Orders row 1001
 
 ---
 
-### P4 — Missing Index Causing Page Lock Escalation
+### P4 — Missing Index Causing Scan-Level Page or Table Lock Deadlock
 
 **What gives it away in the XML:** Resource type is `pagelock` or `objectlock` rather than `keylock`.
 
@@ -275,23 +274,25 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 
 ---
 
-### P8 — Self-Deadlock (Single Process)
+### P8 — Self-Deadlock (Single SPID)
 
-**What gives it away:** The `victim-list` and `process-list` contain only one process ID — a single SPID is deadlocked with itself.
+**What gives it away:** The deadlock graph shows the same SPID in multiple processes (different ECIDs, indicating a parallel plan) or a single process deadlocked with itself.
 
-**Why it happens:** A single session requests a lock that it already holds in an incompatible mode. This is rare and almost always caused by:
+**Why it happens:** A single session requests a lock that it already holds in an incompatible mode, or multiple execution contexts of the same SPID (parallel plan) block each other. This is rare and almost always caused by:
 - A cursor iterating over rows while updating them (the cursor holds a shared lock, the update needs exclusive)
 - Certain `MERGE` statement patterns where the same row can match multiple WHEN clauses
 - A transaction that opens a connection to itself via a linked server
+- Parallel query plans where different threads acquire locks in conflicting orders
 
 **Fix:**
 - Replace cursor-based row-by-row processing with a set-based UPDATE
 - Review MERGE statements: ensure each target row can only be matched by one source row (add a uniqueness guarantee on the source)
 - Check for loopback linked server usage
+- For parallel plans, consider reducing MAXDOP or simplifying the query
 
 ---
 
-## Extended Patterns (P9–P16)
+## Extended Patterns (P9–P17)
 
 ### P9 — RCSI Reader Deadlock Despite RCSI Enabled
 
@@ -333,7 +334,7 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 
 ### P12 — Distributed Transaction Deadlock
 
-**What gives it away:** One or more process entries has `transactionname` containing "Distributed Transaction" or shows `dtcState` attributes.
+**What gives it away:** One or more process entries has `transactionname` containing "Distributed Transaction".
 
 **Why it happens:** MS DTC coordinates a two-phase commit protocol across multiple resource managers (SQL Server instances, MSMQ, etc.). During Phase 1 (prepare), all participants hold locks. Phase 2 (commit) releases them. The total lock hold time spans both phases — often several seconds — vs milliseconds for a local transaction. This extended hold time dramatically increases the window during which another session can form a deadlock cycle.
 
@@ -366,7 +367,7 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 2. **User temp table DML:** Two sessions share a temp table (via a global temp table `##name` or SPID-scoped temp table used by nested procedures) and DML from one session deadlocks with another.
 
 **Fix:**
-- For allocation page contention: add tempdb data files (one per CPU up to 8), enable trace flag 1118 on SQL Server 2014 and earlier, or ensure `tempdb` is using the default SQL Server 2016+ configuration.
+- For allocation page contention: add tempdb data files (one per CPU up to 8). On SQL Server 2014 and earlier, enable trace flag 1118 as a startup parameter; on SQL Server 2016 and later, uniform extent allocation is the default for tempdb and trace flag 1118 is not required.
 - For user temp table DML deadlocks: apply the same lock-order fix as P1 (ensure consistent row access order), or convert the shared global temp table to a dedicated permanent staging table with tighter concurrency control.
 
 ---
@@ -375,7 +376,7 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 
 **What gives it away:** The resource list contains an `objectlock` entry (table-level lock, granularity = Object) alongside `keylock` or `ridlock` entries on the same table, held by different sessions.
 
-**Why it happens:** SQL Server escalates row-level locks to a table lock when a single transaction holds more than 5,000 locks on a table (or exceeds a memory threshold). The escalated table lock (IS → X) conflicts with row-level locks already held by another concurrent session, forming a deadlock cycle between the escalating session and the row-level holder.
+**Why it happens:** SQL Server escalates row or page locks to a table lock when a single Transact-SQL statement acquires at least 5,000 locks on a single nonpartitioned table or index, or when lock memory exceeds the instance threshold. The escalated table lock (IS → X) conflicts with row-level locks already held by another concurrent session, forming a deadlock cycle between the escalating session and the row-level holder.
 
 **Fix:**
 - Prevent escalation with `ALTER TABLE dbo.YourTable SET (LOCK_ESCALATION = DISABLE)` — this stops escalation on that table. Use only when RCSI or SNAPSHOT isolation is also enabled, otherwise the lock count can grow unbounded.
@@ -394,6 +395,19 @@ This doesn't eliminate the lock on the parent, but it minimises the time the chi
 - Keep base table DML transactions short — history row insertion is proportional to the number of rows updated/deleted per transaction.
 - Route queries against the history table to a readable secondary replica (Always On) to separate read traffic from write traffic.
 - Avoid explicit DML on the history table from application code; let the engine manage it.
+
+---
+
+### P17 — Optimized Locking / TID Lock Deadlock
+
+**What gives it away:** SQL Server 2022+ with optimized locking enabled. The resource list contains `<xactlock>` elements (transaction ID locks) alongside the underlying `keylock` or `ridlock`. Each session holds an exclusive (`X`) lock on its own TID resource and waits for a shared (`S`) lock on the other session's TID.
+
+**Why it happens:** With optimized locking, writers acquire short-duration exclusive locks on row/page TIDs instead of holding locks until transaction end. Under concurrent updates on the same rows, two sessions can each hold an X lock on their own TID and wait for an S lock on the other's TID, forming a cycle.
+
+**Fix:**
+- Reduce transaction scope and ensure rows are updated in a consistent order (as in P1).
+- Retry deadlocked transactions in the application with a brief random backoff.
+- Optimized locking generally reduces deadlocks overall, but TID deadlocks can still occur under the same forward/reverse access patterns.
 
 ---
 

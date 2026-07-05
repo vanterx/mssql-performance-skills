@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "We got hit by error 1205 every 20 minutes in production today. I extracted the deadlock XML from system_health XE. What is the root cause and pattern?",
-      "expected_output": "Deadlock Summary table with victim/winner, isolation levels, lock resources. Pattern Match identifying which of P1-P8 patterns this is. Root cause section. Fix priority table ranked Low/Medium/High effort vs effectiveness.",
+      "expected_output": "Deadlock Summary table with victim/winner, isolation levels, lock resources. Pattern Match identifying which of P1-P17 patterns this is. Root cause section. Fix priority table ranked Low/Medium/High effort vs effectiveness.",
       "files": []
     },
     {
