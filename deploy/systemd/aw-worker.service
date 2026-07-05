@@ -1,0 +1,19 @@
+[Unit]
+Description=AgentWorks worker loop (start_work.sh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# TODO(adopter): set these two to your runner user and clone path
+User=agentworks
+WorkingDirectory=/opt/agentworks/repo
+EnvironmentFile=/etc/agentworks/aw.env
+ExecStart=/opt/agentworks/repo/scripts/start_work.sh
+Restart=on-failure
+RestartSec=60
+# never let a stuck loop take the box down with it
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

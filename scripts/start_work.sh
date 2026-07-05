@@ -51,11 +51,101 @@ reconcile_rework() {
       set_status_label "$issue" "changes-requested"
     fi
   done
+
+  reconcile_automation_failures
+}
+
+# ---------------------------------------------------------------------------
+# Auto-resume (autonomy L3, owner-gated in .github/autonomy.json): my open
+# PRs that failed CI or hit a merge conflict get a marker comment with the
+# context and their issue routed back to the rework queue — no human nudge
+# needed. Marker comments are deduped per head SHA, and the rework prompt
+# picks them up via automation_feedback().
+# ---------------------------------------------------------------------------
+reconcile_automation_failures() {
+  local do_ci do_conflict
+  do_ci="$(autonomy_setting '.auto_resume.ci_failures' 'false')"
+  do_conflict="$(autonomy_setting '.auto_resume.merge_conflicts' 'false')"
+  [ "$do_ci" = "true" ] || [ "$do_conflict" = "true" ] || return 0
+
+  local prs pr sha issue marker existing
+  prs="$(gh pr list --repo "$REPO" --author "@me" --state open --json number --jq '.[].number')"
+  for pr in $prs; do
+    sha="$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq '.headRefOid')"
+
+    if [ "$do_ci" = "true" ]; then
+      local failed
+      failed="$(gh pr view "$pr" --repo "$REPO" --json statusCheckRollup \
+        --jq "[.statusCheckRollup[]? | select(.conclusion==\"FAILURE\" and .name != null and (.name | test(\"$REVIEW_CHECK_CONTEXT\") | not))] | map(.name) | unique | join(\", \")" 2>/dev/null)"
+      if [ -n "$failed" ]; then
+        marker="<!-- aw-ci-fail:$sha -->"
+        existing="$(gh pr view "$pr" --repo "$REPO" --json comments --jq '.comments[].body' | grep -cF "$marker" || true)"
+        if [ "$existing" = "0" ]; then
+          if [ "$DRY_RUN" = "1" ]; then
+            log "[dry-run] would route PR #$pr back for rework (CI failed: $failed)"
+          else
+            gh pr comment "$pr" --repo "$REPO" --body "$marker
+🤖 Auto-resume: CI checks failed at \`${sha:0:12}\`: **$failed**. Routing back to the rework queue — fix the failures and push to this branch." >/dev/null 2>&1 || true
+            issue="$(issue_addressed_by_pr "$pr")"
+            [ -n "$issue" ] && set_status_label "$issue" "changes-requested"
+            audit_event "auto-resume" "pr#$pr" "ci-failed" "$failed"
+            log "PR #$pr routed to rework (CI failed: $failed)"
+          fi
+        fi
+        continue   # CI failure takes precedence over conflict handling
+      fi
+    fi
+
+    if [ "$do_conflict" = "true" ]; then
+      local mergeable
+      mergeable="$(gh pr view "$pr" --repo "$REPO" --json mergeable --jq '.mergeable')"
+      if [ "$mergeable" = "CONFLICTING" ]; then
+        marker="<!-- aw-conflict:$sha -->"
+        existing="$(gh pr view "$pr" --repo "$REPO" --json comments --jq '.comments[].body' | grep -cF "$marker" || true)"
+        if [ "$existing" = "0" ]; then
+          if [ "$DRY_RUN" = "1" ]; then
+            log "[dry-run] would route PR #$pr back for rework (merge conflict)"
+          else
+            gh pr comment "$pr" --repo "$REPO" --body "$marker
+🤖 Auto-resume: this branch conflicts with the default branch at \`${sha:0:12}\`. Routing back to the rework queue — rebase (or merge the default branch in), resolve, and push." >/dev/null 2>&1 || true
+            issue="$(issue_addressed_by_pr "$pr")"
+            [ -n "$issue" ] && set_status_label "$issue" "changes-requested"
+            audit_event "auto-resume" "pr#$pr" "merge-conflict" ""
+            log "PR #$pr routed to rework (merge conflict)"
+          fi
+        fi
+      fi
+    fi
+  done
 }
 
 # Prompt construction lives in common.sh (build_work_prompt /
 # build_rework_prompt) so scripts/render_prompt.sh previews exactly what
 # this loop sends.
+
+# ---------------------------------------------------------------------------
+# next_ready_issue — first fresh candidate whose "Depends-on: #N" lines
+# (if any) all point at CLOSED issues. Owner-gated by dependency_gating
+# in .github/autonomy.json (default on — it's pure risk reduction).
+# Skipped issues keep their place in the queue; no label churn.
+# ---------------------------------------------------------------------------
+next_ready_issue() {  # $1 = fresh-issues json array -> issue json or empty
+  local fresh="$1" item n body
+  if [ "$(autonomy_setting '.dependency_gating' 'true')" != "true" ]; then
+    jq -c 'if length>0 then .[0] else empty end' <<<"$fresh"
+    return 0
+  fi
+  while read -r item; do
+    [ -n "$item" ] || continue
+    n="$(jq -r '.number' <<<"$item")"
+    body="$(gh issue view "$n" --repo "$REPO" --json body --jq '.body // ""' 2>/dev/null)"
+    if dependencies_met "$body"; then
+      printf '%s' "$item"
+      return 0
+    fi
+    log "issue #$n has unmet Depends-on references — skipping until they close"
+  done < <(jq -c '.[]' <<<"$fresh")
+}
 
 claim_and_run() {  # $1 = issue json
   local n title logfile rc pr
@@ -217,7 +307,7 @@ main() {
         gh issue edit "$n" --repo "$REPO" --add-assignee "@me" >/dev/null 2>&1 || true
         rework_and_run "$next"; count=$((count+1))
       else
-        next="$(jq -c 'if length>0 then .[0] else empty end' <<<"$fresh")"
+        next="$(next_ready_issue "$fresh")"
         if [ -n "$next" ]; then claim_and_run "$next"; count=$((count+1)); fi
       fi
     fi

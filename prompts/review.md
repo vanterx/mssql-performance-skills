@@ -25,8 +25,9 @@ Review criteria:
 - Safety: does it introduce security issues, secrets, or unsafe patterns?
 - Fit: does it match this project's existing conventions?
 {{tdd_criterion}}- If the diff touches this repository's own automation — anything under
-  scripts/ or .github/workflows/, the prompts/ directory, aw.conf, or
-  .github/trusted-reviewers.json — treat that as a governance change
+  scripts/ or .github/workflows/, the prompts/ directory, aw.conf,
+  .github/trusted-reviewers.json, .github/autonomy.json, or the goals
+  file the planner reads (GOALS.md) — treat that as a governance change
   requiring human ratification — mark it NEEDS_WORK unless the PR itself
   is explicitly framed and justified as an automation/governance
   proposal.

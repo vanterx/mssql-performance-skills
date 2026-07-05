@@ -16,6 +16,13 @@ body:
       description: How will a reviewer know this is done correctly?
     validations:
       required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on (optional)
+      description: "If this must wait for other issues, add lines like: Depends-on: #12 — the worker loop skips this issue until they close."
+    validations:
+      required: false
   - type: markdown
     attributes:
       value: |

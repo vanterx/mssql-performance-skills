@@ -1,0 +1,20 @@
+[Unit]
+Description=AgentWorks adversarial review loop (review_work.sh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# TODO(adopter): set these two to your runner user and clone path.
+# /etc/agentworks/aw.env must contain REVIEW_GITHUB_TOKEN (second
+# identity) or AW_ALLOW_SOLO_REVIEW=1 — the loop refuses to start bare.
+User=agentworks
+WorkingDirectory=/opt/agentworks/repo
+EnvironmentFile=/etc/agentworks/aw.env
+ExecStart=/opt/agentworks/repo/scripts/review_work.sh
+Restart=on-failure
+RestartSec=60
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

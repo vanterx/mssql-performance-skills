@@ -8,5 +8,7 @@
 /scripts/               @vanterx
 /.github/workflows/     @vanterx
 /.github/trusted-reviewers.json  @vanterx
+/.github/autonomy.json  @vanterx
 /prompts/               @vanterx
 /aw.conf                @vanterx
+/GOALS.md               @vanterx
