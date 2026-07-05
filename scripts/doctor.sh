@@ -108,13 +108,55 @@ if [ -n "$REPO" ] && gh auth status >/dev/null 2>&1; then
   fi
 fi
 
+echo "== Autonomy configuration =="
+if [ -f "$AUTONOMY_FILE" ]; then
+  if jq -e . "$AUTONOMY_FILE" >/dev/null 2>&1; then
+    at_enabled="$(autonomy_setting '.auto_triage.enabled' 'false')"
+    at_agent="$(autonomy_setting '.auto_triage.agent_triage' 'false')"
+    ar_ci="$(autonomy_setting '.auto_resume.ci_failures' 'false')"
+    ar_conf="$(autonomy_setting '.auto_resume.merge_conflicts' 'false')"
+    dep_gate="$(autonomy_setting '.dependency_gating' 'true')"
+    planner="$(autonomy_setting '.planner.enabled' 'false')"
+
+    level="L1 (loops only — humans triage every issue)"
+    [ "$at_enabled" = "true" ] && level="L2 (auto-triage)"
+    { [ "$ar_ci" = "true" ] || [ "$ar_conf" = "true" ]; } && level="L3 (auto-triage + auto-resume)"
+    [ "$planner" = "true" ] && level="L4 (fully autonomous — planner generates backlog)"
+    pass "autonomy.json valid — effective level: $level"
+    pass "toggles: auto_triage=$at_enabled (agent=$at_agent) auto_resume(ci=$ar_ci, conflicts=$ar_conf) dep_gating=$dep_gate planner=$planner"
+
+    if [ "$at_agent" = "true" ]; then
+      visibility="$(gh api "repos/$OWNER/$NAME" --jq .visibility 2>/dev/null || echo unknown)"
+      if [ "$visibility" = "public" ]; then
+        warn "agent_triage is enabled on a PUBLIC repo — any issue author can reach your triage agent; see .claude/docs/aw/AUTONOMY.md#what-each-rung-costs-you-read-before-climbing"
+      fi
+    fi
+    if [ "$planner" = "true" ]; then
+      goals="$REPO_DIR/$(autonomy_setting '.planner.goals_file' 'GOALS.md')"
+      if [ ! -f "$goals" ]; then
+        fail "planner enabled but goals file missing: $goals"
+      elif grep -q 'TODO(adopter)' "$goals"; then
+        warn "planner enabled but $goals is still the template stub — plan_work.sh will refuse to run"
+      else
+        pass "planner goals file present and customized"
+      fi
+    fi
+  else
+    fail "$AUTONOMY_FILE is not valid JSON — all autonomy features fail safe to OFF"
+  fi
+else
+  pass "no autonomy.json — all autonomy features off (level L1)"
+fi
+
 echo "== Prompt templates =="
 declare -A TEMPLATE_VARS=(
   [work.md]="issue_number issue_title issue_body skills_section tdd_section"
   [rework.md]="issue_number pr_number feedback tdd_section"
   [review.md]="pr_number title body diff history tdd_criterion review_file"
+  [triage.md]="issue_number issue_title issue_body"
+  [plan.md]="max_issues goals_file goals recent_closed"
 )
-for tpl in work.md rework.md review.md; do
+for tpl in work.md rework.md review.md triage.md plan.md; do
   path="$PROMPTS_DIR/$tpl"
   if [ ! -f "$path" ]; then
     fail "prompt template missing: $path (the loops cannot run without it)"

@@ -27,3 +27,5 @@ skill-inventory.md
 .aw-followups.json
 .aw/
 aw.conf.local
+aw.env
+aw.*.env

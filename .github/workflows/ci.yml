@@ -22,7 +22,8 @@ env:
   AW_SCRIPTS: >-
     scripts/doctor.sh scripts/merge_ready.sh scripts/metrics.sh
     scripts/reap.sh scripts/render_prompt.sh scripts/review_work.sh
-    scripts/start_work.sh scripts/validate.sh scripts/lib/common.sh
+    scripts/start_work.sh scripts/validate.sh scripts/triage_work.sh
+    scripts/plan_work.sh scripts/lib/common.sh
 
 jobs:
   lint-shell:
@@ -79,4 +80,7 @@ jobs:
           jq -e 'has("whitelist") and has("required_approvals")' .github/trusted-reviewers.json
 
       - name: Run content validator
-        run: ./scripts/validate.sh example
+        # example/ (the template's own sanity-check target) was removed
+        # after the SETUP.md trial (see PR #57) — prompts/ is real,
+        # present content that keeps this check meaningful.
+        run: ./scripts/validate.sh prompts

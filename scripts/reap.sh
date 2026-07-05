@@ -80,5 +80,42 @@ reap_stale_reworks() {
   done
 }
 
+# ---------------------------------------------------------------------------
+# reap_mislabeled_done — self-heal for inconsistent "done" labels. An
+# issue that truly merged gets CLOSED by its PR's "Closes #n" keyword, so
+# an OPEN issue carrying "status: done" is lying (historically: a merge
+# blocked by branch protection while the label was written anyway).
+# Route it back to the truthful state.
+# ---------------------------------------------------------------------------
+reap_mislabeled_done() {
+  local issues n pr
+  issues="$(gh issue list --repo "$REPO" --state open --label "status: done" \
+    --json number --limit 100)"
+  warn_if_capped "$issues" "status: done"
+  jq -r '.[].number' <<<"$issues" | while read -r n; do
+    [ -n "$n" ] || continue
+    pr="$(pr_for_issue "$n")"
+    if [ "$DRY_RUN" = "1" ]; then
+      log "[dry-run] would relabel mislabeled-done #$n (open PR: ${pr:-none})"
+      continue
+    fi
+    if [ -n "$pr" ]; then
+      set_status_label "$n" "in-review"
+      gh issue comment "$n" --repo "$REPO" \
+        --body "🧹 This issue was labeled \`status: done\` but PR #$pr is still open (the merge was likely blocked by branch protection). Relabeling to \`status: in-review\` to reflect reality." >/dev/null 2>&1 || true
+      audit_event "reap" "issue#$n" "relabeled" "done -> in-review (open pr#$pr)"
+      log "relabeled mislabeled-done #$n -> in-review (open PR #$pr)"
+    else
+      set_status_label "$n" "available"
+      gh issue edit "$n" --repo "$REPO" --remove-assignee "@me" >/dev/null 2>&1 || true
+      gh issue comment "$n" --repo "$REPO" \
+        --body "🧹 This issue was labeled \`status: done\` but is still open with no PR. Releasing back to \`status: available\`." >/dev/null 2>&1 || true
+      audit_event "reap" "issue#$n" "relabeled" "done -> available (no PR)"
+      log "relabeled mislabeled-done #$n -> available (no PR)"
+    fi
+  done
+}
+
 reap_stale_claims
 reap_stale_reworks
+reap_mislabeled_done

@@ -88,21 +88,12 @@ merge_pr() {  # $1 = PR number
   fi
   gh_retry gh api -X POST "repos/$OWNER/$NAME/statuses/$sha" \
     -f state=success -f context="$REVIEW_CHECK_CONTEXT" -f description="Trust model satisfied" >/dev/null 2>&1 || true
-  # Don't trust `gh pr merge`'s exit code alone — re-query the PR's actual
-  # state afterward and only record success / flip the issue to "done" if
-  # it truly merged (branch protection can still block this even with the
-  # trust model satisfied, e.g. an unmet required-approving-review count).
-  gh pr merge "$pr" --repo "$REPO" --squash --delete-branch >/dev/null 2>&1 || true
-  local merged_state iss
-  merged_state="$(gh pr view "$pr" --repo "$REPO" --json state --jq .state 2>/dev/null || echo "")"
-  iss="$(issue_for_pr "$pr")"
-  if [ "$merged_state" = "MERGED" ]; then
-    audit_event "merge" "pr#$pr" "ok" "trust model satisfied"
+  if merge_pr_verified "$pr"; then
+    local iss; iss="$(issue_for_pr "$pr")"
     [ -n "$iss" ] && set_status_label "$iss" "done"
     log "merged PR #$pr"
   else
-    audit_event "merge" "pr#$pr" "blocked" "trust model satisfied but gh pr merge did not result in a merged PR (branch protection or other gate)"
-    log_warn "PR #$pr: trust model satisfied but auto-merge did not complete (PR still $merged_state) — merge manually: gh pr merge $pr --squash --delete-branch"
+    log "PR #$pr: READY by trust model but merge was BLOCKED — see the aw-merge-blocked comment on the PR"
   fi
 }
 

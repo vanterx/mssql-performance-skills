@@ -47,7 +47,10 @@ stop — that's not your job.
 
 3. **Read the whole chain** — the issue, any parent/linked issues, and any
    prior PRs or review comments referencing it — before writing any code.
-   Avoid duplicating work that's already in flight.
+   Avoid duplicating work that's already in flight. If your issue should
+   wait for another one, say so with a line-anchored `Depends-on: #N` in
+   the issue body — the worker loop skips issues whose dependencies are
+   still open.
 
 4. **Do the work.** Stay in scope: fix what the issue asks for. If you spot
    something else worth fixing, note it in the PR description or open a new
@@ -79,23 +82,27 @@ stop — that's not your job.
 - **Respect existing conventions** in this repo before introducing new
   ones. If this project has an ADR/decision-log directory, read it before
   making structural changes.
-- **Changes to `scripts/` or `.github/workflows/` are governance
-  changes**, not ordinary work items — the adversarial review treats them
-  as needing explicit justification and, in solo-review setups, extra
-  scrutiny. Don't casually "improve" the orchestration scripts while
-  working on an unrelated issue.
+- **Changes to `scripts/`, `.github/workflows/`, `.github/autonomy.json`,
+  or `GOALS.md` are governance changes**, not ordinary work items — the
+  adversarial review treats them as needing explicit justification and,
+  in solo-review setups, extra scrutiny. Don't casually "improve" the
+  orchestration scripts while working on an unrelated issue.
 
 ## Running it on autopilot
 
-Five scripts do all the bookkeeping — see `.claude/docs/aw/AUTOMATION.md` for the full
-status lifecycle:
+Six scripts do all the bookkeeping — see `.claude/docs/aw/AUTOMATION.md` for the full
+status lifecycle and `.claude/docs/aw/AUTONOMY.md` for the opt-in autonomy
+ladder these scripts read from `.github/autonomy.json` (everything in it
+is off in this repo today — L1, fully manual triage):
 
 | Script | Role |
 |---|---|
 | `scripts/start_work.sh` | Worker loop: claims available work, runs the agent, opens a PR |
 | `scripts/review_work.sh` | Adversarial reviewer loop: reviews open PRs, sets the merge-gate check |
-| `scripts/reap.sh` | Garbage collector: frees stale claims and reworks |
+| `scripts/reap.sh` | Garbage collector: frees stale claims and reworks, heals mislabeled state |
 | `scripts/merge_ready.sh` | Evaluates trust-model approval and merges READY PRs |
+| `scripts/triage_work.sh` | Agent-triage loop (autonomy L2, off) — inert while `auto_triage.agent_triage` is `false` |
+| `scripts/plan_work.sh` | Backlog planner (autonomy L4, off) — inert while `planner.enabled` is `false` |
 
 Every PR is adversarially reviewed before it can merge, and by default the
 review must come from a **different identity** than the author (branch

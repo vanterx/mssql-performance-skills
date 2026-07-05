@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the AgentWorks backlog planner periodically (no-op unless the queue is dry)
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

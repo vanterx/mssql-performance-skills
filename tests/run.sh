@@ -129,6 +129,81 @@ msg="$(set_status_label 42 done 2>&1)"
 DRY_RUN=0
 assert_contains "dry-run announces the sweep" "$msg" "would set issue #42 to status: done"
 
+echo "== autonomy_setting =="
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  skip autonomy_setting tests (jq not installed on this machine; CI runs them)"
+else
+cat > "$TMP/autonomy.json" <<'EOF'
+{
+  "auto_triage": { "enabled": true, "trusted_authors": ["alice"] },
+  "dependency_gating": false
+}
+EOF
+AUTONOMY_FILE="$TMP/autonomy.json"
+assert_eq "reads true"  "true"  "$(autonomy_setting '.auto_triage.enabled' 'false')"
+assert_eq "explicit false does NOT collapse to default" "false" "$(autonomy_setting '.dependency_gating' 'true')"
+assert_eq "missing key -> default" "3" "$(autonomy_setting '.planner.max_issues_per_run' '3')"
+assert_eq "array setting readable" "true" "$(autonomy_setting '.auto_triage.trusted_authors' '[]' | jq 'index("alice") != null')"
+printf 'not json' > "$TMP/bad.json"
+AUTONOMY_FILE="$TMP/bad.json"
+assert_eq "malformed file -> default (fail safe)" "false" "$(autonomy_setting '.auto_triage.enabled' 'false' 2>/dev/null)"
+AUTONOMY_FILE="$TMP/does-not-exist.json"
+assert_eq "missing file -> default" "false" "$(autonomy_setting '.auto_triage.enabled' 'false')"
+fi
+
+echo "== last_triage_line =="
+printf 'reasoning...\nTRIAGE: ACCEPT\n' > "$TMP/t1"
+assert_eq "triage accept" "ACCEPT" "$(last_triage_line "$TMP/t1")"
+printf 'quote: TRIAGE: ACCEPT mid-text\nTRIAGE: REJECT\n' > "$TMP/t2"
+assert_eq "mid-text quote ignored" "REJECT" "$(last_triage_line "$TMP/t2")"
+printf 'no decision here\n' > "$TMP/t3"
+assert_eq "no decision -> empty (fail closed)" "" "$(last_triage_line "$TMP/t3")"
+
+echo "== issue_dependencies =="
+dep_body='Some context
+
+Depends-on: #12
+depends-on: #34
+Not a dep: see #99
+  Depends-on: #56'
+deps="$(issue_dependencies "$dep_body" | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "parses anchored deps, case-insensitive, with indent" "12 34 56" "$deps"
+assert_eq "no deps -> empty" "" "$(issue_dependencies 'plain body, mentions #7 casually')"
+
+echo "== parse_plan_blocks =="
+cat > "$TMP/plan.out" <<'EOF'
+Some preamble the agent wrote.
+
+### ISSUE
+Title: First task
+Body:
+Do the thing.
+
+With a second paragraph.
+### END
+### ISSUE
+Title: Second task
+Body:
+Another thing.
+### END
+### ISSUE
+Body:
+malformed - no title, must be dropped
+### END
+EOF
+records=0
+titles=""
+while IFS=$'\x1f' read -r -d $'\x1e' t b; do
+  records=$((records+1))
+  titles="$titles|$t"
+  [ "$t" = "First task" ] && first_body="$b"
+done < <(parse_plan_blocks "$TMP/plan.out")
+assert_eq "two well-formed blocks parsed" "2" "$records"
+assert_contains "titles captured" "$titles" "First task"
+assert_contains "titles captured (2)" "$titles" "Second task"
+assert_contains "multiline body preserved" "$first_body" "second paragraph"
+assert_not_contains "malformed block dropped" "$titles" "malformed"
+
 echo
 echo "tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

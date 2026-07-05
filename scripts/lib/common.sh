@@ -95,6 +95,39 @@ PROMPTS_DIR="${AW_PROMPTS_DIR:-$REPO_DIR/prompts}"   # external prompt templates
 ENFORCE_TDD="${AW_ENFORCE_TDD:-0}"          # 1 = inject tests-first requirements into prompts
 
 # ---------------------------------------------------------------------------
+# Autonomy control surface — .github/autonomy.json
+#
+# Every autonomy feature (auto-triage, auto-resume, planner) is OFF by
+# default and individually toggled by the repo owner in this committed
+# file. It is a governance surface: reviewed like scripts/, validated by
+# doctor.sh. Missing or malformed file = everything off (fail-safe).
+# Env vars still override per the usual precedence.
+# ---------------------------------------------------------------------------
+AUTONOMY_FILE="${AW_AUTONOMY_FILE:-$REPO_DIR/.github/autonomy.json}"
+PLAN_MAX_ISSUES="${AW_PLAN_MAX_ISSUES:-}"            # override planner.max_issues_per_run
+TRIAGE_POLL_SECONDS="${AW_TRIAGE_POLL_SECONDS:-300}"
+
+autonomy_setting() {  # $1 = jq path (e.g. ".auto_triage.enabled"), $2 = default
+  local path="$1" default="$2" val
+  if [ ! -f "$AUTONOMY_FILE" ]; then
+    printf '%s' "$default"
+    return 0
+  fi
+  # Plain -r (not // empty): an explicit `false` must NOT collapse to the
+  # default. Missing keys read as the literal string "null".
+  if ! val="$(jq -r "$path" "$AUTONOMY_FILE" 2>/dev/null)"; then
+    log_warn "malformed $AUTONOMY_FILE — treating $path as default ($default)"
+    printf '%s' "$default"
+    return 0
+  fi
+  if [ -z "$val" ] || [ "$val" = "null" ]; then
+    printf '%s' "$default"
+  else
+    printf '%s' "$val"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Merge-gate identity
 # ---------------------------------------------------------------------------
 # The commit-status context that acts as the actual merge gate.
@@ -494,20 +527,117 @@ output_was_truncated() {  # $1 = path to captured agent output (capped by head -
 }
 
 # ---------------------------------------------------------------------------
-# last_verdict_line — strict verdict parsing. Prints PASS or NEEDS_WORK
-# only when the LAST NON-EMPTY line of the file is exactly a verdict line;
-# prints nothing otherwise. Immune to instructions or quoted examples
-# appearing mid-text (the old grep-anywhere approach was not).
+# last_line_matching — strict last-line contract parsing. Prints the
+# captured keyword only when the LAST NON-EMPTY line of the file is
+# exactly "<PREFIX>: <ONE-OF-CHOICES>"; prints nothing otherwise. Immune
+# to instructions or quoted examples appearing mid-text.
 # ---------------------------------------------------------------------------
-last_verdict_line() {  # $1 = file
+last_line_matching() {  # $1 = file, $2 = prefix (e.g. VERDICT), $3 = choices regex (e.g. "PASS|NEEDS_WORK")
   [ -f "$1" ] || return 0
   local line
   line="$(awk 'NF { last = $0 } END { print last }' "$1")"
   # strip trailing CR in case the agent emitted CRLF
   line="${line%$'\r'}"
-  if [[ "$line" =~ ^VERDICT:[[:space:]]*(PASS|NEEDS_WORK)[[:space:]]*$ ]]; then
+  if [[ "$line" =~ ^$2:[[:space:]]*($3)[[:space:]]*$ ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
   fi
+}
+
+last_verdict_line() {  # $1 = file -> PASS | NEEDS_WORK | ""
+  last_line_matching "$1" "VERDICT" "PASS|NEEDS_WORK"
+}
+
+last_triage_line() {  # $1 = file -> ACCEPT | DEFER | REJECT | ""
+  last_line_matching "$1" "TRIAGE" "ACCEPT|DEFER|REJECT"
+}
+
+# ---------------------------------------------------------------------------
+# Depends-on gating — issues may declare "Depends-on: #N" lines (one per
+# line, case-insensitive). The worker loop skips them until every
+# referenced issue is closed. Pure read; no label churn.
+# ---------------------------------------------------------------------------
+issue_dependencies() {  # $1 = issue body -> newline-separated issue numbers
+  printf '%s\n' "$1" | grep -iE '^[[:space:]]*Depends-on:[[:space:]]*#[0-9]+' \
+    | grep -oE '#[0-9]+' | tr -d '#' || true
+}
+
+dependencies_met() {  # $1 = issue body -> 0 if all deps closed (or none)
+  local deps n state
+  deps="$(issue_dependencies "$1")"
+  [ -n "$deps" ] || return 0
+  while read -r n; do
+    [ -n "$n" ] || continue
+    state="$(gh issue view "$n" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")"
+    [ "$state" = "CLOSED" ] || return 1
+  done <<<"$deps"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# automation_feedback — the latest CI-failure / merge-conflict marker
+# comments posted by the auto-resume sweeps, so the rework agent sees WHY
+# the PR bounced even when no human/agent review said so.
+# ---------------------------------------------------------------------------
+automation_feedback() {  # $1 = PR number
+  gh pr view "$1" --repo "$REPO" --json comments \
+    --jq '[.comments[] | select(.body | test("<!-- aw-(ci-fail|conflict):"))] | .[-2:] | .[] | .body' 2>/dev/null \
+    | head -c 4000
+}
+
+# ---------------------------------------------------------------------------
+# merge_pr_verified — merge a PR and VERIFY it actually merged before
+# reporting success. Branch protection can reject a merge (e.g. a native
+# required-approving-review rule that commit-status approvals don't
+# satisfy, the classic solo-mode trigger); trusting the exit code — or
+# worse, swallowing it with `|| true` — once let callers label issues
+# "done" and audit "merge ok" for merges that never happened. The
+# observed PR state is the only truth consulted here.
+#
+# Returns 0 iff the PR is MERGED. On a blocked merge: audits "blocked",
+# posts one deduped explanatory PR comment per head SHA, returns 1 —
+# callers must leave issue labels untouched.
+# ---------------------------------------------------------------------------
+merge_pr_verified() {  # $1 = PR number
+  local pr="$1" sha errout state marker
+  sha="$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq '.headRefOid' 2>/dev/null)"
+  errout="$(gh pr merge "$pr" --repo "$REPO" --squash --delete-branch 2>&1 >/dev/null)" || true
+  state="$(gh pr view "$pr" --repo "$REPO" --json state --jq '.state' 2>/dev/null)"
+
+  if [ "$state" = "MERGED" ]; then
+    audit_event "merge" "pr#$pr" "ok" ""
+    return 0
+  fi
+
+  audit_event "merge" "pr#$pr" "blocked" "$(printf '%s' "$errout" | head -c 300)"
+  marker="<!-- aw-merge-blocked:$sha -->"
+  if ! gh pr view "$pr" --repo "$REPO" --json comments --jq '.comments[].body' 2>/dev/null | grep -qF "$marker"; then
+    gh pr comment "$pr" --repo "$REPO" --body "$marker
+🤖 Review passed, but the merge was **rejected** — most likely branch protection (e.g. a native \"require approving reviews\" rule, which commit-status approvals don't satisfy; see docs/AUTOMATION.md#why-merge_readysh-exists). A maintainer must merge manually or adjust protection to require only the \`$REVIEW_CHECK_CONTEXT\` check.
+
+\`\`\`
+$(printf '%s' "$errout" | head -c 500)
+\`\`\`" >/dev/null 2>&1 || true
+  fi
+  log_warn "PR #$pr merge blocked (state: ${state:-unknown}) — leaving issue state untouched; see PR comment"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# parse_plan_blocks — extract "### ISSUE ... ### END" proposals from the
+# planner agent's output. Emits one record per well-formed block:
+# title and body separated by \x1f (unit sep), records terminated by \x1e
+# (record sep). Malformed blocks (missing title) are dropped, never
+# guessed at. Consumed by plan_work.sh; unit-tested in tests/run.sh.
+# ---------------------------------------------------------------------------
+parse_plan_blocks() {  # $1 = file
+  [ -f "$1" ] || return 0
+  awk '
+    /^### ISSUE\r?$/ { inb=1; inbody=0; title=""; body=""; next }
+    /^### END\r?$/   { if (inb && title != "") printf "%s\x1f%s\x1e", title, body; inb=0; next }
+    inb && /^Title: /   { title=substr($0, 8); sub(/\r$/, "", title); next }
+    inb && /^Body:\r?$/ { inbody=1; next }
+    inb && inbody       { line=$0; sub(/\r$/, "", line); body = body line "\n" }
+  ' "$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -653,8 +783,15 @@ $skills
 }
 
 build_rework_prompt() {  # $1 = issue number, $2 = PR number
-  local n="$1" pr="$2" feedback tdd_section=""
+  local n="$1" pr="$2" feedback auto_fb tdd_section=""
   feedback="$(review_feedback "$pr")"
+  auto_fb="$(automation_feedback "$pr")"
+  if [ -n "$auto_fb" ]; then
+    feedback="$feedback
+
+### Automation feedback (CI / merge status)
+$auto_fb"
+  fi
   [ "$ENFORCE_TDD" = "1" ] && tdd_section="$TDD_REWORK_SECTION"
 
   render_template "$PROMPTS_DIR/rework.md" \
@@ -672,6 +809,16 @@ review_history() {  # $1 = PR number
   gh api graphql -f query="{repository(owner:\"$OWNER\",name:\"$NAME\"){pullRequest(number:$pr){reviews(last:5){nodes{state body author{login}}}}}}" \
     --jq '[.data.repository.pullRequest.reviews.nodes[] | select(.body != "")] | .[0:2] | .[] | "- \(.author.login) [\(.state)]: \(.body)"' \
     | head -c 6000
+}
+
+build_triage_prompt() {  # $1 = issue number, $2 = issue JSON (title/body)
+  local n="$1" title body
+  title="$(jq -r '.title' <<<"$2")"
+  body="$(jq -r '.body // ""' <<<"$2")"
+  render_template "$PROMPTS_DIR/triage.md" \
+    "issue_number=$n" \
+    "issue_title=$title" \
+    "issue_body=$body"
 }
 
 build_review_prompt() {  # $1 = PR number, $2 = absolute review-file path
