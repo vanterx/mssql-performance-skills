@@ -4,8 +4,8 @@
 // every Write/Edit otherwise, and verify-docs.sh itself is slow (~3 min on
 // this Windows/Git Bash setup — 46 checks x 26 skill dirs, each spawning its
 // own grep/awk process) so this fast-path skip avoids a multi-minute stall
-// on edits that have nothing to do with the skills library (e.g. AgentWorks
-// worker-loop edits to example/ or scripts/).
+// on edits that have nothing to do with the skills library (e.g. edits to
+// scripts/ or non-skill tooling).
 
 const { spawnSync } = require("child_process");
 
