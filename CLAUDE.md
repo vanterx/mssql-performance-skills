@@ -110,44 +110,6 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 | [.github/workflows/deploy-mcp.yml](.github/workflows/deploy-mcp.yml) | GitHub Actions CD — auto-deploys to Cloudflare Workers on push when `mcp-server/`, `skills/`, or `PERFORMANCE_TUNING_GUIDE.md` changes |
 | [.mcp.json](.mcp.json) | Project-scoped MCP server config — registers the `microsoft-learn` HTTP server (`https://learn.microsoft.com/api/mcp`) so every contributor gets Microsoft Learn validation tools without per-machine setup; see [.claude/docs/ms-learn-validation.md](.claude/docs/ms-learn-validation.md) |
 
-### AgentWorks Orchestration (autonomous issue-driven workflow)
-
-Adopted from [vanterx/agentworks](https://github.com/vanterx/agentworks) (currently synced to upstream v1.2.0): lets an AI coding agent claim a GitHub issue, do the work in an isolated git worktree, open a PR, and pass adversarial review before merge — with bash scripts (never the agent) owning every label change and merge decision. Solo review mode; `AW_AGENT=claude` by default, `opencode` also supported. The opt-in autonomy ladder (auto-triage, auto-resume, backlog planner) is installed but every toggle in `.github/autonomy.json` is off — this repo runs at L1 (fully manual triage).
-
-| File | Purpose |
-|------|---------|
-| [AGENT_CONTRACT.md](AGENT_CONTRACT.md) | Operating contract for the claim/work/review/merge loop — separate from [AGENTS.md](AGENTS.md), which covers this repo's own conventions |
-| [aw.conf](aw.conf) | Committed team-wide defaults (`AW_AGENT`, timeouts, TDD enforcement — off, no test suite here) |
-| [GOALS.md](GOALS.md) | Stub goals file the backlog planner would read — template placeholder, planner disabled |
-| [.github/autonomy.json](.github/autonomy.json) | Governance switchboard for the autonomy ladder (auto-triage, auto-resume, dependency gating, planner) — every feature off |
-| [scripts/start_work.sh](scripts/start_work.sh) | Worker loop: claims available work, runs the agent, opens a PR; also runs dependency-gating and auto-resume sweeps (both inert while off) |
-| [scripts/review_work.sh](scripts/review_work.sh) | Adversarial reviewer loop: reviews open PRs, sets the merge-gate check, merges via `merge_pr_verified()` |
-| [scripts/reap.sh](scripts/reap.sh) | Garbage collector: frees stale claims and reworks, heals issues mislabeled `status: done` by a blocked merge |
-| [scripts/merge_ready.sh](scripts/merge_ready.sh) | Evaluates trust-model approval and merges READY PRs via `merge_pr_verified()` |
-| [scripts/doctor.sh](scripts/doctor.sh) | Read-only deployment health check — run after setup and whenever the loop misbehaves; reports the effective autonomy level (L1–L4) |
-| [scripts/render_prompt.sh](scripts/render_prompt.sh) | Previews the exact prompt a loop would send, without running the agent |
-| [scripts/metrics.sh](scripts/metrics.sh) | Reports queue/throughput metrics from the audit log |
-| [scripts/triage_work.sh](scripts/triage_work.sh) | Agent-triage loop (autonomy L2) — inert while `auto_triage.agent_triage` is `false` |
-| [scripts/plan_work.sh](scripts/plan_work.sh) | Backlog planner (autonomy L4) — inert while `planner.enabled` is `false`; refuses to run against the stub `GOALS.md` |
-| [scripts/lib/common.sh](scripts/lib/common.sh) | Shared library: agent dispatch (claude/codex/hermes/opencode), trust config, worktree isolation, audit logging, autonomy settings, `merge_pr_verified()` |
-| [prompts/work.md](prompts/work.md), [prompts/rework.md](prompts/rework.md), [prompts/review.md](prompts/review.md), [prompts/triage.md](prompts/triage.md), [prompts/plan.md](prompts/plan.md) | Prompt templates rendered by the loop scripts |
-| [.github/labels.yml](.github/labels.yml) | Reference label taxonomy for the status-lifecycle state machine |
-| [.github/trusted-reviewers.json](.github/trusted-reviewers.json) | Whitelist + required-approval count read by `merge_ready.sh` |
-| [.github/workflows/issue-status.yml](.github/workflows/issue-status.yml), [reap.yml](.github/workflows/reap.yml) | Scheduled/triggered automation for the issue-status state machine |
-| [.github/workflows/triage.yml](.github/workflows/triage.yml) | Deterministic zero-token auto-triage tier (autonomy L2) — no-op while `auto_triage.enabled` is `false` |
-| [.github/workflows/agent-runner.yml.disabled](.github/workflows/agent-runner.yml.disabled) | Opt-in cloud/Actions execution mode — stays `.disabled`; rename to enable, understand the trade-offs in its header first |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Lints the orchestration scripts themselves (`bash -n`, shellcheck, YAML, `tests/run.sh`) |
-| [.github/workflows/validate.yml](.github/workflows/validate.yml) | Runs `scripts/verify-docs.sh` against `skills/` on every PR, from the base branch's trusted copy |
-| [tests/run.sh](tests/run.sh) | Zero-dependency test harness for `scripts/lib/common.sh` |
-| [deploy/systemd/](deploy/systemd/), [deploy/docker/](deploy/docker/) | Reference scaffolding for an always-on runner (worker/reviewer/triage services, planner timer) — not currently deployed; loops run on-demand from this machine today |
-| [.claude/docs/aw/AUTOMATION.md](.claude/docs/aw/AUTOMATION.md) | Status-label state machine reference |
-| [.claude/docs/aw/AUTONOMY.md](.claude/docs/aw/AUTONOMY.md) | The autonomy ladder (L1–L4): what each rung does, costs, and how to toggle it |
-| [.claude/docs/aw/MIGRATION.md](.claude/docs/aw/MIGRATION.md) | Upstream's own version-to-version upgrade notes |
-| [.claude/docs/aw/OPERATIONS.md](.claude/docs/aw/OPERATIONS.md) | Day-to-day operations: monitoring, troubleshooting, recipes |
-| [.claude/docs/aw/GETTING_STARTED.md](.claude/docs/aw/GETTING_STARTED.md) | Manual (non-agent-driven) setup walkthrough, kept for reference |
-| [.claude/docs/aw/SETUP.md](.claude/docs/aw/SETUP.md) | End-to-end trial-run walkthrough (used `example/NOTES.md`, since removed after a successful trial — see git history for the original recipe if repeating it) |
-| [.claude/skills/onboard-contributor/SKILL.md](.claude/skills/onboard-contributor/SKILL.md), [.claude/skills/triage-task/SKILL.md](.claude/skills/triage-task/SKILL.md) | Contributor-facing skills for getting started and advisory issue triage |
-
 ### Examples
 
 | Path | What it demonstrates |

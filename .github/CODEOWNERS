@@ -1,14 +1,1 @@
-# The orchestration engine and CI are governance surfaces: changes to them
-# alter how work is claimed, reviewed, and merged. Route them to the
-# maintainer.
-
-*                       @vanterx
-
-# Governance-critical paths — require the repo owner specifically.
-/scripts/               @vanterx
-/.github/workflows/     @vanterx
-/.github/trusted-reviewers.json  @vanterx
-/.github/autonomy.json  @vanterx
-/prompts/               @vanterx
-/aw.conf                @vanterx
-/GOALS.md               @vanterx
+* @vanterx
