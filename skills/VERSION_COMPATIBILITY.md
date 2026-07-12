@@ -77,9 +77,9 @@ These cumulative counts show how many of the 833 total checks are active on a gi
 | SQL Server 2019 | **729** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
 | SQL Server 2017 | **707** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
 | SQL Server 2016 | **694** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **657** | −37 more: U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
-| SQL Server 2012 | **651** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **555** | −96 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), I16, X23, B29 (service-SID sysadmin membership, SQL 2012+) unavailable |
+| SQL Server 2014 | **655** | −39 more: S37/S38 (SQL 2016 SP2+/SP1+) unavailable; U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
+| SQL Server 2012 | **649** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
+| SQL Server 2008 R2 | **553** | −96 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), I16, X23, B29 (service-SID sysadmin membership, SQL 2012+) unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -124,6 +124,8 @@ These checks require features introduced in SQL Server 2012.
 | Check | Skill | Name | Feature |
 |-------|-------|------|---------|
 | S10 | `sqlplan-review` | Downlevel Cardinality Estimator | Compat level 130 CE baseline (SQL 2016+) |
+| S37 | `sqlplan-review` | Hidden Scalar UDF Time | `UdfCpuTime`/`UdfElapsedTime` showplan attributes (SQL 2016 SP2+, SQL 2017 CU3+) |
+| S38 | `sqlplan-review` | In-Plan Wait Statistics Present | Top-10 wait stats in actual showplan XML (SQL 2016 SP1+; `CXPACKET` specifically requires SQL 2016 SP2+/2017 CU3+) |
 | U20 | `sqlbootstraplog-review` | IFI Not Granted at Setup | `SQLSVCINSTANTFILEINIT` setup parameter (SQL 2016+) |
 | U21 | `sqlbootstraplog-review` | TempDB Setup Parameters Undersized | Setup-time TempDB parameters `SQLTEMPDB*` (SQL 2016+) |
 | H25 | `sqlhadr-review` | Parallel Redo Worker Saturation | Parallel redo for AG secondaries (SQL 2016+) |
@@ -278,7 +280,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**553 of 833 checks (66.4%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**551 of 833 checks (66.1%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
