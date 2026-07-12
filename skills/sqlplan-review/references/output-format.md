@@ -8,6 +8,20 @@ or the parameter-sniffing fix options block.
 
 ## Parameter Sniffing Fix Options Template
 
+Before applying this template, confirm the signal actually is sniffing using the four-pattern
+table:
+
+| Pattern | XML signature | Is it sniffing? |
+|---------|----------------|------------------|
+| Sniffed parameter | `ParameterCompiledValue` ≠ `ParameterRuntimeValue`, plan reused from cache | Yes |
+| `OPTIMIZE FOR UNKNOWN` | Statement text has `OPTIMIZE FOR ... UNKNOWN`; compiled value reflects average density | No — deliberate (N32) |
+| Never-executed cached plan | Compiled value present, no runtime value recorded yet | Not yet |
+| Statement-level `OPTION (RECOMPILE)` | Compiled value = runtime value always | No — compile cost (S20), not sniffing |
+
+Also check for the **local-variable tell**: a `DECLARE @x ...` used in the predicate produces no
+`<ParameterList>` entry for `@x` at all, yet behaves like `OPTIMIZE FOR UNKNOWN` (average-density
+estimate) rather than true sniffing.
+
 When `[I1] Parameter Sniffing` fires, use this template for the fix block:
 
 ```

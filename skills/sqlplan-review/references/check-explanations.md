@@ -3,8 +3,8 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [Statement-Level Checks (S1–S27)](#statement-level-checks-s1s27)
-- [Node-Level Checks (N1–N72)](#node-level-checks-n1n72)
+- [Statement-Level Checks (S1–S38)](#statement-level-checks-s1s38)
+- [Node-Level Checks (N1–N73)](#node-level-checks-n1n73)
 - [Quick Reference Tables](#quick-reference-tables)
 
 ---
@@ -93,7 +93,7 @@ Every plan in the analyser is stored as XML. Most checks inspect specific attrib
 
 ---
 
-## Statement-Level Checks (S1–S27)
+## Statement-Level Checks (S1–S38)
 
 These checks fire once per query statement before individual operators are examined. They look at plan-wide attributes like memory grants, compile stats, and hints.
 
@@ -1151,11 +1151,13 @@ WHERE i.object_id = OBJECT_ID('dbo.YourTable')
 ORDER BY i.index_id, ic.key_ordinal
 ```
 
+Note: this count only reflects suggestions the optimizer chose to emit. An eager index spool (N2) elsewhere in the same plan can mean a real index need exists with no corresponding `<MissingIndexGroup>` entry at all — the spool suppresses the suggestion for that access path.
+
 **Related checks:** N34 (wide index suggestion — fires when individual suggestions are already too wide), N2 (Eager Index Spool — SQL Server building indexes at runtime because no permanent ones exist)
 
 ---
 
-## Node-Level Checks (N1–N60)
+## Node-Level Checks (N1–N73)
 
 These checks examine individual operators within the plan tree.
 
@@ -1220,7 +1222,9 @@ ON dbo.Orders (CustomerId, OrderDate)
 INCLUDE (Total, Status)  -- columns referenced elsewhere in the query
 ```
 
-**Related checks:** N45 (non-index eager spool — different kind of spool)
+**A missing spool can hide a missing index suggestion.** Because the spool already gives the optimizer a working (if expensive) path to correct results, SQL Server may not also emit a `<MissingIndexGroup>` entry for the same access pattern — the `<MissingIndexes>` element can be silent even though a real index gap exists here. Don't wait for a suggestion to appear; derive the index directly from the spool's own seek predicate, as shown above.
+
+**Related checks:** N45 (non-index eager spool — different kind of spool), S27 (excessive missing index suggestions — the count this spool can suppress from)
 
 ---
 
@@ -1478,9 +1482,12 @@ WHERE EmailDomain = 'gmail.com'  -- fast equality seek
 ### N10 — No Join Predicate (Cartesian Product)
 
 **What it means**  
-Two tables are being joined with no matching condition. Every row from Table A is combined with every row from Table B. If A has 1,000 rows and B has 1,000 rows, the result is 1,000,000 rows — 999,000 of which are probably wrong.
+The `NoJoinPredicate` flag fired on this node — but that alone doesn't mean it's a bug. Rule out two common false alarms before treating it as Critical:
 
-This is almost always a bug.
+1. **Correlated APPLY** — the "join condition" lives in `OuterReferences` on the inner side of a `CROSS`/`OUTER APPLY`, not as a join predicate node. The row isn't a real Cartesian product; the correlation happens elsewhere in the XML.
+2. **Transitive predicate elimination** — the optimizer proved this join's predicate is logically implied by other predicates in the query (e.g., `A.x = B.x` and `B.x = C.x` make `A.x = C.x` redundant) and dropped it from this specific node, even though the overall join is still correctly restricted. This is a common false alarm, not a bug.
+
+Only after excluding both of those is this a genuine **unintended cross join**: every row from Table A combined with every row from Table B. If A has 1,000 rows and B has 1,000 rows, the result is 1,000,000 rows — 999,000 of which are probably wrong.
 
 **How it happens**
 ```sql
@@ -1494,7 +1501,7 @@ SELECT * FROM dbo.Orders o
 JOIN dbo.Customers c ON o.CustomerId > 0  -- not an equi-join
 ```
 
-**Why it's Critical**  
+**Why the genuine case is Critical**  
 Even "small" tables produce explosive results:
 - Orders (10K rows) × Customers (5K rows) = 50 million rows
 - On large tables this can produce billions of rows and run for hours
@@ -1506,6 +1513,8 @@ Even "small" tables produce explosive results:
     <Warnings NoJoinPredicate="true"/>
 ```
 
+Check the same `NestedLoops`/`Apply` element for an `OuterReferences` list — its presence points to case 1 (correlated APPLY), not a genuine cartesian product.
+
 **Fix**
 ```sql
 -- Add the correct join condition:
@@ -1513,7 +1522,9 @@ SELECT * FROM dbo.Orders o
 JOIN dbo.Customers c ON o.CustomerId = c.CustomerId
 ```
 
-If a cross join is truly intentional (generating all combinations for a report), add a comment to suppress future alerts.
+If a cross join is truly intentional (generating all combinations for a report), add a comment to suppress future alerts. If the node turns out to be a correlated APPLY or transitive elimination case, downgrade to Warning and note why rather than treating it as a Critical bug.
+
+**Related checks:** N56 (CROSS APPLY with high-cost correlated inner side — the same APPLY family case 1 can also trigger)
 
 ---
 
@@ -2269,7 +2280,7 @@ For an estimated plan (no runtime data), a scan operator has a selectivity (frac
 | 1% | Minimum selectivity floor |
 
 **Why this matters**  
-If you see exactly 30% or exactly 10% selectivity, that's a strong signal: SQL Server didn't actually estimate this from data — it used a fixed constant because there are no statistics for the predicate column.
+If you see selectivity close to 30% or close to 10%, that's a strong signal: SQL Server didn't actually estimate this from data — it used a fixed constant because there are no statistics for the predicate column. Treat these as a **shape to recognize** rather than values requiring an exact match: the precise figures can drift slightly by CE version, predicate type (equality vs. inequality vs. `BETWEEN`), and column nullability, so a value a fraction of a percent off the canonical list is still a meaningful signal, not a mismatch to dismiss.
 
 **Fix**
 ```sql
@@ -3660,6 +3671,96 @@ SQL Server's auto-update threshold (20% row modifications) triggers a re-sample 
 
 ---
 
+### S37 — Hidden Scalar UDF Time
+
+> **Verified against Microsoft Learn.** `UdfCpuTime` and `UdfElapsedTime` are confirmed runtime attributes in actual showplan XML, added alongside the overall query CPU/elapsed time tracking on the plan's root node. Per the [SQL Server 2016 release notes](https://learn.microsoft.com/sql/sql-server/sql-server-2016-release-notes?view=sql-server-ver17#sql-server-2016-service-pack-2-sp2) (Showplan XML enhancements) and the Microsoft SQL Server Team blog "More Showplan enhancements – UDFs," these attributes shipped in SQL Server 2017 CU3 and SQL Server 2016 SP2. Minimum version: **SQL Server 2016 SP2 / SQL Server 2017 CU3.**
+
+**What it means**
+A scalar UDF can consume real CPU and elapsed time without ever showing up as its own operator (`<RelOp>`) in the plan tree — it executed inside a scalar expression rather than as a separate step. N25 only fires when the UDF has a distinct operator; this check catches the case where the cost is real but invisible to N25, by reading the aggregate `UdfCpuTime`/`UdfElapsedTime` figures SQL Server records at the statement level.
+
+**How to spot it**
+Look for `UdfCpuTime` or `UdfElapsedTime` on the `QueryTimeStats` element of a `StmtSimple`, with no N25 finding anywhere else in the same statement:
+
+```xml
+<QueryTimeStats CpuTime="820" ElapsedTime="4100" UdfCpuTime="650" UdfElapsedTime="3900" />
+```
+
+Here, 3,900 of the statement's 4,100 ms elapsed time (95%) is UDF time, yet nothing in the visible operator tree points at it.
+
+**Why it matters**
+A serial plan (S1) with a large gap between elapsed and CPU time, alongside a nonzero `UdfElapsedTime`, is a fingerprint of a scalar UDF whose own internal queries went parallel while the outer statement's plan stayed serial — the outer plan looks cheap and serial, but the real work is happening one row at a time inside the function.
+
+**Fix options**
+1. Identify the UDF: check the statement text for function calls, or query `sys.dm_exec_function_stats` for functions with high `total_worker_time`/`total_elapsed_time` matching the same window.
+2. Rewrite the scalar UDF as an inline table-valued function (a single `SELECT` statement) so the optimizer can inline and parallelize it — this is the highest-impact fix.
+3. If rewriting isn't feasible short-term, inline the UDF's logic directly into the calling query as a `CROSS APPLY` or computed expression.
+4. Re-capture an actual plan after the fix and confirm `UdfCpuTime`/`UdfElapsedTime` drop to zero (or near it).
+
+**Related checks:** N25 (visible scalar UDF operator — the case this check complements), S1 (serial plan — often co-occurs when UDF-internal parallelism masks as outer serialism)
+
+---
+
+### S38 — In-Plan Wait Statistics Present
+
+> **Partially verified against Microsoft Learn.** The underlying feature is confirmed: the Microsoft SQL Server Team blog "New Showplan enhancements" describes the **top 10 waits** (WaitType, WaitTimeMs, WaitCount, sourced from `sys.dm_exec_session_wait_stats`) being added to actual showplan XML, available with SQL Server 2016 SP1 and SQL Server 2017 — with `CXPACKET` specifically reported starting SQL Server 2016 SP2 / SQL Server 2017 CU3 (confirmed separately via the `sys.dm_os_wait_stats` documentation's `CXPACKET` version notes). **[Unverified]** the exact XML element/attribute names (`<WaitStats>`, `<Wait WaitType= WaitTimeMs= WaitCount=>`) were not found verbatim in indexed Microsoft Learn content — Microsoft Learn's docs search does not currently index the raw `showplanxml.xsd` schema file. Confirm the literal element name against a captured actual plan or the schema at `\Microsoft SQL Server\<version>\Tools\Binn\schemas\sqlserver\2004\07\showplan\showplanxml.xsd` before relying on it in tooling.
+
+**What it means**
+An actual execution plan can carry its own `<WaitStats>` element recording which wait types the statement accumulated during execution, and how much time each contributed. This gives a plan-scoped view of the same wait-type taxonomy `sqlwait-review` analyzes instance-wide — useful when you already have the plan in hand and want a quick read on whether the bottleneck was CPU/estimation-related or something the plan itself can't show (I/O, latching, parallelism coordination).
+
+**How to spot it**
+Search the actual plan XML for a `WaitStats` element under the statement's `QueryTimeStats`:
+
+```xml
+<WaitStats>
+  <Wait WaitType="PAGEIOLATCH_SH" WaitTimeMs="2400" WaitCount="180" />
+  <Wait WaitType="CXPACKET" WaitTimeMs="310" WaitCount="42" />
+</WaitStats>
+```
+
+If the statement's total elapsed time is 4,000 ms, the `PAGEIOLATCH_SH` wait alone accounts for 60% of it — a dominant, actionable signal.
+
+**Fix options**
+1. Rank the wait types by `WaitTimeMs` and report the top 2–3.
+2. Interpret using this short glossary:
+   - `PAGEIOLATCH_*` — waiting on physical data file I/O; check disk latency (`sqldiskio-review`) or missing indexes causing excess reads.
+   - `PAGELATCH_*` — in-memory latch contention, often tempdb allocation pages (GAM/SGAM/PFS) under heavy temp object churn.
+   - `CXPACKET` / `CXCONSUMER` — parallelism coordination overhead; cross-reference S8/S9 for thread efficiency.
+   - `RESOURCE_SEMAPHORE` — waiting for a memory grant to become available; cross-reference S2/S4.
+   - `LCK_*` — blocking; if deadlocks are involved, hand off to `sqldeadlock-review`.
+3. For a full wait-type breakdown across the whole workload (not just this one plan), use `sqlwait-review`.
+
+**Related checks:** S2, S4 (memory grant waits — a common `RESOURCE_SEMAPHORE` root cause), S8, S9 (parallelism — a common `CXPACKET`/`CXCONSUMER` root cause)
+
+---
+
+### N73 — Memory Grant Undersized by LOB/(MAX) Column Estimate
+
+> **[Unverified]** Microsoft Learn was searched directly for this mechanism (row/heap/clustered-index size estimation, `AvgRowSize`/showplan documentation, statistics internals, and the memory-grant troubleshooting guide) and none of the returned content states that the row-size estimator uses a flat, size-independent width guess for LOB/`(MAX)` columns specifically. Related, confirmed facts did surface — `varchar(max)`/`nvarchar(max)`/`varbinary(max)` columns each add 24 bytes of fixed allocation counted against the 8,060-byte row limit during a sort, and general row-size estimation for `(MAX)`/LOB values is documented as "complex" with Microsoft's own heap-sizing guide recommending simply adding the average expected LOB size rather than a formula — but the specific claim that the optimizer's cardinality/row-size estimator substitutes a fixed, content-independent width for `(MAX)` columns is community-documented (SQL Server tuning practitioners) rather than confirmed via an official Microsoft source. The mechanism below is stated qualitatively, not as a specific byte figure, and should be treated as a hypothesis to verify against the co-occurring S18/N41 evidence rather than an authoritative fact.
+
+**What it means**
+When a `varchar(max)`, `nvarchar(max)`, `varbinary(max)`, `xml`, `text`, `ntext`, or `image` column is projected by an operator, the row-size estimator uses a flat, size-independent width estimate for that column rather than reflecting how much data is actually stored in it. Since memory grants for Sort/Hash operators are computed from estimated row width × estimated row count (`AvgRowSize`, see N61), a table with genuinely large LOB values gets the same grant as one with tiny or empty LOB values — the grant looks reasonable at compile time but is undersized once real data flows through.
+
+**How to spot it**
+This check only fires as a root-cause annotation alongside S18 (insufficient memory grant) or N41 (confirmed spill) on the same statement. Look at the flagged operator's `<OutputList>` for a LOB/`(MAX)` column:
+
+```xml
+<OutputList>
+  <ColumnReference Column="[Body]" />  <!-- declared nvarchar(max) -->
+</OutputList>
+```
+
+If S18 or N41 is also firing on this statement and a `(MAX)`/LOB column is in the projection feeding the sort or hash operator, this is the likely root cause.
+
+**Fix options**
+1. Trim the projection — stop selecting LOB columns that aren't needed by the operator doing the sort/hash/spill; replace `SELECT *` with an explicit column list.
+2. Split the query: compute the result set on the non-LOB columns first (correctly estimated and sized), then fetch the LOB column in a second query keyed by the row's identifying columns, after the expensive set-based work is done.
+3. If the LOB column truly must flow through the sort/hash step, treat the resulting spill as expected and size TempDB/Resource Governor accordingly rather than chasing the memory grant.
+4. Re-run with an actual plan after trimming the projection and confirm S18/N41 no longer fire.
+
+**Related checks:** N61 (AvgRowSize — the mechanism this check explains), S18 (insufficient memory grant), N41 (confirmed spill)
+
+---
+
 ## Quick Reference Tables
 
 ### Severity Levels
@@ -3703,12 +3804,15 @@ SQL Server's auto-update threshold (20% row modifications) triggers a re-sample 
 | Compilation contention | S32, S7, S15 |
 | Partition elimination failure | N65, N8, N42, N3 |
 | Parallel inefficiency | N63, N27, S8, N62 |
+| Hidden scalar UDF cost (no visible operator) | S37, N25, S1 |
+| In-plan wait bottleneck (I/O, latch, parallelism) | S38, S8, S9, S2, S4 |
+| LOB/(MAX) column undersizing memory grant | N73, N61, S18, N41 |
 
 ### Checks that Require an Actual Plan
 
 These checks fire only when actual execution statistics are present (Ctrl+M in SSMS before running):
 
-S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56, N62, N63, N65, N66, N72
+S8, S9, N4 (rowsRead threshold), N6, N7, N15, N16, N21, N26, N27, N28, N33, N41, N43 (ratio check), N47, N49, N50, N54, N56, N62, N63, N65, N66, N72, S37, S38, N73
 
 All other checks can fire on estimated plans.
 
@@ -3738,3 +3842,6 @@ These fire to provide context but rarely require immediate action:
 | S33 — Non-Standard SET Options | Fix the connection string but non-urgent if query is fast |
 | N61 — High Estimated Avg Row Size | Act when paired with S3 (large grant) or N22 (expensive sort) |
 | N64 — Wide Projection | Always worth fixing; SELECT * is rarely intentional in production |
+| S37 — Hidden Scalar UDF Time (Info tier) | Below the 25% elapsed-time threshold; still worth noting for later |
+| S38 — In-Plan Wait Statistics (Info tier) | Below the 25% elapsed-time threshold; useful context, not yet dominant |
+| N73 — Memory Grant Undersized by LOB/(MAX) | Always Info — the actionable problem is the S18/N41 finding it explains |
