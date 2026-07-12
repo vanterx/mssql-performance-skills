@@ -288,7 +288,7 @@ The 16 skills in alphabetical order:
 | 9 | sqlplan-compare | 20 |
 | 10 | sqldeadlock-review | 16 |
 | 11 | sqlindex-advisor | 8 |
-| 12 | sqlplan-review | 108 |
+| 12 | sqlplan-review | 111 |
 | 13 | sqlstats-review | 27 |
 | 14 | sqltrace-review | 25 |
 | 15 | sqlwait-review | 44 |

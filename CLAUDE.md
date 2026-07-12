@@ -23,7 +23,7 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
 | [skills/sqlwait-review/SKILL.md](skills/sqlwait-review/SKILL.md) | Wait statistics analysis: `sqlwait-review`. 44 checks (V1–V44) — I/O, lock, parallelism, memory, CPU, latch, log space, poison/throttle waits, backup I/O, insert hotspots, cumulative skew, trend analysis, modern feature waits, memory grants, file I/O latency, IQP/PSP/ADR waits, TempDB metadata |
-| [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 108 checks (S1–S36, N1–N72), thresholds, output format |
+| [skills/sqlplan-review/SKILL.md](skills/sqlplan-review/SKILL.md) | Runtime plan analysis: `sqlplan-review`. 111 checks (S1–S38, N1–N73), thresholds, output format |
 | [skills/sqlplan-compare/SKILL.md](skills/sqlplan-compare/SKILL.md) | Regression detection: `sqlplan-compare`. Diff two plans (C1–C20) |
 | [skills/sqlindex-advisor/SKILL.md](skills/sqlindex-advisor/SKILL.md) | Index recommendations: `sqlindex-advisor`. Derive indexes from operator patterns (D1–D10) + optimizer suggestions + missing index DMVs |
 | [skills/sqldeadlock-review/SKILL.md](skills/sqldeadlock-review/SKILL.md) | Deadlock analysis: `sqldeadlock-review`. 17 patterns (P1–P17), lock cycle extraction, remediation |
@@ -54,7 +54,7 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 | [skills/sqlstats-review/references/check-explanations.md](skills/sqlstats-review/references/check-explanations.md) | Plain-English explanation of all 27 I/W checks with IO output examples and fix recipes |
 | [skills/sqltrace-review/references/check-explanations.md](skills/sqltrace-review/references/check-explanations.md) | Plain-English explanation of all 25 X-checks with trace output examples, capture how-tos, and quick reference |
 | [skills/sqlwait-review/references/check-explanations.md](skills/sqlwait-review/references/check-explanations.md) | Plain-English explanation of all 44 V-checks with wait type descriptions, capture queries, and category quick reference |
-| [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 108 S/N checks with XML examples and fix recipes |
+| [skills/sqlplan-review/references/check-explanations.md](skills/sqlplan-review/references/check-explanations.md) | Plain-English explanation of all 111 S/N checks with XML examples and fix recipes |
 | [skills/sqlplan-compare/references/check-explanations.md](skills/sqlplan-compare/references/check-explanations.md) | C1–C20 regression checks explained — what each change means and why it causes a slowdown |
 | [skills/sqlindex-advisor/references/check-explanations.md](skills/sqlindex-advisor/references/check-explanations.md) | Plain-English explanation of all 10 D-checks (D1–D10) with XML examples, fix recipes, filtered index and hash match guidance, and Quick Reference table |
 | [skills/sqldeadlock-review/references/check-explanations.md](skills/sqldeadlock-review/references/check-explanations.md) | P1–P17 deadlock patterns, lock concepts, how to capture XML |
