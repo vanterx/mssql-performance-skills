@@ -15,7 +15,6 @@ This example shows the orchestrator's output when the user returns 24 hours afte
 - Baseline recommendations evaluated: 4
 - Verification metric: **3 verified-effective / 1 partial / 0 no-change / 0 regressed-elsewhere / 0 cannot-evaluate**
 - New findings: 1 Info (one new minor finding emerged after the fix)
-- Cost: ~USD 0.18 (Haiku 22k tokens, Sonnet 28k tokens, Opus 6k tokens)
 
 The primary recommendation (covering index) is **verified-effective**. The secondary parameter-sniffing fix is **partial** — duration variance dropped from ~80% to ~35%, below the 50% threshold but not yet at the 30% target. The SELECT * cleanup is also verified-effective. The recommendation index-tuning loop is winding down.
 

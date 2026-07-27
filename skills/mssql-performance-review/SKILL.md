@@ -23,14 +23,14 @@ This skill applies eleven cross-cutting primitives that distinguish it from a na
 - **Evidence chain** (E-tags) — every finding cites the source artifact, the specialised check ID, the observed value, and the threshold violated, so any recommendation is reproducible from the input set
 - **Risk-aware recommendations** — every recommended fix carries action, effort, blocking window, risk class, side effects, explicit rollback, and post-deployment verification
 - **Adversarial root cause check** — after the primary hypothesis is identified, a deliberate pass tries to disprove it; contradicting evidence escalates an alternative hypothesis instead of being suppressed
-- **Confidence-driven early termination** — once three or more specialised skills converge on the same root cause with HIGH confidence and no active contradiction, additional probes are skipped to control token cost
+- **Confidence-driven early termination** — once three or more specialised skills converge on the same root cause with HIGH confidence and no active contradiction, additional probes are skipped as redundant
 
-**Tier 2 — cost and intelligence:**
+**Tier 2 — routing and intelligence:**
 
-- **Multi-model cost routing** — each phase runs on the right model (Haiku for classification and triage, Sonnet for synthesis and deep dive, Opus for the adversarial pass). Cuts cost ~40% vs all-Sonnet at no quality loss. See `references/model-routing.md`.
+- **Multi-model routing** — each phase runs on the right model (Haiku for classification and triage, Sonnet for synthesis and deep dive, Opus for the adversarial pass). See `references/model-routing.md`.
 - **Skill-graph DAG** — replaces fixed phase ordering with a dynamic dependency DAG built from artifact types and probe findings. Probes that depend on each other sequence correctly; everything else runs in parallel. See `references/skill-dag.md`.
 - **Domain memory** — per-instance facts (MAXDOP, cores, AG topology, partitioning, RCSI status) loaded from a user-managed JSON file inform every recommendation: redundant recommendations rejected, environment-aware escalators applied. See `references/domain-memory.md`.
-- **Follow-up Q&A** — after the report, the orchestrator stays in the session and answers questions ("why this index ordering?", "why was MAXDOP not recommended?") from the in-context evidence chain. Most follow-ups cost nothing. See `references/followup-qa.md`.
+- **Follow-up Q&A** — after the report, the orchestrator stays in the session and answers questions ("why this index ordering?", "why was MAXDOP not recommended?") from the in-context evidence chain. Most follow-ups need no new dispatch. See `references/followup-qa.md`.
 
 **Tier 3 — offline loop closure:**
 
@@ -118,26 +118,16 @@ Dynamic edges open during the walk — e.g., `sqlplan-review` firing S9 opens an
 
 `--phases` flag forces tier-1 fixed-phase behavior for environments where DAG variability is undesirable.
 
-## Multi-Model Cost Routing
+## Multi-Model Routing
 
-Each phase runs on a specific model tier. The default routing minimises cost without sacrificing quality on high-stakes phases. The full phase-to-model table and override rules are in `references/model-routing.md`. Load it when:
-
-- The user asks about cost
-- The user passes `--model-tier {economy|standard|maximum}` or `--no-adversarial`
-- You need to set the `model` parameter on an Agent subagent dispatch
+Each phase runs on the model best suited to the reasoning it requires. The full phase-to-model table and per-sub-skill assignments are in `references/model-routing.md`. Load it when you need to set the `model` parameter on an Agent subagent dispatch.
 
 Default model assignments (the common case):
 
-- Classification, hypothesis generation, cost summary, follow-up Q&A: **Haiku 4.5**
+- Classification, hypothesis generation, recommendation rendering, follow-up Q&A: **Haiku 4.5**
 - Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlindex-advisor, sqldeadlock-review, sqlclusterlog-review)
-- Synthesis, conflict detection, deep-dive analysis: **Sonnet 4.6**
-- Adversarial root-cause pass: **Opus 4.5** (claude-opus-4-5; cannot be downgraded even on `--model-tier economy` — quality-critical)
-
-Report the per-phase cost breakdown in the Summary block:
-
-```
-Cost: ~USD 0.21 (Haiku 23k tokens, Sonnet 31k tokens, Opus 6k tokens).
-```
+- Synthesis, conflict detection, deep-dive analysis: **Sonnet 5**
+- Adversarial root-cause pass: **Opus 5** (claude-opus-5; quality-critical, never downgraded)
 
 ## Domain Memory
 
@@ -275,23 +265,17 @@ After each phase completes, evaluate whether to continue. Terminate early if all
 
 Otherwise, continue with the next dispatch phase. The user can override with `--exhaustive` (or by saying "run everything") to force all applicable skills to complete.
 
-Early termination saves token cost on confirmed-cause cases without sacrificing thoroughness on ambiguous ones.
+Early termination avoids redundant probing on confirmed-cause cases without sacrificing thoroughness on ambiguous ones.
 
-## Cost Budget
+## Scoping Large Inputs
 
-Before running, estimate the input token cost and surface it. Use a simple estimator:
-
-- ~3.8 characters per token
-- Per-artifact SKILL.md load cost (see `LLM_COST_ESTIMATION.md`)
-- Per-artifact input size
-
-Offer up to three scope options when the input is large:
+Execution plan XML dominates input size — a folder of plans or a multi-statement plan can crowd out the context needed to reason well across skills. When the artifact set is large, offer three scope options before dispatching:
 
 - Full review (every applicable skill on every artifact)
 - Batch mode (sqlplan-batch summary, drill into top N)
 - Symptom-driven (only skills relevant to the highest-ranked hypothesis)
 
-The user picks; the orchestrator routes accordingly.
+The user picks; the orchestrator routes accordingly. Default to symptom-driven when the input clearly exceeds what a single review can handle well.
 
 ## Reference Files (load on demand)
 
@@ -464,7 +448,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 - The orchestrator never opens a network connection to SQL Server. The capture-bundle generator (tier 3) emits scripts for the user to run; result files come back to the orchestrator as inputs.
 - If a single artifact triggers multiple skills (e.g., a `.sqlplan` for both sqlplan-review and sqlindex-advisor), invoke them in the documented order (review before advisor) so the advisor can reference the review's findings.
-- For inputs where classification is ambiguous (e.g., a `.txt` that matches two skill signals), prefer the higher-cost skill — analysis cost is bounded by the cost budget but missed findings are unbounded.
+- For inputs where classification is ambiguous (e.g., a `.txt` that matches two skill signals), prefer the more thorough skill — an unnecessary probe is a bounded waste, but a missed finding is not.
 - The "Skills Skipped" section is required so the user can see at a glance which areas had no input data. Missing data is itself a finding.
 
 ## Companion Skills

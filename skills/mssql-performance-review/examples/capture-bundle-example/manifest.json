@@ -46,6 +46,5 @@
     "All scripts are SELECT-only against system DMVs.",
     "Output files contain query text and DMV data — review for sensitive content before sharing."
   ],
-  "estimated_total_output_tokens": 10800,
-  "estimated_resume_cost_usd": 0.04
+  "estimated_total_output_tokens": 10800
 }

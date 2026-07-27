@@ -93,7 +93,6 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 |------|---------|
 | [README.md](README.md) | User-facing guide: triggers, input formats, output samples for all 26 skills |
 | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) | Decision guide: which skill to use for which scenario, symptom-based routing, artifact capture how-tos, 830-check ID reference |
-| [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) | Token and dollar cost breakdown per skill — worked examples, cost control strategies, prompt caching guide |
 | [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) | SQL Server version compatibility matrix — which of the 830 checks apply to SQL 2008 R2 through SQL 2022 and Azure SQL; skill-level support matrix; cumulative active check counts per version |
 | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) | Cross-cutting conventions: check ID namespacing, input polymorphism, output format, companion pipeline, dollar-sign avoidance |
 | [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) | Claude Code plugin marketplace manifest — registers this repo as a marketplace with one plugin entry pointing to `./` |
@@ -179,7 +178,7 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 3. Update the check count in the skill's frontmatter `description` field and in its `## Purpose` section
 4. Update the section header range (e.g., `T1–T50` → `T1–T51`) in both files
 5. Update the Quick Reference table at the bottom of `references/check-explanations.md` if the skill has one
-6. Update the check count in [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) (Check ID Reference table) and [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) (total checks line)
+6. Update the check count in [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) (Check ID Reference table)
 
 ## Adding a New Skill
 
@@ -189,9 +188,8 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 4. Add install line to [README.md](README.md) Installation section and `## Skills` table
 5. Add a full `## <skill-name>` section to [README.md](README.md) with triggers, usage, and output sample
 6. Add the skill to [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) Skills at a Glance, Skill Scope Comparison, and relevant scenario sections
-7. Add the skill file size row to [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md)
-8. Add example input + analysis files to `skills/<skill-name>/examples/`
-9. Add `tsql-review` as companion in `sqlplan-review/SKILL.md` (or the relevant existing companion)
+7. Add example input + analysis files to `skills/<skill-name>/examples/`
+8. Add `tsql-review` as companion in `sqlplan-review/SKILL.md` (or the relevant existing companion)
 
 ## Git Hooks
 
@@ -220,8 +218,8 @@ Every change must be made on a new branch — never commit directly to `main`. B
 ### Before committing
 Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
 
-### Dollar signs in SKILL.md code block templates
-Never use `$0`, `$3`, `$15`, or `$[...]` inside SKILL.md files. The skill loader performs shell-style variable expansion on the entire file content, so `$0` expands to the input file path argument and `$3`/`$15` expand to empty strings. Use `USD` prefix instead: `USD 0.012`, `[tokens] × USD 3/M`.
+### Dollar signs in SKILL.md files
+Never write `$` immediately followed by a digit or `[` inside SKILL.md files. The skill loader performs shell-style variable expansion on the entire file content, so `$0` expands to the input file path argument, `$1`/`$15` expand to empty strings, and `$[...]` is parsed as deprecated bash arithmetic. This bites SQL Server content in practice — named instances (`MSSQL$SQL2019`), shell snippets, and currency literals in T-SQL examples. Rephrase with a placeholder (`MSSQL$<InstanceName>`) or drop the symbol (`Amount > 1500.00`). Dollar signs followed by a letter are safe: PowerShell variables (`$true`), instance placeholders, and JSON paths (`'$.path'`) all pass. Enforced by verify-docs.sh Check 5; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §10.
 
 ### Check ID prefixes — currently taken
 | Prefix | Skill |
@@ -280,7 +278,6 @@ Then run `bash scripts/verify-docs.sh` to confirm Check 1 passes.
 | Architectural patterns, conventions, design decisions | [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) |
 | Microsoft Learn MCP validation policy (mandatory) | [.claude/docs/ms-learn-validation.md](.claude/docs/ms-learn-validation.md) |
 | Scenario-based skill selection, symptom routing | [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) |
-| Token costs and cost control strategies | [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md) |
 | SQL Server version compatibility matrix | [skills/VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) |
 | Skill usage, triggers, input/output examples | [README.md](README.md) |
 | All check triggers, thresholds, fix logic | Each skill's `SKILL.md` — see Key Files table above |

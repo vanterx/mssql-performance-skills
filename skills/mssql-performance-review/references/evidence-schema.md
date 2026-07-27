@@ -146,4 +146,3 @@ Validation failures block the report — the orchestrator either downgrades the 
 
 - Not a replacement for the specialised skill's own check-explanations.md (those still explain the underlying check)
 - Not an attempt to formalise the specialised checks (each skill defines its own thresholds)
-- Not a billing record (cost tracking is separate, see model-routing.md in tier 2)

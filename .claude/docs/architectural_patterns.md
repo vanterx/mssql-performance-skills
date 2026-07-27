@@ -279,30 +279,36 @@ The repository uses layered documentation for distinct audiences:
 |-------|---------|----------|-------|
 | Navigation | `README.md` | Users — skill discovery and installation | Triggers, usage, output shape |
 | Decision | `PERFORMANCE_TUNING_GUIDE.md` | Users — scenario-based skill selection | Which skill for which problem |
-| Cost | `LLM_COST_ESTIMATION.md` | Users — token and dollar estimates | Skill sizes, worked examples |
 | Rules | `skills/*/SKILL.md` | Claude (the model) | Precise triggers, thresholds, fix steps |
 | Explanations | `skills/*/references/check-explanations.md` | Humans learning SQL Server | Conceptual, examples, alternatives |
 | Contributor | `CLAUDE.md` | Developers adding skills | File map, conventions, update steps |
 | Architecture | `.claude/docs/architectural_patterns.md` | Developers — this file | Cross-cutting patterns and conventions |
 
-**Convention:** Do not duplicate content across layers. `README.md` links to other files but never duplicates check definitions. `SKILL.md` is the authoritative source for check logic — if a threshold changes, update `SKILL.md` first, then `references/check-explanations.md`. `PERFORMANCE_TUNING_GUIDE.md` and `LLM_COST_ESTIMATION.md` are user-facing reference docs, not skill instructions.
+**Convention:** Do not duplicate content across layers. `README.md` links to other files but never duplicates check definitions. `SKILL.md` is the authoritative source for check logic — if a threshold changes, update `SKILL.md` first, then `references/check-explanations.md`. `PERFORMANCE_TUNING_GUIDE.md` is a user-facing reference doc, not skill instructions.
 
 ---
 
 ## 10. Dollar Sign Avoidance in Code Block Templates
 
-**Where:** Any `## Output Format` or `## Cost Estimate` code block template in `SKILL.md`
+**Where:** Any `## Output Format` code block template, or any other content in `SKILL.md`
 
-The skill loader performs shell-style variable interpolation on `SKILL.md` content before passing it to the model. Dollar signs followed by digits (`$0`, `$3`, `$15`) or brackets (`$[...]`) are expanded as positional parameters or deprecated arithmetic expressions:
+The skill loader performs shell-style variable interpolation on `SKILL.md` content before passing it to the model. Dollar signs followed by digits (`$0`, `$1`, `$15`) or brackets (`$[...]`) are expanded as positional parameters or deprecated arithmetic expressions:
 
 - `$0` → expands to the input file path argument
-- `$3`, `$15` → expand to empty strings (unset positional parameters)
+- `$1`, `$15` → expand to empty strings (unset positional parameters)
 - `$[expr]` → deprecated bash arithmetic, may expand or error
 
-**Convention:** Never use `$` in code block template placeholders or static cost amounts. Use `USD` prefix instead:
-- `$0.012` → `USD 0.012`
-- `$[input_tok × 0.000003]` → `[input_tok] × USD 3/M`
-- `$3/M input` → `USD 3/M input`
+This is a live hazard in SQL Server content, not a theoretical one. Named instances (`MSSQL$SQL2019`), shell snippets (`$1`), and currency literals in T-SQL examples all produce `$`-plus-digit sequences. `verify-docs.sh` Check 5 greps `skills/*/SKILL.md` for `\$[0-9\[]` and fails the build on a match.
+
+**Convention:** Never write `$` immediately followed by a digit or `[`. Rephrase instead:
+- `MSSQL$SQL2019` → `MSSQL$<InstanceName>` (placeholder, not a digit)
+- `WHERE Amount > $1500.00` → `WHERE Amount > 1500.00` (drop the currency symbol)
+- `$[expr]` → `[expr]`
+- shell `$1` → `<first-argument>`
+
+Dollar signs followed by a letter are safe and appear legitimately throughout the library —
+PowerShell variables (`$true`, `$db`), instance placeholders (`ReportServer$<InstanceName>`),
+and JSON path literals (`'$.path'`) all pass Check 5 unmodified.
 
 This applies to any content inside fenced code blocks (` ``` `) as well as inline text in `SKILL.md`.
 

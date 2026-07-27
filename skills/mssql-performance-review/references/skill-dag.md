@@ -145,11 +145,11 @@ Walk:
 
 Skills NOT run: sqlplan-compare (artifact missing), sqldeadlock-review (no XDL), tsql-review (no `.sql`), sqltrace-review (no trace), sqlprocstats-review (no procstats), all AG/cluster/errorlog/spn (no signals).
 
-10 skills skipped. 4 ran. Cost ~USD 0.12.
+10 skills skipped. 4 ran.
 
 ## Why this exists
 
-Fixed phases waste cost and time. A senior DBA looks at the wait stats first, sees CPU-dominant, immediately pulls the plan for the top CPU consumer, sees parameter sniffing, checks Query Store, confirms. The DAG encodes that adaptive flow.
+Fixed phases waste effort and time. A senior DBA looks at the wait stats first, sees CPU-dominant, immediately pulls the plan for the top CPU consumer, sees parameter sniffing, checks Query Store, confirms. The DAG encodes that adaptive flow.
 
 Fixed phases also produce wrong dispatch — they might run sqlplan-batch even when there's no batch (because the phase says to), or skip the dynamic edge to sqlquerystore-review (because the phase ordering doesn't have it).
 
@@ -195,7 +195,7 @@ The DAG walk does not block on missing artifacts — it skips the node and recor
 
 Pure parallelism would invoke every applicable skill on every input simultaneously. Two problems:
 
-1. **Cost waste.** Tier-1 ordering (cheap source/breadth before expensive deep-dive) is preserved by the DAG via the static dependency catalogue. Pure parallelism would run sqlplan-review on every plan even when the source is clean enough to skip.
+1. **Wasted probes.** Tier-1 ordering (broad, lightweight source checks before narrow deep-dives) is preserved by the DAG via the static dependency catalogue. Pure parallelism would run sqlplan-review on every plan even when the source is clean enough to skip.
 
 2. **Cross-skill validation loss.** Findings from skill A often reveal which probe in skill B is worth running. The dynamic edges encode this. Without them, the orchestrator would either run B always (waste) or never (miss findings).
 

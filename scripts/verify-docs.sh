@@ -228,21 +228,6 @@ done
 [ "$check12_ok" -eq 1 ] && pass "All skills referenced in PERFORMANCE_TUNING_GUIDE.md"
 
 # ---------------------------------------------------------------------------
-# Check 13: Every skill appears in LLM_COST_ESTIMATION.md
-# ---------------------------------------------------------------------------
-echo ""
-echo "[13 ] Skills referenced in LLM_COST_ESTIMATION.md"
-check13_ok=1
-for skill_dir in skills/*/; do
-    name=$(basename "$skill_dir")
-    if ! grep -q "$name" LLM_COST_ESTIMATION.md 2>/dev/null; then
-        fail "$name not found in LLM_COST_ESTIMATION.md — add a row to the skill file size table"
-        check13_ok=0
-    fi
-done
-[ "$check13_ok" -eq 1 ] && pass "All skills referenced in LLM_COST_ESTIMATION.md"
-
-# ---------------------------------------------------------------------------
 # Check 14: Frontmatter description stated check count matches actual
 #           (only for skills that explicitly state "N checks" in description)
 # ---------------------------------------------------------------------------

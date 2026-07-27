@@ -159,7 +159,6 @@ Once connected, the following are available in any conversation:
 For non-Claude LLMs, use `SKILL.md` alone (not `references/check-explanations.md`) — it contains every trigger and threshold in a compact form. For large `.sqlplan` XML, ask the LLM to extract key fields first.
 
 > **Not sure which skill to use?** See [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) for symptom-based routing.
-> **Costs?** See [LLM_COST_ESTIMATION.md](LLM_COST_ESTIMATION.md).
 > **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
 
 ---
@@ -1706,7 +1705,7 @@ Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom de
 | Risk-aware recommendations | Every fix has action + effort + window + risk class + side effects + rollback + verification + confidence |
 | Adversarial root-cause check | Mandatory pass that tries to disprove the primary hypothesis before declaring a root cause |
 | Confidence-driven early termination | Stop probing when 3+ skills converge HIGH with no contradiction |
-| Multi-model cost routing | Haiku for triage, Sonnet for synthesis, Opus for the adversarial pass — ~40% cheaper than all-Sonnet |
+| Multi-model routing | Haiku for triage, Sonnet for synthesis, Opus for the adversarial pass |
 | Skill-graph DAG | Dynamic dispatch graph — probes that depend on each other sequence correctly; everything else runs in parallel |
 | Domain memory | Per-instance facts (MAXDOP, AG topology, partitioning) inform every recommendation |
 | Follow-up Q&A | After the report, ask "why?" — most answers are free from the in-context evidence chain |
@@ -1718,8 +1717,6 @@ Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom de
 
 | Flag | Effect |
 |------|--------|
-| `--model-tier {economy\|standard\|maximum}` | Cost tier (economy ~USD 0.06, standard ~USD 0.21, maximum ~USD 0.50) |
-| `--no-adversarial` | Skip the Opus adversarial pass (saves ~6k tokens) |
 | `--exhaustive` | Run every applicable skill even after 3+ converge |
 | `--phases` | Fixed five-phase dispatch instead of dynamic DAG |
 | `--baseline <state.json>` | Tag prior recommendations after deploy |
@@ -1772,8 +1769,6 @@ symptom ──► /sql-triage ──► capture bundle ◄──┘ (if artifact
 
 The orchestrator does not duplicate the specialised skills — it composes them.
 
-**Cost:** ~USD 0.06–0.50 per review depending on tier and artifact volume. Typical mixed-artifact review on `--model-tier standard`: ~USD 0.21. Follow-up Q&A is usually free (reads from in-context evidence). Full breakdown in [`skills/mssql-performance-review/references/model-routing.md`](skills/mssql-performance-review/references/model-routing.md).
-
 **Deep references** (loaded on demand by the orchestrator):
 
 | File | Topic |
@@ -1782,7 +1777,7 @@ The orchestrator does not duplicate the specialised skills — it composes them.
 | [`references/evidence-schema.md`](skills/mssql-performance-review/references/evidence-schema.md) | `evidence.json` schema, validation rules, human rendering |
 | [`references/risk-rubric.md`](skills/mssql-performance-review/references/risk-rubric.md) | Risk-class definitions, environmental escalators, rollback rules |
 | [`references/adversarial-prompts.md`](skills/mssql-performance-review/references/adversarial-prompts.md) | Disproof templates per hypothesis class |
-| [`references/model-routing.md`](skills/mssql-performance-review/references/model-routing.md) | Multi-model routing tiers, override flags, cost profile |
+| [`references/model-routing.md`](skills/mssql-performance-review/references/model-routing.md) | Per-sub-skill model assignment, quality safeguards |
 | [`references/skill-dag.md`](skills/mssql-performance-review/references/skill-dag.md) | DAG construction, static + dynamic edge catalogue |
 | [`references/domain-memory.md`](skills/mssql-performance-review/references/domain-memory.md) | `facts.json` schema, rejection/escalation catalogue |
 | [`references/followup-qa.md`](skills/mssql-performance-review/references/followup-qa.md) | Question taxonomy, when-to-probe rules |

@@ -893,6 +893,48 @@ Copy the XML from the `deadlock_graph` column.
 
 ---
 
+## Managing Input Size
+
+Execution plan XML is by far the largest input these skills take — a multi-statement plan can run to hundreds of thousands of characters, dwarfing the skill instructions themselves. Large inputs are slower to analyse and can crowd out the context an LLM needs to reason well. Three habits keep reviews sharp.
+
+### Trim the plan before pasting
+
+If a stored procedure has eight statements and only statement 3 is slow, do not paste the whole plan. In the SSMS plan viewer, right-click the operator you care about → **Show Execution Plan for Selected Node** to export just that subtree. A focused plan produces a focused review.
+
+### Describe before you paste
+
+Every skill accepts a natural-language description as well as raw artifacts. When you are still deciding whether a plan deserves deep analysis, describe what you see:
+
+```
+/sqlplan-review
+The plan has a Key Lookup on Orders executing 48,000 times at 78% cost,
+and a Hash Match join with estimated 500 rows but actual 4.2M rows.
+```
+
+That is enough for the skill to tell you whether a full review is worthwhile. Paste the complete XML once you know it is.
+
+### Pre-filter before batch analysis
+
+`/sqlplan-batch` scales linearly — twenty plans take roughly twenty times the work of one. Use Query Store (Top Resource Consuming Queries) or Extended Events to narrow to the top ten by CPU or duration first, then run the batch. You will reach the same conclusions from a fraction of the input.
+
+### Relative weight of each skill
+
+Roughly ordered from lightest to heaviest input, useful when you have a choice of entry point:
+
+```
+sqldeadlock-review · sqlstats-review · sqlspn-review
+  → sqltrace-review (small) · sqlquerystore-review · sqlerrorlog-review
+  → sqlclusterlog-review · sqlhadr-review · sqlprocstats-review
+  → sqlplan-compare · tsql-review → sqlwait-review
+  → sqlplan-review → sqltrace-review (large) → sqlplan-batch
+```
+
+`/sqlstats-review` is a good opening move on a slow query: it identifies the problem table and whether the bottleneck is I/O or waits from a small input. Reach for `/sqlplan-review` once you need operator-level detail.
+
+Asking for a summary rather than a full report also meaningfully reduces output size — worth doing on batch runs across many plans.
+
+---
+
 ## Check ID Reference
 
 Each check has an ID you can use when discussing findings or searching the `references/check-explanations.md` files inside each skill directory.

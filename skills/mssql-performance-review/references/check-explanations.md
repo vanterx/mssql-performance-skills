@@ -96,7 +96,7 @@ Confirmation bias is the orchestrator's biggest failure mode. The first plausibl
 
 Concretely: after a primary hypothesis is identified with HIGH confidence, run the template from `adversarial-prompts.md` for that hypothesis class. If the contradicting evidence is strong, escalate the alternative hypothesis to equal or higher priority in the report. If weak, note it as a caveat.
 
-The adversarial pass cannot be skipped — even if early termination (confidence-driven) would otherwise stop the dispatch. Termination saves probe cost; it must not skip the disproof attempt.
+The adversarial pass cannot be skipped — even if early termination (confidence-driven) would otherwise stop the dispatch. Termination avoids redundant probes; it must not skip the disproof attempt.
 
 ## Confidence grading
 
