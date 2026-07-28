@@ -122,7 +122,7 @@ SQL Server Execution Times: CPU time = 18420 ms, elapsed time = 18912 ms.
 
 **Use: `/sqlindex-advisor`**
 
-Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D10: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans, filtered index opportunities, hash match probe-side scans) plus the optimizer's own `MissingIndexGroup` suggestions and DMV data from `sys.dm_db_missing_index_group_stats`. All sources are merged and deduplicated per table — the output is one index per table group, not one per source.
+Takes one or more `.sqlplan` files and produces a single ranked, deployment-ready `CREATE INDEX` script from two independent sources: operator-derived recommendations (D1–D13: Key Lookups, expensive scans, Sort operators, Eager Index Spools, Nested Loops inner-side scans, heap tables, backward scans, filtered index opportunities, hash match probe-side scans) plus the optimizer's own `MissingIndexGroup` suggestions and DMV data from `sys.dm_db_missing_index_group_stats`. All sources are merged and deduplicated per table — the output is one index per table group, not one per source.
 
 ```
 /sqlindex-advisor path/to/query.sqlplan
@@ -706,7 +706,7 @@ Execution Plan            │  .sqlplan XML
                           │  IQP/PSP/ADR/CE feedback (SQL 2019–2022)
 
 /sqlindex-advisor    │  Indexes: what should I create?
-                          │  D1–D10 derived rules + MissingIndexGroup + DMV
+                          │  D1–D13 derived rules + MissingIndexGroup + DMV
                           │  → ranked CREATE INDEX script
 
 /sqlplan-compare          │  Regression: what changed between two plans?
@@ -955,7 +955,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `S1–S38` | `sqlplan-review` | Statement-level: memory grants, parallelism, compile, statistics, hints, plan cache, row width, PSP dispatcher, ADR version store, CE feedback, hidden UDF time, in-plan wait stats | 38 |
 | `N1–N73` | `sqlplan-review` | Node-level: per-operator scans, joins, spills, row estimates, index usage, elapsed timing, thread starvation, IQP/PSP/DOP feedback nodes, low statistics sampling percent, LOB/(MAX) grant undersizing | 73 |
 | `C1–C20` | `sqlplan-compare` | Regression: what changed between two plans — join type, batch mode, implicit conversion, partition elimination, PSP, Eager Index Spool | 20 |
-| `D1–D10` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap, filtered index, hash match probe side | 10 |
+| `D1–D13` | `sqlindex-advisor` | Derived index rules: Key Lookup, scan, sort, spool, loops, heap, filtered index, hash match probe side; plus per-query attribution, hard index-limit validation, and filtered-index SET prerequisites | 13 |
 | `P1–P17` | `sqldeadlock-review` | Deadlock patterns: lock order, reader/writer, FK, SERIALIZABLE, self, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal, optimized locking/TID | 17 |
 | `Q1–Q32` | `sqlquerystore-review` | Query Store: regressed queries, plan instability, resource hotspots, query-level waits, operational health, PSP optimization, CE/DOP feedback, memory grant instability, replica coverage, QS hints, auto-tuning | 32 |
 | `R1–R25` | `sqlprocstats-review` | Procedure/trigger/function stats: top consumers, per-execution efficiency, N+1 patterns, parameter sniffing signals, trend analysis, natively compiled regression, CLR ratio, trigger dominance, parallel-to-serial, QS instability | 25 |
@@ -974,7 +974,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `J1–J15` | `sqlmigration-security-review` | Migration security objects: orphaned users, SID mismatch, login type platform support, password policy, default database, server/database role membership, explicit grants/denies, ownership chains, credentials, proxy/credential sequencing, linked server logins, certificate/key migration, DMK backup, CMS registrations | 15 |
 | `M1–M16` | `sqlmigration-objects-review` | Migration operational objects: Agent job database scope, job owner, operator notification reachability, alert message dependency, proxy/credential sequencing, schedule time zone, linked server provider/connectivity/collation, Database Mail profile/relay, backup device path, custom error messages, server triggers, XE sessions, non-AG endpoints | 16 |
 
-**Total: 833 checks across all skills.**
+**Total: 836 checks across all skills.**
 
 ---
 

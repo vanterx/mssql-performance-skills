@@ -4,13 +4,25 @@
     {
       "id": 1,
       "prompt": "Here is my execution plan. Generate a deployment-ready CREATE INDEX script for the most impactful indexes. I need to take it to my DBA tomorrow.",
-      "expected_output": "Ranked Index Advisor Report with CREATE INDEX DDL using ONLINE = ON, SORT_IN_TEMPDB = ON. Each with Source (operator-derived D1-D8 vs optimizer suggestion), Impact score, and rationale. Deduplication where derived and suggested overlap.",
+      "expected_output": "Ranked Index Advisor Report with CREATE INDEX DDL using ONLINE = ON, SORT_IN_TEMPDB = ON. Each with Source (operator-derived D1-D10 vs optimizer suggestion), Impact score, and rationale. Deduplication where derived and suggested overlap. Generated DDL respects the D12 hard limits (32 key columns, 1,700-byte nonclustered key, 1,023 INCLUDE columns).",
       "files": []
     },
     {
       "id": 2,
       "prompt": "I have 12 .sqlplan files from a workload trace. Give me one consolidated index script.",
-      "expected_output": "Cross-plan merge with deduplication, ranked by aggregate impact across all 12 plans. CREATE INDEX statements grouped by table, with comments showing which plans drove each recommendation.",
+      "expected_output": "Cross-plan merge with deduplication, ranked by aggregate impact across all 12 plans. CREATE INDEX statements grouped by table, with comments showing which plans drove each recommendation. Merged candidates validated against D12 hard engine limits before DDL is emitted.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Here is the output of the missing index DMVs from our production server. Which indexes should we actually create?",
+      "expected_output": "Source C candidates ranked by weighted_impact (avg_total_user_cost * avg_user_impact * (user_seeks + user_scans)). Report states the 600-row DMV cap and that missing-index data is cleared on engine restart. On SQL 2019+, D11 per-query attribution via sys.dm_db_missing_index_group_stats_query distinguishes suggestions driven by hot queries from those driven by rare reports. Capture query permissions noted (VIEW SERVER STATE, or VIEW SERVER PERFORMANCE STATE on SQL 2022+).",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Recommend a filtered index for our Tasks table where Status = 'Pending' is only 2% of rows.",
+      "expected_output": "D9 filtered index recommendation with the filter predicate in the WHERE clause, plus D13 SET ANSI_NULLS ON / SET QUOTED_IDENTIFIER ON emitted ahead of the CREATE INDEX. Report warns the index will not be used for parameterized @status queries unless sniffed to 'Pending', and that DML sessions with the wrong SET options will fail.",
       "files": []
     }
   ]

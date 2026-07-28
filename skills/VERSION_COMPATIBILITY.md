@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 833 checks in this library apply to your SQL Server version.
+Which of the 836 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -69,7 +69,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 833 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
+These cumulative counts show how many of the 836 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
@@ -280,7 +280,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**551 of 833 checks (66.1%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**553 of 836 checks (66.1%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
