@@ -3,7 +3,7 @@ name: validate
 # Runs this repo's own documentation consistency gate (scripts/verify-docs.sh)
 # against every PR. verify-docs.sh checks cross-file consistency across the
 # WHOLE repo (skills/*/SKILL.md counts against PERFORMANCE_TUNING_GUIDE.md,
-# README.md, CLAUDE.md, LLM_COST_ESTIMATION.md all at once), so it needs the
+# README.md, CLAUDE.md all at once), so it needs the
 # full checkout rather than an overlay of just "skills/".
 #
 # This is safe as a plain `pull_request` trigger (no secrets, no elevated

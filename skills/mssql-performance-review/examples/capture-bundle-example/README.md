@@ -63,7 +63,6 @@ For this bundle, the minimal useful set is **just 01-wait-stats.sql**. That alon
 ## Estimated paste-back size
 
 Total estimated output: ~10,800 tokens (~41 KB).
-Estimated orchestrator cost on resume: ~USD 0.04 (Haiku triage + Sonnet plan deep-dive + Opus adversarial).
 
 ## Trust model
 

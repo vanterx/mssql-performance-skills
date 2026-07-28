@@ -39,9 +39,9 @@ Load a reference file when its situation applies. The orchestrator does not need
 
 ### model-routing.md
 
-**When to load:** Determining which model to assign to a phase or subagent. Also when the user asks about cost or passes `--model-tier` / `--no-adversarial`.
+**When to load:** Determining which model to assign to a phase or subagent.
 
-**What it covers:** Full phase-to-model mapping for the three default tiers (economy / standard / maximum), the per-sub-skill default model assignments, cost profile worked example, quality safeguards (why adversarial always runs on Opus and cannot be downgraded), and the per-phase cost breakdown format that appears in the Summary block.
+**What it covers:** The phase-to-model mapping, the per-sub-skill default model assignments used when setting the `model` parameter on an Agent dispatch, and quality safeguards (why the adversarial pass always runs on Opus and is never downgraded).
 
 ### skill-dag.md
 
@@ -57,9 +57,9 @@ Load a reference file when its situation applies. The orchestrator does not need
 
 ### followup-qa.md
 
-**When to load:** The user asks a follow-up question after the report. Use to classify the question type and decide whether to answer from context (free) or dispatch a new probe (cheap).
+**When to load:** The user asks a follow-up question after the report. Use to classify the question type and decide whether to answer from context or dispatch a new probe.
 
-**What it covers:** The five-category question taxonomy, when-to-probe vs answer-from-context rules, refusal patterns (live SQL, out of scope), the structured answer format with evidence citation, session memory rules, cost-guard warnings, and a catalogue of common question patterns ("why is X recommended?", "show me only Critical findings", "re-rank by effort") with the orchestrator's expected response shape.
+**What it covers:** The five-category question taxonomy, when-to-probe vs answer-from-context rules, refusal patterns (live SQL, out of scope), the structured answer format with evidence citation, session memory rules, context-guard warnings, and a catalogue of common question patterns ("why is X recommended?", "show me only Critical findings", "re-rank by effort") with the orchestrator's expected response shape.
 
 ### capture-bundle-spec.md
 

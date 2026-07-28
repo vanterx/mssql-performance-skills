@@ -2,7 +2,7 @@
 // could actually affect a documentation-consistency check (anything under
 // skills/, or one of the cross-referenced root docs/manifests). Fires after
 // every Write/Edit otherwise, and verify-docs.sh itself is slow (~3 min on
-// this Windows/Git Bash setup — 46 checks x 26 skill dirs, each spawning its
+// this Windows/Git Bash setup — 45 checks x 26 skill dirs, each spawning its
 // own grep/awk process) so this fast-path skip avoids a multi-minute stall
 // on edits that have nothing to do with the skills library (e.g. edits to
 // scripts/ or non-skill tooling).
@@ -15,7 +15,6 @@ const RELEVANT = [
   /(^|[\\/])CLAUDE\.md$/,
   /(^|[\\/])AGENTS\.md$/,
   /(^|[\\/])PERFORMANCE_TUNING_GUIDE\.md$/,
-  /(^|[\\/])LLM_COST_ESTIMATION\.md$/,
   /(^|[\\/])\.claude-plugin[\\/]/,
 ];
 

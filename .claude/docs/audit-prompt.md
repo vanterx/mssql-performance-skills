@@ -18,7 +18,7 @@ Every skill, script, query, configuration, reference file, and supporting docume
 ## Scope
 
 - All 19 skills: every SKILL.md, references/check-explanations.md, scripts/, examples/
-- Root documentation: CLAUDE.md, README.md, PERFORMANCE_TUNING_GUIDE.md, LLM_COST_ESTIMATION.md, skills/VERSION_COMPATIBILITY.md
+- Root documentation: CLAUDE.md, README.md, PERFORMANCE_TUNING_GUIDE.md, skills/VERSION_COMPATIBILITY.md
 - .claude/docs/ files
 
 ## What to Validate

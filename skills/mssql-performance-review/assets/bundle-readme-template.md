@@ -43,7 +43,6 @@ That is fine. Re-invoke `--resume` after running any subset — the orchestrator
 ## Estimated paste-back size
 
 Total estimated output: ~{{TOTAL_OUTPUT_TOKENS}} tokens (~{{TOTAL_OUTPUT_KB}} KB).
-Estimated orchestrator cost on resume: ~USD {{ESTIMATED_RESUME_COST}}.
 
 ## Trust model
 

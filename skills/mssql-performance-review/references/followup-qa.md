@@ -18,15 +18,15 @@ Re-running the entire orchestrator for each of these is wasteful. Follow-up Q&A 
 
 The orchestrator classifies each follow-up question into one of five categories and responds accordingly:
 
-| Category | Source | Cost | Example |
-|----------|--------|------|---------|
-| 1. Explanation of an existing finding | Evidence chain (in context) | Free | "Why did you flag C1?" |
-| 2. Tradeoff between recommended fix and an alternative | Risk rubric + evidence + domain memory (in context) | Free | "Why not use an indexed view instead?" |
-| 3. Detail about a specialised skill's raw output | Per-Skill Section (in context) | Free | "What did sqlwait-review actually show for WRITELOG?" |
-| 4. New data the user is providing | New probe (cheap dispatch) | ~USD 0.02-0.05 | "Here are the wait stats from after the fix. Did it work?" |
-| 5. Out-of-scope question | Direct answer, no probe | Free | "What version of SQL Server should I upgrade to?" |
+| Category | Source | Example |
+|----------|--------|---------|
+| 1. Explanation of an existing finding | Evidence chain (in context) | "Why did you flag C1?" |
+| 2. Tradeoff between recommended fix and an alternative | Risk rubric + evidence + domain memory (in context) | "Why not use an indexed view instead?" |
+| 3. Detail about a specialised skill's raw output | Per-Skill Section (in context) | "What did sqlwait-review actually show for WRITELOG?" |
+| 4. New data the user is providing | New probe (single-skill dispatch) | "Here are the wait stats from after the fix. Did it work?" |
+| 5. Out-of-scope question | Direct answer, no probe | "What version of SQL Server should I upgrade to?" |
 
-Most questions fall in categories 1-3 (free). Categories 4 and 5 are clearly distinguished by the orchestrator before responding.
+Most questions fall in categories 1-3 and are answered from context with no new dispatch. Categories 4 and 5 are clearly distinguished by the orchestrator before responding.
 
 ## When NOT to dispatch a new probe
 
@@ -40,13 +40,13 @@ The orchestrator must NOT silently re-run a sub-skill to confirm something alrea
 
 ## When to dispatch a new probe
 
-The orchestrator dispatches a new probe (cheap subagent) only when:
+The orchestrator dispatches a new probe (single subagent) only when:
 
 - The user provides a new artifact (paste, file path, follow-up capture bundle)
 - The user asks for a metric or finding that requires a check not previously run
 - The question references a hypothetical change ("what if we set MAXDOP to 4?") that needs new analysis
 
-Dispatch is always single-skill (the most relevant one) and on the cheapest applicable model tier.
+Dispatch is always single-skill (the most relevant one), on that sub-skill's default model per `model-routing.md`.
 
 ## When to refuse
 
@@ -100,23 +100,17 @@ Within a single session, the orchestrator remembers:
 
 Across sessions, the orchestrator does not auto-remember. The user can resume a prior review with `--baseline ./state/<run-id>/state.json`, which loads the prior context.
 
-## Cost guard
+## Context guard
 
-To prevent runaway costs from a long Q&A session, the orchestrator tracks token usage and warns at thresholds:
-
-```
-Note: this Q&A session has consumed ~12,000 tokens beyond the original report.
-Total session cost: ~USD 0.18 (within budget). Continuing.
-```
+A long Q&A session accumulates context, and answer quality degrades once the evidence chain is competing with a long transcript. When the session has grown substantially beyond the original report, surface it:
 
 ```
-Warning: this Q&A session has consumed ~50,000 tokens beyond the original report.
-Total session cost: ~USD 0.42. Consider summarising and starting a new session
-to reset context, or running `--exhaustive` from the start if you need this much
-depth.
+Note: this Q&A session has grown well beyond the original report. If answers start
+losing precision, summarise the findings and start a fresh session to reset context,
+or re-run with `--exhaustive` from the start if you need this much depth.
 ```
 
-The user can override the warning and continue. The orchestrator does not enforce a hard cap.
+The user can continue regardless. The orchestrator does not enforce a hard cap.
 
 ## Question patterns the orchestrator should handle well
 
@@ -149,19 +143,7 @@ This is a fresh review with the new artifacts (plus the prior context as baselin
 
 ### "What would refute your primary hypothesis?"
 
-Cite the adversarial check section. If the user wants more, dispatch a targeted adversarial probe with `--model-tier maximum` (adversarial is on by default). Always show the disproof template that was applied.
-
-## Cost profile
-
-Typical Q&A session:
-
-| Questions | Categories | Tokens (Haiku) | USD |
-|-----------|-----------|----------------|-----|
-| 1-5 follow-ups | Categories 1-3 only | ~3,000 | ~0.003 |
-| 5-15 follow-ups | Mostly 1-3, one 4 | ~10,000 | ~0.012 |
-| Extended Q&A with multiple artifact additions | Mix of 1-4 | ~30,000+ | ~0.10+ |
-
-For routine review + 5 follow-ups: total session cost ~USD 0.23 (USD 0.21 review + USD 0.02 Q&A).
+Cite the adversarial check section. If the user wants more, dispatch a targeted adversarial probe on Opus (adversarial is on by default). Always show the disproof template that was applied.
 
 ## Trust model
 

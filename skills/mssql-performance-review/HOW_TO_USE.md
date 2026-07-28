@@ -1,6 +1,6 @@
 # How to Use `mssql-performance-review`
 
-A detailed user guide for the orchestrator skill. Covers installation, every input mode, every command flag, worked examples, output interpretation, follow-up Q&A, cost management, domain memory, the capture-bundle workflow, and the baseline-diff verification loop.
+A detailed user guide for the orchestrator skill. Covers installation, every input mode, every command flag, worked examples, output interpretation, follow-up Q&A, domain memory, the capture-bundle workflow, and the baseline-diff verification loop.
 
 Last updated: 2026-05-18 NZST.
 
@@ -17,13 +17,12 @@ Last updated: 2026-05-18 NZST.
 7. [Worked examples](#7-worked-examples)
 8. [Reading the report](#8-reading-the-report)
 9. [Follow-up Q&A patterns](#9-follow-up-qa-patterns)
-10. [Cost management](#10-cost-management)
-11. [Domain memory (`facts.json`)](#11-domain-memory-factsjson)
-12. [Capture-bundle workflow](#12-capture-bundle-workflow)
-13. [Verification and the baseline-diff loop](#13-verification-and-the-baseline-diff-loop)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Privacy and the offline trust model](#15-privacy-and-the-offline-trust-model)
-16. [Reference index](#16-reference-index)
+10. [Domain memory (`facts.json`)](#10-domain-memory-factsjson)
+11. [Capture-bundle workflow](#11-capture-bundle-workflow)
+12. [Verification and the baseline-diff loop](#12-verification-and-the-baseline-diff-loop)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Privacy and the offline trust model](#14-privacy-and-the-offline-trust-model)
+15. [Reference index](#15-reference-index)
 
 ---
 
@@ -43,7 +42,7 @@ Eleven cross-cutting primitives distinguish this from a naive dispatcher:
 | Risk-aware recommendations | Every fix has action + effort + window + risk class + side effects + rollback + verification + confidence |
 | Adversarial root-cause check | A mandatory pass that tries to disprove the primary hypothesis before declaring a root cause |
 | Confidence-driven early termination | Stop probing when 3+ skills converge HIGH with no contradiction |
-| Multi-model cost routing | Haiku for triage, Sonnet for synthesis, Opus for the adversarial pass — ~40% cheaper than all-Sonnet |
+| Multi-model routing | Haiku for triage, Sonnet for synthesis, Opus for the adversarial pass |
 | Skill-graph DAG | Dynamic dispatch graph — probes that depend on each other sequence correctly; everything else runs in parallel |
 | Domain memory | Per-instance facts (`MAXDOP`, AG topology, partitioning) inform every recommendation |
 | Follow-up Q&A | After the report, ask "why?" — most answers are free from the in-context evidence chain |
@@ -69,7 +68,7 @@ Eleven cross-cutting primitives distinguish this from a naive dispatcher:
 
 - **You have one artifact and you know what it is.** A single `.sqlplan` → `/sqlplan-review`. A wait-stats capture → `/sqlwait-review`. A deadlock XML → `/sqldeadlock-review`. Faster turnaround; no synthesis overhead.
 - **You want the specialised skill's full raw output.** The orchestrator summarises into a Per-Skill section; the specialised skill's standalone output is more detailed.
-- **You're doing a narrow targeted analysis** (e.g., index advisor from a single plan). The orchestrator would still work but adds unnecessary cost.
+- **You're doing a narrow targeted analysis** (e.g., index advisor from a single plan). The orchestrator would still work but adds unnecessary overhead.
 
 The orchestrator does not replace the specialised skills — it composes them.
 
@@ -128,13 +127,13 @@ No artifacts yet? Just a symptom?
 /sql-triage CPU is pegged at 95% on PROD-SQL01 since 09:00 today, no recent deploy
 ```
 
-The orchestrator generates a [capture bundle](#12-capture-bundle-workflow) — a directory of read-only `.sql` scripts plus instructions. Run them in SSMS, paste results back, then:
+The orchestrator generates a [capture bundle](#11-capture-bundle-workflow) — a directory of read-only `.sql` scripts plus instructions. Run them in SSMS, paste results back, then:
 
 ```
 /mssql-performance-review --resume ./captures/<run-id>/
 ```
 
-You get a full report. Cost: ~USD 0.04–0.25 depending on artifact volume.
+You get a full report.
 
 ---
 
@@ -193,7 +192,7 @@ Paste artifact content directly. The orchestrator detects the boundaries between
 /mssql-performance-review users say the orders page is slow today; we changed nothing
 ```
 
-No artifacts. The orchestrator generates 2–3 ranked hypotheses based on the symptom and emits a [capture bundle](#12-capture-bundle-workflow) for you to run. After running it, return with `--resume`.
+No artifacts. The orchestrator generates 2–3 ranked hypotheses based on the symptom and emits a [capture bundle](#11-capture-bundle-workflow) for you to run. After running it, return with `--resume`.
 
 **Best for:** "Something's wrong but I don't know what to look at first."
 
@@ -205,13 +204,11 @@ All flags are optional. The orchestrator's defaults work well for most reviews.
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `--model-tier {economy\|standard\|maximum}` | `standard` | Force a particular model routing tier. See [Cost management](#10-cost-management). |
-| `--no-adversarial` | adversarial enabled | Skip the Opus adversarial pass. Saves ~6k tokens. Trades off confirmation-bias resistance. |
 | `--exhaustive` | early termination enabled | Run every applicable skill even after 3+ skills converge HIGH. Useful for audits. |
 | `--phases` | DAG dispatch | Revert to tier-1 fixed five-phase dispatch order. Useful for reproducibility against an older review. |
-| `--baseline <path>` | none | Load a prior `state.json` and tag prior recommendations as verified/partial/no-change/regressed. See [Verification](#13-verification-and-the-baseline-diff-loop). |
-| `--resume <bundle-dir>` | none | Resume from a capture-bundle paste-back. See [Capture-bundle workflow](#12-capture-bundle-workflow). |
-| `--instance <name>` | auto-detected from artifacts | Load `~/.mssql-perf-review/instances/<name>.json` domain memory. See [Domain memory](#11-domain-memory-factsjson). |
+| `--baseline <path>` | none | Load a prior `state.json` and tag prior recommendations as verified/partial/no-change/regressed. See [Verification](#12-verification-and-the-baseline-diff-loop). |
+| `--resume <bundle-dir>` | none | Resume from a capture-bundle paste-back. See [Capture-bundle workflow](#11-capture-bundle-workflow). |
+| `--instance <name>` | auto-detected from artifacts | Load `~/.mssql-perf-review/instances/<name>.json` domain memory. See [Domain memory](#10-domain-memory-factsjson). |
 | `--instance-facts <path>` | uses `--instance` resolution | Override the facts.json path (e.g., team-shared location). |
 | `--feedback-file <path>` | `evals/feedback.jsonl` (local) | Override the feedback append path. |
 | `--capture-instance-facts` | n/a (mutually exclusive with normal modes) | Emit a one-shot DMV-survey bundle for populating `facts.json`. |
@@ -220,11 +217,8 @@ All flags are optional. The orchestrator's defaults work well for most reviews.
 ### Combined examples
 
 ```
-# Cheapest review (Haiku-only, no adversarial)
-/mssql-performance-review --model-tier economy --no-adversarial ./artifacts/
-
-# Exhaustive audit review with maximum quality
-/mssql-performance-review --model-tier maximum --exhaustive ./artifacts/
+# Exhaustive audit review — every applicable skill, no early termination
+/mssql-performance-review --exhaustive ./artifacts/
 
 # Verification after deploying fixes
 /mssql-performance-review --baseline ./state/20260517-0942/state.json ./captures/post-fix/
@@ -260,7 +254,7 @@ You've captured: `slow-proc.sql` (procedure source), `slow-proc.sqlplan` (actual
 7. **Adversarial pass** (Opus, ~15 sec). Tries to disprove the parameter-sniffing hypothesis. Wait profile is CPU-dominant (SOS_SCHEDULER_YIELD) — consistent with sniffing. No contradiction.
 8. **Report** (Sonnet, ~5 sec). Renders the full report.
 
-**Total time:** ~2.5 minutes. **Total cost:** ~USD 0.21.
+**Total time:** ~2.5 minutes.
 
 **Reference output:** [`skills/mssql-performance-review/examples/mixed-artifacts-analysis.md`](examples/mixed-artifacts-analysis.md)
 
@@ -302,7 +296,7 @@ Users report the app is slow. You have nothing captured yet.
    ```
 5. The orchestrator parses paste-back, routes each section to the right sub-skill, and emits the full report just like Example 1.
 
-**Total time:** ~5 minutes (mostly your time running the scripts). **Total cost:** ~USD 0.06.
+**Total time:** ~5 minutes (mostly your time running the scripts).
 
 **Reference output:** [`skills/mssql-performance-review/examples/symptom-first-analysis.md`](examples/symptom-first-analysis.md) (bundle-generation response) and [`skills/mssql-performance-review/examples/capture-bundle-example/`](examples/capture-bundle-example/) (sample bundle contents).
 
@@ -319,7 +313,7 @@ Yesterday you ran a review and got recommendations. You deployed the top fix (a 
 **What happens:**
 
 1. The orchestrator loads the prior state.json (evidence chain + recommendations from yesterday).
-2. Runs the normal dispatch on the new artifacts (~2 min, ~USD 0.18).
+2. Runs the normal dispatch on the new artifacts (~2 min).
 3. For each prior recommendation, finds the corresponding finding in the new report.
 4. Tags each as `verified-effective` / `partial` / `no-change` / `regressed-elsewhere` / `cannot-evaluate`.
 5. Emits a Recommendation Status section in the new report.
@@ -345,7 +339,6 @@ The output structure is consistent across every invocation. Each section answers
 - Primary bottleneck: Parameter sniffing on dbo.usp_GetOrdersByCustomer
 - Highest-priority fix: Add covering index on Orders(CustomerId, OrderDate) INCLUDE (Status, TotalAmount)
 - Early termination: No — full dispatch ran (5 applicable skills)
-- Cost: ~USD 0.21 (Haiku 23k tokens, Sonnet 31k tokens, Opus 6k tokens)
 ```
 
 The Summary tells you the answer in one screen. Everything below is supporting evidence.
@@ -498,7 +491,7 @@ You: Re-rank the fixes by effort, not impact.
 You: What did sqlwait-review say about WRITELOG specifically?
 ```
 
-### Cheap follow-ups (new probe, ~USD 0.02–0.05)
+### Follow-ups that need a new probe
 
 When you provide new artifacts:
 
@@ -528,67 +521,20 @@ strategy depends on factors I don't have (licensing, hardware, application
 compatibility). The DBA team or a Microsoft sizing exercise is the right path.
 ```
 
-### Cost-guard warnings
+### Context-guard warnings
 
-After ~12k follow-up tokens, the orchestrator warns:
-
-```
-Note: this Q&A session has consumed ~12,000 tokens beyond the original report.
-Total session cost: ~USD 0.18 (within budget). Continuing.
-```
-
-After ~50k:
+Once a Q&A session has grown well beyond the original report, the orchestrator flags it:
 
 ```
-Warning: this Q&A session has consumed ~50,000 tokens beyond the original report.
-Total session cost: ~USD 0.42. Consider summarising and starting a new session
-to reset context.
+Note: this Q&A session has grown well beyond the original report. If answers start
+losing precision, summarise the findings and start a fresh session to reset context.
 ```
 
 You can ignore and continue; there's no hard cap.
 
 ---
 
-## 10. Cost management
-
-The orchestrator's default is `--model-tier standard` — the cost/quality sweet spot. Three knobs let you trade cost against thoroughness.
-
-### Per-tier cost (typical mixed-artifact review)
-
-| Tier | Adversarial | Total tokens | USD | Quality notes |
-|------|-------------|--------------|-----|---------------|
-| `economy` | Haiku-only | ~50k | ~USD 0.06 | Lower quality on complex multi-statement plans; adversarial drops to Sonnet (still mandatory) |
-| `standard` | Opus | ~66k | ~USD 0.21 | Best cost/quality balance |
-| `maximum` | Opus | ~85k | ~USD 0.50 | Highest quality; uses Opus for synthesis + adversarial + deep-dive |
-| `standard --no-adversarial` | none | ~60k | ~USD 0.13 | Saves ~USD 0.08; trades off confirmation-bias resistance |
-
-### When to choose each tier
-
-| Situation | Recommended |
-|-----------|-------------|
-| Routine review of well-understood workload | `economy` |
-| Production incident review with confidence-critical recommendations | `standard` (default) |
-| Compliance/audit review driving a change ticket | `maximum --exhaustive` |
-| Cost-sensitive scheduled review (daily batch across many servers) | `economy --no-adversarial` |
-| Previous review missed the obvious problem | `maximum` (escalates synthesis + adversarial to Opus) |
-
-### Cost reporting in the report
-
-Every report's Summary block includes a one-line cost report:
-
-```
-Cost: ~USD 0.21 (Haiku 23k tokens, Sonnet 31k tokens, Opus 6k tokens). Override with --model-tier {economy|standard|maximum}.
-```
-
-For a per-phase breakdown, ask in follow-up Q&A:
-
-```
-You: Show me the cost breakdown per phase.
-```
-
----
-
-## 11. Domain memory (`facts.json`)
+## 10. Domain memory (`facts.json`)
 
 The orchestrator can read per-instance facts (MAXDOP, AG topology, partitioning, RCSI state) to make recommendations environment-aware. Without facts, recommendations are generic; with facts, redundant recommendations are rejected and environment-specific escalators kick in.
 
@@ -664,7 +610,7 @@ For full schema, rejection/escalation catalogue, and staleness rules: [`referenc
 
 ---
 
-## 12. Capture-bundle workflow
+## 11. Capture-bundle workflow
 
 When the orchestrator detects missing artifacts (or you invoke `/sql-triage` with just a symptom), it generates a self-contained **capture bundle** — a directory of read-only `.sql` scripts plus instructions.
 
@@ -745,7 +691,7 @@ Full bundle layout, manifest schema, edit-required scripts, and the resume flow:
 
 ---
 
-## 13. Verification and the baseline-diff loop
+## 12. Verification and the baseline-diff loop
 
 A fix without verification is a hypothesis. The verification loop closes the gap.
 
@@ -808,31 +754,31 @@ For full tagging rules, timing guidance, edge cases (rollbacks, multi-rec findin
 
 ---
 
-## 14. Troubleshooting
+## 13. Troubleshooting
 
 ### "The orchestrator picked the wrong root cause"
 
 Three escalations:
 
 1. **Provide more artifacts.** Often the orchestrator picked the loudest signal because it had nothing else. Add wait stats, Query Store, or a trace.
-2. **Run with `--model-tier maximum`.** Promotes synthesis and the adversarial pass to Opus.
+2. **Re-run with `--exhaustive`.** Every applicable skill runs instead of stopping at convergence.
 3. **Tell it directly in follow-up Q&A.** "I think the actual issue is X. Why didn't you flag it?" The orchestrator either points to evidence supporting its conclusion (and you can decide if you accept that) or dispatches a targeted probe for X.
 
 ### "The report flags something that's not a problem in our environment"
 
-Use [domain memory](#11-domain-memory-factsjson). Add a `user_notes` entry to `facts.json` saying "do not recommend changing X" and the orchestrator will reject those recommendations on future runs.
+Use [domain memory](#10-domain-memory-factsjson). Add a `user_notes` entry to `facts.json` saying "do not recommend changing X" and the orchestrator will reject those recommendations on future runs.
 
 ### "I can't run all the capture scripts in the bundle"
 
 Run what you can. `--resume` works on partial captures. The orchestrator gives a partial report and tells you which remaining scripts would most improve confidence. You can also remove scripts you don't want to run before re-invoking.
 
-### "The cost was higher than expected"
+### "The review took much longer than expected"
 
-Check the cost report in the Summary. Common causes:
-- `.sqlplan` files are very large (>50k tokens each). Use `sqlplan-batch` instead of running sqlplan-review per plan.
+Common causes:
+- `.sqlplan` files are very large. Use `sqlplan-batch` instead of running sqlplan-review per plan, or export just the slow statement's subtree from SSMS.
 - The folder had many trace excerpts and STATISTICS outputs. Filter to the most relevant.
 - `--exhaustive` was set — every applicable skill ran. Use default early termination unless you specifically need exhaustive.
-- The Q&A session ran long. Each follow-up adds tokens.
+- The Q&A session ran long. Summarise and start fresh to reset context.
 
 ### "verify-docs.sh fails after I added something"
 
@@ -845,10 +791,6 @@ The orchestrator's verify gates:
 - Attribution footer (`*Analyzed by: ...*`) in the Output Format block
 
 Run `bash scripts/verify-docs.sh` from the repo root for the full check list.
-
-### "I want to disable the adversarial pass to save cost"
-
-`--no-adversarial`. Saves ~6k tokens (~USD 0.09 with Opus pricing). Trades off confirmation-bias resistance — you'll lose the disproof attempt that catches "loudest signal" errors.
 
 ### "The orchestrator suggested an index, but I want to know if it'll regress other queries"
 
@@ -873,7 +815,7 @@ The orchestrator works offline — it doesn't need network at runtime (it never 
 
 ---
 
-## 15. Privacy and the offline trust model
+## 14. Privacy and the offline trust model
 
 The orchestrator is strictly offline. Here is exactly what it does and doesn't do.
 
@@ -910,7 +852,7 @@ Yes. The orchestrator is a set of Markdown files plus the LLM that interprets th
 
 ---
 
-## 16. Reference index
+## 15. Reference index
 
 For each tier-2 and tier-3 primitive, the deep reference is in `references/`. Load them on demand when you need detail beyond what `SKILL.md` and this guide provide.
 
@@ -921,7 +863,7 @@ For each tier-2 and tier-3 primitive, the deep reference is in `references/`. Lo
 | [`references/evidence-schema.md`](references/evidence-schema.md) | `evidence.json` schema, field rules, human-readable rendering, reproducibility guarantee |
 | [`references/risk-rubric.md`](references/risk-rubric.md) | Risk-class definitions, environmental escalators, side-effect checklist, rollback rules |
 | [`references/adversarial-prompts.md`](references/adversarial-prompts.md) | Disproof templates per hypothesis class |
-| [`references/model-routing.md`](references/model-routing.md) | Multi-model routing tier table, override flags, cost profile |
+| [`references/model-routing.md`](references/model-routing.md) | Per-sub-skill model assignment, quality safeguards |
 | [`references/skill-dag.md`](references/skill-dag.md) | DAG construction, static and dynamic edge catalogues, walk algorithm |
 | [`references/domain-memory.md`](references/domain-memory.md) | `facts.json` schema, rejection/escalation rules, staleness handling |
 | [`references/followup-qa.md`](references/followup-qa.md) | Question taxonomy, when-to-probe rules, refusal patterns |
@@ -971,8 +913,6 @@ ENTRY MODES
   /mssql-performance-review --baseline <state.json> <new-artifacts> — verification
 
 FLAGS
-  --model-tier {economy|standard|maximum}    cost tier
-  --no-adversarial                            skip Opus disproof attempt
   --exhaustive                                run every applicable skill
   --phases                                    fixed phases instead of DAG
   --instance <name>                           load domain memory
@@ -985,7 +925,4 @@ WHAT YOU GET
 
 TRUST MODEL
   Reads files you provide. Writes ./captures/ and ./state/. Never contacts SQL Server.
-
-COST
-  Typical: USD 0.06 (economy) — 0.21 (standard) — 0.50 (maximum)
 ```
