@@ -1,6 +1,6 @@
 ---
 name: sqlindex-advisor
-description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Applies 10 checks (D1–D10). Derives index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops, filtered index opportunities, hash match probe-side scans — D1–D10) and the optimizer's explicit MissingIndexGroup suggestions. Also accepts sys.dm_db_missing_index_details + sys.dm_db_missing_index_group_stats DMV output directly, without a plan file. Use this skill whenever a user wants index recommendations from an execution plan; asks what indexes would help a query; mentions Key Lookup, index scan, missing index, filtered index, or covering index; or asks to generate CREATE INDEX statements. Trigger after sqlplan-review findings or directly on any .sqlplan file or missing index DMV output.
+description: Analyze SQL Server execution plans to produce a ranked CREATE INDEX script. Applies 13 checks (D1–D13). Derives index recommendations from operator patterns (Key Lookups, scans, sorts, spools, nested loops, filtered index opportunities, hash match probe-side scans — D1–D10) and the optimizer's explicit MissingIndexGroup suggestions, then validates the generated DDL against engine limits and filtered-index prerequisites (D11–D13). Also accepts sys.dm_db_missing_index_details + sys.dm_db_missing_index_group_stats DMV output directly, without a plan file. Use this skill whenever a user wants index recommendations from an execution plan; asks what indexes would help a query; mentions Key Lookup, index scan, missing index, filtered index, or covering index; or asks to generate CREATE INDEX statements. Trigger after sqlplan-review findings or directly on any .sqlplan file or missing index DMV output.
 triggers:
   - /sqlindex-advisor
   - /index-advisor
@@ -32,7 +32,7 @@ Accept any of:
 SELECT
     mig.index_group_handle,
     mig.index_handle,
-    mig.unique_compiles,
+    migs.unique_compiles,
     migs.user_seeks,
     migs.user_scans,
     migs.avg_total_user_cost,
@@ -50,6 +50,12 @@ JOIN sys.dm_db_missing_index_group_stats migs
 ORDER BY weighted_impact DESC;
 ```
 
+`sys.dm_db_missing_index_groups` exposes only `index_group_handle` and `index_handle` — `unique_compiles` lives on `sys.dm_db_missing_index_group_stats` (`migs`), not on `mig`.
+
+**Permissions:** `VIEW SERVER STATE` on SQL Server 2019 and earlier; `VIEW SERVER PERFORMANCE STATE` on SQL Server 2022 and later.
+
+**600-row cap:** `sys.dm_db_missing_index_details` and `sys.dm_db_missing_index_groups` each return at most 600 rows. On an instance with more missing indexes than that, the capture is silently truncated — address the visible suggestions first, then re-capture to see the rest. Always state this caveat in the report when Source C is used.
+
 When DMV output is provided, treat each row as a Source C candidate and use `weighted_impact` as the ranking score rather than the optimizer's static Impact percentage.
 
 ## How to Run
@@ -58,8 +64,8 @@ When DMV output is provided, treat each row as a Source C candidate and use `wei
 2. **Source B — Explicit extraction:** Extract all `<MissingIndexGroup>` elements
 3. **Source C — DMV parsing:** If DMV output is present, parse each row into a candidate (table, equality cols, inequality cols, include cols, weighted_impact)
 4. **Unified merge:** Combine A, B, and C by table, apply merge rules, deduplicate
-5. **Rank** the merged set by score
-6. **Generate DDL** with width checks applied
+5. **Rank** the merged set by score — apply D11 per-query attribution when Source C is present on SQL 2019+
+6. **Generate DDL** with width checks applied, gated by D12 (hard engine limits) and D13 (filtered-index SET options)
 
 ---
 
@@ -315,6 +321,85 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 
 ---
 
+### D11 — Per-Query Attribution Available (SQL 2019+)
+
+**When:** Source C data is present AND the instance is SQL Server 2019 (15.x) or later (or Azure SQL Database / Managed Instance)
+
+`sys.dm_db_missing_index_group_stats` aggregates across every query that wanted an index, so a suggestion with a large `weighted_impact` may be driven by one hot query or by fifty cold ones — and the aggregate cannot tell you which. `sys.dm_db_missing_index_group_stats_query` resolves that ambiguity: it returns one row per query per missing index group.
+
+**What to extract:** `query_hash`, `query_plan_hash`, and `last_sql_handle` per `group_handle`, then resolve the text via `sys.dm_exec_sql_text`.
+
+```sql
+-- Attribute a missing index suggestion to the queries that actually needed it
+SELECT
+    migsq.group_handle,
+    migsq.query_hash,
+    migsq.avg_user_impact,
+    migsq.user_seeks + migsq.user_scans AS operator_count,
+    st.text                             AS query_text
+FROM sys.dm_db_missing_index_group_stats_query AS migsq
+CROSS APPLY sys.dm_exec_sql_text(migsq.last_sql_handle) AS st
+ORDER BY migsq.avg_total_user_cost * migsq.avg_user_impact
+       * (migsq.user_seeks + migsq.user_scans) DESC;
+```
+
+**Recommendation:** Report the driving queries alongside each Source C candidate. A suggestion attributable to a single nightly report is a different deployment decision from one attributable to a hot OLTP path, even at identical `weighted_impact`.
+
+**Note:** `last_statement_sql_handle` maps to `sys.query_store_query_text` when Query Store was enabled at compile time (returns `0` otherwise) — the durable alternative, since all missing-index DMV data is lost on restart.
+
+**Estimated impact:** Not a standalone index recommendation; it re-ranks and annotates existing Source C candidates.
+
+**Version gate:** SQL Server 2019+. On earlier versions, log as `SKIP (version: requires SQL 2019+)`.
+
+---
+
+### D12 — Generated DDL Exceeds a Hard Index Limit
+
+**When:** A merged candidate's key or INCLUDE list would violate an engine limit. Unlike the advisory Width Check, these are hard errors — the `CREATE INDEX` fails outright.
+
+| Limit | Value | Applies to |
+|-------|-------|-----------|
+| Key columns | **32** (16 before SQL 2016) | All index types |
+| Key size | **1,700 bytes** nonclustered / **900 bytes** clustered (900 for all types before SQL 2016) | Sum of key column max widths |
+| INCLUDE columns | **1,023** | Nonclustered only |
+| Nonclustered indexes per table | **999** | — |
+
+**Also invalid:** `text`, `ntext`, and `image` cannot be INCLUDE columns; a column cannot appear in both the key list and the INCLUDE list; a column cannot repeat within INCLUDE.
+
+**Recommendation:** Never emit DDL that violates these. When a merge produces an over-wide candidate, split it by query rather than truncating arbitrarily, and say so in the Skipped / Flagged table. Note that variable-length columns are checked against their *declared* maximum: an index on two `nvarchar(500)` columns is 2,000 bytes and fails at creation even if every stored value is short.
+
+**Estimated impact:** Not an impact score — a hard gate applied before DDL generation.
+
+**Cross-reference:** Width Check (advisory thresholds), D2, D10
+
+---
+
+### D13 — Filtered Index SET-Option Prerequisites
+
+**When:** A D9 filtered index is recommended
+
+A filtered index cannot be created, and queries against a table carrying one can fail, unless the correct SET options are in effect. `ANSI_NULLS` and `QUOTED_IDENTIFIER` must both be `ON` in the session that creates the index, and in any session that subsequently modifies the table.
+
+**Recommendation:** Emit the SET statements with every filtered-index recommendation rather than assuming the deploying session inherits them — SQLCMD mode, some ORMs, and older linked-server sessions do not.
+
+```sql
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+CREATE NONCLUSTERED INDEX [IX_Tasks_AssignedUserId_Pending]
+ON [dbo].[Tasks] ([AssignedUserId], [CreatedDate])
+INCLUDE ([Priority], [DueDate])
+WHERE [Status] = 'Pending';
+```
+
+**Recommendation:** Flag any D9 output that omits these as incomplete.
+
+**Estimated impact:** Not a standalone score — a correctness gate on D9 output.
+
+**Cross-reference:** D9
+
+---
+
 ## Source B: Optimizer Explicit Suggestions
 
 Extract all `<MissingIndexGroup>` elements across all input plans.
@@ -339,6 +424,8 @@ Extract all `<MissingIndexGroup>` elements across all input plans.
 Per suggestion, extract: `Impact`, `Database/Schema/Table`, EQUALITY columns, INEQUALITY columns, INCLUDE columns.
 
 **Key column order rule:** EQUALITY columns always precede INEQUALITY columns, regardless of XML order.
+
+**Ordering within the EQUALITY group:** order equality columns by selectivity, most selective (highest distinct-value count) leftmost. The optimizer emits `<ColumnGroup>` members in an arbitrary order and does not rank them — this ordering is the caller's responsibility. When selectivity is unknown from the plan alone, state the assumption in the report and suggest confirming with `sys.dm_db_stats_histogram` or a `COUNT(DISTINCT …)` sample before deploying.
 
 **Note on Impact scores:** The Impact percentage reflects the optimizer's single-query cost estimate. A score of 99.999 (the cap) means the optimizer thinks the query would be effectively free with the index — treat these as high-priority but verify the query actually runs frequently enough to justify the write overhead.
 
@@ -397,6 +484,8 @@ Before generating DDL, flag:
 | Key columns > 4 | Info | B-tree pages hold fewer rows; seek cost increases |
 | INCLUDE columns > 5 | Info | Evaluate whether all columns serve the same query |
 | Total columns > 10 | Warning | High write amplification; review carefully |
+
+These are advisory design thresholds. The hard engine limits that make DDL fail outright are enforced separately by **D12** — check those first.
 
 ---
 
@@ -468,7 +557,8 @@ ON [dbo].[...] ([...])
 INCLUDE ([...])
 WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
       -- SQL 2019+ on large tables: add RESUMABLE = ON, MAX_DURATION = 120 MINUTES (resumable CREATE INDEX is SQL 2019+; resumable rebuild is SQL 2017+; both require ONLINE = ON)
-      -- Remove ONLINE = ON for Standard edition (online index create/rebuild is Enterprise-only in every version through SQL Server 2022), or tables with LOB columns
+      -- Remove ONLINE = ON for Standard/Web/Express (Enterprise-only through SQL Server 2022; Azure SQL DB and MI always support it),
+      -- or when a LOB column appears in this index definition, or for a clustered index on a table with image/ntext/text
      );
 
 -- Validate before promoting to production:
@@ -506,7 +596,10 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON
 - Operator-derived recommendations (Source A) are inferences — they are not guaranteed improvements. Always validate with `/sqlplan-review` findings before deploying.
 - The optimizer's Impact score reflects a single query's estimated benefit. A derived recommendation from a Nested Loops with 50,000 executions may be more valuable than an optimizer suggestion with Impact 90 from a query that runs once a day. DMV `weighted_impact` data is the most reliable ranking signal when available.
 - Always test in non-production first. New indexes can shift plan shapes for other queries on the same table.
-- Include `WITH (ONLINE = ON)` by default. Remove for Standard edition (online index create/rebuild operations are Enterprise-only in every version through SQL Server 2022), or tables with LOB columns (xml, varchar(max), etc.). Enterprise edition supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` — resumable rebuild from SQL 2017+, resumable CREATE INDEX from SQL 2019+; both require ONLINE = ON.
+- Include `WITH (ONLINE = ON)` by default. Remove it for Standard, Web, and Express editions — online index create and rebuild are Enterprise-only in every version through SQL Server 2022. Azure SQL Database and Azure SQL Managed Instance support online index operations regardless of this restriction.
+- **LOB columns rarely block ONLINE for the indexes this skill generates.** The offline requirement applies to *clustered* indexes on tables containing the legacy LOB types `image`, `ntext`, or `text`. A nonunique *nonclustered* index — which is nearly everything this skill emits — can be created online on a table with LOB columns as long as no LOB column appears in the index definition as a key or included column. `xml` and `varchar(max)` do not by themselves force an offline build. Only drop ONLINE when a LOB column is actually in the index, or when the recommendation is a D7 clustered index on a table with `image`/`ntext`/`text`.
+- Indexes on local temp tables cannot be created online; global temp tables are unaffected.
+- Enterprise edition supports `RESUMABLE = ON, MAX_DURATION = N MINUTES` — resumable rebuild from SQL 2017+, resumable CREATE INDEX from SQL 2019+; both require ONLINE = ON.
 - `DROP_EXISTING = ON` is appropriate when extending an existing index (D1 Key Lookup pattern). Always verify the current index name against `sys.indexes` before using it.
 
 ---
@@ -557,7 +650,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 ## Companion Skills
 
-- **sqlplan-review** — Run the full 108-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
+- **sqlplan-review** — Run the full 111-check analysis on the same plan before generating indexes. The check findings (N5 Key Lookup, N4 Expensive Scan) directly inform the index recommendations.
 - **sqlplan-compare** — After deploying the recommended indexes, capture a new plan and diff against the baseline to confirm the improvement.
 - **sqlplan-batch** — Run index advisor across a folder of plans to produce a single consolidated `CREATE INDEX` script for the whole workload.
 - **tsql-review** — If the plan shows implicit conversion warnings (S12), review the T-SQL source (T5) to fix the type mismatch that prevents index seeks.

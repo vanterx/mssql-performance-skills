@@ -1,4 +1,4 @@
-# sqlindex-advisor — Checks Explained (D1–D10)
+# sqlindex-advisor — Checks Explained (D1–D13)
 
 ## Contents
 
@@ -12,6 +12,9 @@
 - [D8 — Backward Scan: Add DESC Index](#d8--backward-scan-add-desc-index)
 - [D9 — Filtered Index Opportunity](#d9--filtered-index-opportunity)
 - [D10 — Hash Match Probe Side: Add Join Index](#d10--hash-match-probe-side-add-join-index)
+- [D11 — Per-Query Attribution Available (SQL 2019+)](#d11--per-query-attribution-available-sql-2019)
+- [D12 — Generated DDL Exceeds a Hard Index Limit](#d12--generated-ddl-exceeds-a-hard-index-limit)
+- [D13 — Filtered Index SET-Option Prerequisites](#d13--filtered-index-set-option-prerequisites)
 - [Concepts: Why Raw Suggestions Need Consolidation](#why-raw-suggestions-need-consolidation)
 - [Concepts: Merge Rules Explained](#merge-rules-explained)
 - [Concepts: Ranking Formula](#ranking-formula)
@@ -295,6 +298,69 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 
 ---
 
+### D11 — Per-Query Attribution Available (SQL 2019+)
+
+**What it means:** `sys.dm_db_missing_index_group_stats` aggregates every query that would have benefited from an index into a single row. That makes `weighted_impact` a good ranking signal but a poor decision signal — an aggregate of 40,000 says nothing about whether one query ran 40,000 times or 400 queries ran 100 times each. Those are different deployment decisions with different risk.
+
+SQL Server 2019 added `sys.dm_db_missing_index_group_stats_query`, which returns one row per *query* per missing index group, carrying `query_hash`, `query_plan_hash`, and `last_sql_handle`.
+
+**How to spot it:** Source C data is present and the instance is SQL Server 2019 (15.x) or later, Azure SQL Database, or Azure SQL Managed Instance.
+
+**Example:** Two suggestions on `dbo.Orders`, both with `weighted_impact ≈ 38,000`. Attribution shows the first is driven by a single `SELECT` inside the order-entry path executing 12,000 times an hour; the second by a month-end reconciliation report that runs twice. The first justifies the write overhead immediately; the second probably does not, and might be better served by a filtered index or no index at all.
+
+**Fix options:**
+1. **Join through `sys.dm_exec_sql_text`** on `last_sql_handle` to recover the batch text. Cheapest path, but the plan cache entry may already have been evicted, in which case the handle resolves to NULL.
+2. **Use `last_statement_sql_handle` against `sys.query_store_query_text`** when Query Store was enabled at compile time. This survives cache eviction. Returns `0` when Query Store was off at compile time.
+3. **Persist the DMV output on a schedule.** All missing-index DMV data is lost on engine restart, so a suggestion that looks weak may simply reflect a recent restart. Snapshot to a table before any planned failover.
+
+**Related checks:** Source C ranking, D12
+
+---
+
+### D12 — Generated DDL Exceeds a Hard Index Limit
+
+**What it means:** The Width Check thresholds (>4 key columns, >5 INCLUDE) are design advice — exceed them and you get a suboptimal index. The limits in this check are different in kind: exceed them and `CREATE INDEX` throws an error and creates nothing. A skill that merges candidates from three sources can produce an over-wide index without any single source being unreasonable, so the merged result must be validated before DDL is emitted.
+
+**How to spot it:** After the unified merge, count key columns, sum their declared byte widths, and count INCLUDE columns.
+
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Key columns | 32 | 16 before SQL Server 2016 |
+| Nonclustered key size | 1,700 bytes | 900 before SQL Server 2016 |
+| Clustered key size | 900 bytes | All versions |
+| INCLUDE columns | 1,023 | Max table columns minus 1 |
+| Nonclustered indexes per table | 999 | Includes those created by PRIMARY KEY / UNIQUE constraints |
+
+**Example:** A merge of two Source B suggestions on `dbo.Documents` yields key columns `(Title nvarchar(450), Author nvarchar(450), Category nvarchar(450))`. Each is 900 bytes declared, totalling 2,700 — well over the 1,700-byte nonclustered ceiling. The index fails at creation even though every actual title in the table is under 40 characters, because the engine validates the *declared* maximum, not the stored data.
+
+**Fix options:**
+1. **Move columns from key to INCLUDE.** Included columns are excluded from both the key-column count and the key size calculation. This is the intended remedy and usually costs nothing, since a column only needs to be a key if it is used for seeking, ordering, or grouping.
+2. **Split into multiple narrower indexes** aligned to the actual queries, rather than one merged index attempting to serve all of them.
+3. **Drop the widest column from the recommendation** and flag it in Skipped / Flagged for human review.
+
+**Note:** `text`, `ntext`, and `image` cannot appear as INCLUDE columns at all. A column may not appear in both the key list and the INCLUDE list, nor repeat within INCLUDE — all three produce errors rather than warnings.
+
+**Related checks:** Width Check, D2, D10
+
+---
+
+### D13 — Filtered Index SET-Option Prerequisites
+
+**What it means:** Filtered indexes carry a session-settings contract that ordinary indexes do not. `ANSI_NULLS` and `QUOTED_IDENTIFIER` must both be `ON` when the index is created — and, more easily missed, in any later session that performs DML on the table. A session with the wrong settings will fail its INSERT/UPDATE/DELETE rather than silently bypassing the index.
+
+**How to spot it:** Any D9 recommendation. The risk is not in the plan; it is in the deployment path.
+
+**Example:** A filtered index is created successfully from SSMS, which defaults both options to ON. A nightly ETL job runs through a linked server connection with `QUOTED_IDENTIFIER OFF`, and its inserts into the filtered table begin failing with error 1934. The index looks correct; the deployment context is what broke.
+
+**Fix options:**
+1. **Emit the SET statements as part of the recommendation**, ahead of the `CREATE INDEX`. This is the default and costs nothing.
+2. **Audit the writing paths** before deploying a filtered index to a table with ETL, ORM, or linked-server writers. Legacy DB-Library and some ODBC configurations default `QUOTED_IDENTIFIER` to OFF.
+3. **Prefer a standard index** when the writing paths cannot be audited or changed — a slightly wider index that always works beats a narrower one that breaks a nightly load.
+
+**Related checks:** D9
+
+---
+
 ## Why Raw Suggestions Need Consolidation
 
 SQL Server generates missing index suggestions independently per query execution. It does not:
@@ -414,3 +480,6 @@ Every index is updated separately on write operations. An INSERT into a table wi
 | D8 | ScanDirection = BACKWARD | 22 (fixed) |
 | D9 | Equality predicate on low-cardinality column, > 80% rows excluded | `min(85, (1 − selectivity) × 100)` |
 | D10 | Hash Match Join, probe-side scan, costPercent ≥ 20% | `min(80, costPercent)` |
+| D11 | Source C present on SQL 2019+ | Re-ranks Source C; no standalone score |
+| D12 | Merged DDL exceeds 32 keys / 1,700 bytes / 1,023 INCLUDE | Hard gate; blocks DDL emission |
+| D13 | D9 filtered index recommended | Correctness gate on D9 output |
