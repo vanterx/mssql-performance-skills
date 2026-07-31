@@ -24,7 +24,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlerrorlog-review`](#sqlerrorlog-review) | `/sqlerrorlog-review` | SQL Server ERRORLOG file or inline paste | ERRORLOG operational analysis — 33 checks (E1–E33): AG failover events, lease expiry, memory pressure, I/O slow, corruption warnings, login failure bursts, startup/shutdown, configuration signals, and SQL 2019/2022 modern feature events |
 | [`sqlhadr-review`](#sqlhadr-review) | `/sqlhadr-review` | `sys.dm_hadr_*` DMV output | Always On AG health analysis — 27 checks (H1–H28, H21 retired): replica connectivity, data loss risk, recovery time, throughput, configuration, modern AG features (Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection), and seeding/initialization integrity |
 | [`sqlag-review`](#sqlag-review) | `/sqlag-review` / `/ag-review` / `/ag-config-review` | `sys.availability_groups`, `sys.availability_replicas`, `sys.availability_group_listeners`, `sys.availability_group_listener_ip_addresses`, `sys.database_mirroring_endpoints`, `sys.databases` (AG members), `sys.certificates` output | AG configuration audit — 37 checks (F1–F37): prerequisites and instance setup, replica design, listener and network architecture, backup strategy, endpoint security, distributed AG and advanced features (Basic AG, Contained AG), operational monitoring including AG scale ceiling and seeding-mode left active during a manual-restore workflow |
-| [`sqlspn-review`](#sqlspn-review) | `/sqlspn-review` | `setspn` output and/or `Get-ADUser`/`Get-ADComputer` AD attribute output | SPN and Kerberos delegation analysis — 40 checks (K1–K40): SPN presence, service account binding, AG listener, permissions, delegation, Azure AD hybrid, gMSA rollover, FCI/DAG, FAST armoring, CNAME alias |
+| [`sqlspn-review`](#sqlspn-review) | `/sqlspn-review` | `setspn` output, `Get-ADUser`/`Get-ADComputer` AD attributes, Kerberos Configuration Manager or SQLCHECK output, or Linux keytab state | SPN and Kerberos delegation analysis — 54 checks (K1–K54): SPN presence, service account binding, AG listener, permissions, delegation, Entra ID hybrid, gMSA rollover, FCI/DAG, encryption types, CNAME alias, double-hop platform constraints, clock skew and token size, Linux keytabs, client driver limits |
 | [`sqlmemory-review`](#sqlmemory-review) | `/sqlmemory-review` | `sys.dm_os_memory_clerks`, `sys.dm_exec_query_memory_grants`, PLE counter, `sys.dm_os_sys_memory` output | Memory pressure analysis — 20 checks (O1–O20): PLE, plan cache bloat, memory grants queue, oversized grants, ColumnStore/XTP footprint, OS pressure notifications, LPIM, Max Server Memory |
 | [`sqldiskio-review`](#sqldiskio-review) | `/sqldiskio-review` | `sys.dm_io_virtual_file_stats` snapshot pair, `sys.master_files`, default trace auto-growth events | File-level I/O analysis — 15 checks (Z1–Z15): data/log latency, hot file, stall ratio, storage placement, TempDB co-location, auto-growth sizing and timing, I/O trend worsening |
 | [`sqlencryption-review`](#sqlencryption-review) | `/sqlencryption-review`, `/tde-review`, `/encryption-review`, `/tls-review`, `/ledger-review`, `/ssisdb-review`, `/data-masking-review` | `sys.databases`, `sys.dm_database_encryption_keys`, `sys.certificates`, `sys.symmetric_keys`, `sys.master_key_passwords`, `sys.masked_columns`, `msdb.dbo.backupset`, `sys.dm_exec_connections`, and related DMV output | Full encryption posture analysis — 112 checks (A1–A112) across 20 categories: TDE, Always Encrypted, CLE, backup encryption, transport/TLS, certificate lifecycle, key management, DMK/SMK hierarchy (including sp_control_dbmasterkey_password/SSISDB), EKM/AKV, compliance, TLS hardening, AE enclave/driver, key lifecycle, Ledger, Azure, DDM patterns, compliance explicit (PCI-DSS v4/HIPAA/GDPR/FedRAMP), operational validation (job step passwords/plan cache/AKV soft-delete), advanced crypto (PBKDF1/HASHBYTES/NTLM/SB certs) |
@@ -513,11 +513,17 @@ AG failover / unexpected downtime / auth failure
          │
          │ Kerberos/auth error? NTLM fallback in ERRORLOG?
          ▼
-/sqlspn-review  (K1–K40)
-   Check: MSSQLSvc SPN missing (K1–K4), AG listener SPN (K9–K10),
-          delegation not configured (K17–K22), gMSA rollover drift (K34),
+/sqlspn-review  (K1–K54)
+   Check: MSSQLSvc SPN missing (K1–K4), duplicate SPN (K8),
+          AG listener SPN (K12), unconstrained delegation (K19),
+          delegation not configured (K21–K22), gMSA rollover drift (K34),
           FCI node SPN leak (K35), Distributed AG forwarder (K36),
           CNAME alias without SPN (K40)
+   Then:  linked server RBCD unsupported (K41), SQL 2017 CU17 floor (K42),
+          SSISDB needs unconstrained delegation (K43), dynamic port (K44),
+          clock skew (K45), token size / error 17832 (K46),
+          RC4-only under AES enforcement (K47), Linux keytab (K49–K51),
+          legacy provider over named pipes (K52)
 ```
 
 ---
@@ -963,7 +969,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `H1–H28` | `sqlhadr-review` | AG health: replica connectivity, data loss risk, recovery time, throughput, configuration, Contained AG, Cloud Witness, Parallel Redo, RCSI, DB health detection, seeding/initialization integrity (H21 retired — merged into sqlag-review F15) | 27 |
 | `F1–F37` | `sqlag-review` | AG configuration: AlwaysOn prerequisites, replica design (sync count, session timeout, health check timeout, backup priority, join state), listener architecture (multi-subnet, read-only routing URL/list, MultiSubnetFailover), backup strategy (preference, guard function, log backup scheduling), endpoint security (auth method, cert expiry, RC4 algorithm), distributed AG topology (listener URL, sync link), Basic and Contained AG constraints, operational monitoring, AG database-count scale ceiling, automatic seeding left active during a manual-restore workflow | 37 |
 | `E1–E33` | `sqlerrorlog-review` | ERRORLOG: AG failover, lease expiry, memory pressure, I/O slow, corruption, login failure bursts, startup/shutdown, configuration signals, ADR PVS, IQP/CE feedback, Ledger verification, Azure Arc | 33 |
-| `K1–K40` | `sqlspn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Azure AD hybrid, gMSA rollover, FCI node leak, DAG forwarder SPN, Kerberos FAST, AdminSDHolder, CNAME alias | 40 |
+| `K1–K54` | `sqlspn-review` | SPN and Kerberos delegation: MSSQLSvc SPN presence, service account binding, AG listener and alias, permissions, KCD/RBCD delegation, Entra ID hybrid and Azure SQL MI Windows Auth, gMSA rollover, FCI node leak, DAG forwarder SPN, encryption types, AdminSDHolder, CNAME alias, linked server and SSISDB double-hop constraints, dynamic port, clock skew, token size, SQL Server on Linux keytabs, legacy provider limits | 54 |
 | `O1–O20` | `sqlmemory-review` | Memory pressure: PLE, NUMA imbalance, buffer pool concentration, stolen memory, single-use plan bloat, compile rate, large plans, lock clerk, grant queue depth, grant timeout, oversized grants, Resource Governor, BPE, ColumnStore clerk, XTP clerk, OS pressure notifications, LPIM, Max Server Memory | 20 |
 | `Z1–Z15` | `sqldiskio-review` | File I/O: data read latency, data write latency, log write latency, hot file, stall ratio, data+log co-location, TempDB co-location, TempDB log latency, file count imbalance, system drive placement, auto-growth events, data growth increment, log growth increment, peak-hour growth, I/O trend worsening | 15 |
 | `A1–A112` | `sqlencryption-review` | Encryption posture: TDE, AE, CLE, backup encryption, transport TLS, certs, key management, DMK/SMK hierarchy (sp_control_dbmasterkey_password, SSISDB, AG replicas, cross-server restore), EKM/AKV, compliance, TLS hardening, AE enclave/driver, key lifecycle, Ledger, Azure, DDM (masking vs encryption, UNMASK), compliance explicit (PCI-DSS v4 PAN, HIPAA PHI audit, GDPR Art.17 ledger, FIPS mode, FedRAMP/CMMC), operational validation (job step passwords, plan cache exposure, AKV soft-delete/purge, DR restore test), advanced crypto (PBKDF1, HASHBYTES, NTLM auth, SB cross-DB cert, ENCRYPTBYCERT expiry, Azure MI AKV perms) | 112 |
@@ -974,7 +980,7 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `J1–J15` | `sqlmigration-security-review` | Migration security objects: orphaned users, SID mismatch, login type platform support, password policy, default database, server/database role membership, explicit grants/denies, ownership chains, credentials, proxy/credential sequencing, linked server logins, certificate/key migration, DMK backup, CMS registrations | 15 |
 | `M1–M16` | `sqlmigration-objects-review` | Migration operational objects: Agent job database scope, job owner, operator notification reachability, alert message dependency, proxy/credential sequencing, schedule time zone, linked server provider/connectivity/collation, Database Mail profile/relay, backup device path, custom error messages, server triggers, XE sessions, non-AG endpoints | 16 |
 
-**Total: 836 checks across all skills.**
+**Total: 850 checks across all skills.**
 
 ---
 

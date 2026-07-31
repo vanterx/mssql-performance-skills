@@ -53,12 +53,16 @@ SID                       : S-1-5-21-1234567890-987654321-111222333-1105
 Surname                   :
 UserPrincipalName         : sqlsvc@contoso.com
 
-TrustedForDelegation        : True
-TrustedToAuthForDelegation  : False
-msDS-AllowedToDelegateTo    : {MSSQLSvc/SQLBACK01:1433, MSSQLSvc/SQLBACK01.contoso.com:1433, cifs/FILESERVER01}
-ServicePrincipalNames       : {MSSQLSvc/SQLNODE1:1433, MSSQLSvc/SQLNODE1.contoso.com:1433}
-MemberOf                    : {CN=SQLServerAdmins,OU=Groups,DC=contoso,DC=com,
-                               CN=DomainUsers,DC=contoso,DC=com}
+TrustedForDelegation          : True
+TrustedToAuthForDelegation    : False
+msDS-AllowedToDelegateTo      : {MSSQLSvc/SQLBACK01:1433, MSSQLSvc/SQLBACK01.contoso.com:1433, cifs/FILESERVER01}
+msDS-SupportedEncryptionTypes : 4
+ServicePrincipalNames         : {MSSQLSvc/SQLNODE1:1433, MSSQLSvc/SQLNODE1.contoso.com:1433}
+PasswordLastSet               : 2025-11-02 08:14:33
+LockedOut                     : False
+adminCount                    :
+MemberOf                      : {CN=SQLServerAdmins,OU=Groups,DC=contoso,DC=com,
+                                 CN=DomainUsers,DC=contoso,DC=com}
 
 
 --- Get-ADComputer SQLNODE1 -Properties TrustedForDelegation, msDS-AllowedToActOnBehalfOfOtherIdentity, ServicePrincipalNames ---
@@ -113,5 +117,36 @@ to pass his credentials through the SQL Server to the linked server on SQLBACK01
 
 setspn -Q MSSQLSvc/SQLBACK01* output:
 No such SPN found.
+
+
+--- SELECT SERVERPROPERTY(...) on SQLNODE1 ---
+
+product_version   product_level   product_update_level   edition
+----------------  --------------  ---------------------  ------------------------------
+13.0.6300.2       SP3             NULL                   Enterprise Edition (64-bit)
+
+
+--- SELECT net_transport, auth_scheme FROM sys.dm_exec_connections WHERE session_id = @@SPID ---
+
+net_transport   auth_scheme   local_tcp_port   client_interface_name
+--------------  ------------  ---------------  -----------------------
+TCP             NTLM          1433             .Net SqlClient Data Provider
+
+
+--- w32tm /stripchart /computer:DC01.contoso.com /samples:3 /dataonly ---
+
+Tracking DC01.contoso.com [10.20.0.10:123].
+Collecting 3 samples.
+14:22:01, +00.0217735s
+14:22:03, +00.0219012s
+14:22:05, +00.0218440s
+
+
+--- Get-ItemProperty HKLM:\System\CurrentControlSet\services\KDC -Name DefaultDomainSupportedEncTypes ---
+
+DefaultDomainSupportedEncTypes : 24
+
+Note from the AD team: RC4 was disabled domain-wide during the November 2025
+hardening project. Domain functional level is Windows Server 2016.
 
 ============================================================

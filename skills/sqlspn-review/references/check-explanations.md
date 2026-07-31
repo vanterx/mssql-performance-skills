@@ -10,13 +10,23 @@
 - [SQL Server ERRORLOG SPN Signals](#sql-server-errorlog-spn-signals)
 - [setspn -A vs -S: Avoiding Duplicate SPNs](#setspn--a-vs--s-avoiding-duplicate-spns)
 - [Loopback Connections and Kerberos](#loopback-connections-and-kerberos)
-- [Azure AD / Hybrid and Advanced Checks (K31–K40)](#azure-ad--hybrid-and-advanced-checks-k31k40)
-- [Quick Reference — All K1–K40 Checks](#quick-reference--all-k1k40-checks)
+- [MSSQLSvc SPN Presence Checks (K1–K6)](#mssqlsvc-spn-presence-checks-k1k6)
+- [Service Account Binding Checks (K7–K11)](#service-account-binding-checks-k7k11)
+- [AG Listener and Alias Checks (K12–K16)](#ag-listener-and-alias-checks-k12k16)
+- [Configuration and Permissions Checks (K17–K20)](#configuration-and-permissions-checks-k17k20)
+- [Kerberos Delegation — Service Account Checks (K21–K25)](#kerberos-delegation--service-account-checks-k21k25)
+- [AD Account and Computer Sensitivity Checks (K26–K30)](#ad-account-and-computer-sensitivity-checks-k26k30)
+- [Entra ID / Hybrid and Advanced Checks (K31–K40)](#entra-id--hybrid-and-advanced-checks-k31k40)
+- [Double-Hop Platform Constraints (K41–K44)](#double-hop-platform-constraints-k41k44)
+- [Kerberos Environment Prerequisites (K45–K48)](#kerberos-environment-prerequisites-k45k48)
+- [SQL Server on Linux Kerberos (K49–K51)](#sql-server-on-linux-kerberos-k49k51)
+- [Client Driver and Service State (K52–K54)](#client-driver-and-service-state-k52k54)
+- [Quick Reference — All K1–K54 Checks](#quick-reference--all-k1k54-checks)
 
 ---
 
 
-Plain-English explanations for all 40 K-checks (K1–K40) in `/sqlspn-review`.
+Plain-English explanations for all 54 K-checks (K1–K54) in `/sqlspn-review`.
 
 ---
 
@@ -270,9 +280,21 @@ Related check: K20 (NTLM Fallback Signal).
 
 ---
 
+## MSSQLSvc SPN Presence Checks (K1–K6)
+
 ### K1 — Missing Default-Instance SPN
 
-**What it means:** The SQL Server default instance (always on port 1433) has no SPN registered for its hostname. The KDC has nothing to look up when a client requests a Kerberos ticket for this SQL Server.
+**What it means:** The SQL Server default instance (conventionally on port 1433) has no SPN registered for its hostname. The KDC has nothing to look up when a client requests a Kerberos ticket for this SQL Server.
+
+Which form the client asks for depends on the protocol, not on whether a port appears in the connection string. Over TCP the client builds `MSSQLSvc/<FQDN>:<port>`. Over a protocol other than TCP — named pipes or shared memory — it builds the portless `MSSQLSvc/<FQDN>`. Both forms should exist so either transport can use Kerberos. Microsoft's documented SPN formats are:
+
+| SPN format | When it is used |
+|------------|-----------------|
+| `MSSQLSvc/<FQDN>:<port>` | The provider-generated default when TCP is used, for both named and default instances |
+| `MSSQLSvc/<FQDN>` | The provider-generated default for a **default instance** when a protocol other than TCP is used |
+| `MSSQLSvc/<FQDN>:<instancename>` | The provider-generated default for a **named instance** when a protocol other than TCP is used |
+
+The port number is not itself mandatory — a multi-port server, or a protocol that does not use ports, can still authenticate with Kerberos. But where the TCP port *is* included in the SPN, the TCP protocol has to be enabled on the instance for Kerberos to work.
 
 **How to spot it:** Run `setspn -Q MSSQLSvc/*` and look for entries matching the SQL Server hostname. If neither `MSSQLSvc/<hostname>:1433` nor `MSSQLSvc/<hostname.domain.com>:1433` appears, the SPN is missing.
 
@@ -296,7 +318,9 @@ No such SPN found.
 
 ### K2 — Missing Named-Instance SPN
 
-**What it means:** A named SQL instance (e.g., `SQL2019\PROD`) uses a dynamic TCP port that changes unless configured as static. The SPN must use the actual port number, not the instance name.
+**What it means:** A named SQL instance (e.g., `SQL2019\PROD`) uses a dynamic TCP port that changes unless configured as static. Two SPN forms are valid and both should be registered: `MSSQLSvc/<FQDN>:<port>` for TCP clients, and `MSSQLSvc/<FQDN>:<instancename>` for clients arriving over named pipes or shared memory. Registering only the port form leaves non-TCP connections on NTLM; registering only the instance-name form leaves TCP connections on NTLM.
+
+If the instance is still on a dynamic port, fix that first — see K44. A port that changes on restart cannot be represented by a stable SPN at all.
 
 **How to spot it:** Identify the instance's TCP port in SQL Server Configuration Manager → SQL Server Network Configuration → Protocols for INSTANCENAME → TCP/IP → IP Addresses → IPAll → TCP Port. Then verify that `setspn -Q MSSQLSvc/*` shows `MSSQLSvc/<hostname>:<that port>`.
 
@@ -407,6 +431,8 @@ setspn -Q MSSQLSvc/SQLFCI01*
 **Related checks:** K1, K12
 
 ---
+
+## Service Account Binding Checks (K7–K11)
 
 ### K7 — SPN on Wrong Account
 
@@ -526,6 +552,8 @@ RestrictedKrbHost/SQLNODE1
 
 ---
 
+## AG Listener and Alias Checks (K12–K16)
+
 ### K12 — Missing AG Listener SPN
 
 **What it means:** Always On Availability Group listeners have their own DNS name (e.g., `AGLISTEN01`), separate from the replica node names. Clients connect to the listener name, and Kerberos ticket requests specify `MSSQLSvc/AGLISTEN01:1433`. If no SPN for the listener name exists, Kerberos fails for listener connections even if the replica node SPNs are correct.
@@ -542,11 +570,12 @@ No such SPN found.
 ```
 
 **Fix options:**
-1. `setspn -S MSSQLSvc/AGLISTEN01:1433 CONTOSO\sqlsvc` (register on each replica's service account if they differ)
-2. `setspn -S MSSQLSvc/AGLISTEN01.contoso.com:1433 CONTOSO\sqlsvc`
-3. If replicas use different service accounts, register on all accounts or on the primary's account and update after failover
+1. `setspn -S MSSQLSvc/AGLISTEN01.contoso.com:1433 CONTOSO\sqlsvc` — register **once**, using the service account of the instances that host the availability replicas. A domain administrator has to do this; SQL Server does not auto-register listener SPNs
+2. Register the short-name form as well: `setspn -S MSSQLSvc/AGLISTEN01:1433 CONTOSO\sqlsvc`
+3. Confirm the prerequisite first: for one SPN to work across every replica, **all instances in the WSFC cluster hosting the availability group must run under the same service account**. If they do not, fix the service accounts rather than registering the same SPN on several of them — that produces the duplicate SPN in K8, and the KDC rejects every ticket for the listener
+4. If the listener uses a port other than 1433, put that port in the SPN and in the client connection string (`Server=tcp:AGLISTEN01,1445`)
 
-**Related checks:** K6, K16
+**Related checks:** K6, K8, K16, K36
 
 ---
 
@@ -640,6 +669,8 @@ No such SPN found.
 
 ---
 
+## Configuration and Permissions Checks (K17–K20)
+
 ### K17 — HTTP SPN Missing
 
 **What it means:** Delegation to Reporting Services (SSRS) or a web service over HTTP requires an HTTP SPN on the target service account. Without it, Kerberos cannot issue a service ticket for the HTTP endpoint, and the delegation chain breaks at the HTTP hop.
@@ -655,19 +686,23 @@ No such SPN found.
 ```
 
 **Fix options:**
-1. `setspn -S HTTP/SSRSNODE1 CONTOSO\svcSSRS`
-2. `setspn -S HTTP/SSRSNODE1.contoso.com CONTOSO\svcSSRS`
-3. Verify IIS/SSRS Kerberos configuration in rsreportserver.config (RSWindowsNegotiate must be listed)
+1. `setspn -S HTTP/SSRSNODE1.contoso.com CONTOSO\svcSSRS` — HTTP SPNs carry **no port**, unlike `MSSQLSvc`
+2. `setspn -S HTTP/SSRSNODE1 CONTOSO\svcSSRS` — register the NetBIOS form too; the host portion must match the name used in the browser URL, which you can confirm on the Web Portal URL tab of Report Server Configuration Manager
+3. Place the SPN on the identity the service actually runs under. A domain user account needs it registered manually. A Virtual Service Account or `NETWORK SERVICE` runs in the machine account's context, whose HOST SPN already covers HTTP — no manual SPN unless a virtual or load-balanced URL is used, in which case register it on the machine account
+4. Verify `RSWindowsNegotiate` is present and first in `<AuthenticationTypes>` in `rsreportserver.config` — see K54
+5. Watch for collateral damage: an HTTP SPN grants tickets to every application running in `HTTP.SYS` on that host, including IIS-hosted ones. Either run them all under the same account, or give each a host header with its own SPN
 
-**Related checks:** K21, K22
+**Related checks:** K21, K22, K54
 
 ---
 
 ### K18 — SPN Registration Permission Gap
 
-**What it means:** By default, only Domain Admins can write the `ServicePrincipalName` attribute on AD objects. If the SQL service account is granted Self-Write SPN permission, it can register its own SPNs. Without this permission, automated or self-registration attempts fail silently, leaving the SPN absent.
+**What it means:** When the Database Engine starts it tries to register its SPN automatically, calling the `DsWriteAccountSpn` API. That call succeeds only if the startup account holds `Read servicePrincipalName` and `Write servicePrincipalName` rights in Active Directory. When it fails, SQL Server logs a warning to both the SQL Server error log and the Application event log — and then **carries on starting**, so nothing about the service state signals the problem. The same happens in reverse at shutdown, when deregistration fails.
 
-**How to spot it:** The service account consistently lacks SPNs despite the SQL Server service starting, or error 17806/17807 events in the SQL Server ERRORLOG mention SPN registration failure.
+Which identity you are running under decides whether this is a problem at all. Built-in accounts (`Local System`, `NETWORK SERVICE`), virtual accounts, managed service accounts and group managed service accounts can all register an SPN themselves. A plain domain user account generally cannot, unless it has been granted the rights explicitly — and Microsoft grants them on the **SQL Server computer object**, not on the service account's own user object.
+
+**How to spot it:** The service account consistently lacks SPNs despite the SQL Server service starting cleanly, or the SQL Server error log records an SPN registration failure at startup.
 
 **Example:**
 ```
@@ -678,11 +713,13 @@ Windows return code: 0x2098, state: 15.
 ```
 
 **Fix options:**
-1. Grant Self-Write SPN: use ADSI Edit → find the service account → Properties → Security → Add permission: Self / Write ServicePrincipalName
-2. Or have a Domain Admin run `setspn -S` manually and document a process for SPN updates on port changes
-3. Check ERRORLOG after granting permission to confirm SQL Server registers SPNs on next start
+1. Grant the rights on the **SQL Server computer object**, following Microsoft's documented steps: Active Directory Users and Computers → View → Advanced → Computers → the SQL Server computer → Properties → Security → Advanced. Add the SQL Server startup account if absent, then Edit and select **Validated write to service principal name** under Permissions, plus **Read servicePrincipalName** and **Write servicePrincipalName** under Properties
+2. Or have a domain administrator run `setspn -S` manually, and document a process for re-registering when the TCP port or service account changes — manual registration means nothing updates itself
+3. Consider switching the service to a virtual account, MSA or gMSA, all of which self-register and remove the whole class of problem
+4. Check the SQL Server error log after the next restart to confirm registration now succeeds
+5. Do not solve this by running SQL Server under a domain administrator account — that works, but Microsoft advises against it in production, and it triggers K39 via AdminSDHolder
 
-**Related checks:** K1, K2
+**Related checks:** K1, K2, K11, K39
 
 ---
 
@@ -729,6 +766,8 @@ WHERE auth_scheme = 'NTLM';
 **Related checks:** K1, K3, K4, K5, K7
 
 ---
+
+## Kerberos Delegation — Service Account Checks (K21–K25)
 
 ### K21 — Constrained Delegation Not Configured
 
@@ -844,6 +883,8 @@ msDS-AllowedToDelegateTo : {
 
 ---
 
+## AD Account and Computer Sensitivity Checks (K26–K30)
+
 ### K26 — Connecting User Delegation-Sensitive
 
 **What it means:** Even when the SQL Server service account is perfectly configured for delegation, the connecting user's AD settings can block it. `AccountNotDelegated = True` marks the user's Kerberos tickets as non-forwardable, preventing any service from delegating on their behalf.
@@ -879,12 +920,24 @@ Get-ADGroupMember "Protected Users" | Where-Object { $_.Name -eq "jsmith" }
 # Kerberos delegation for jsmith will fail regardless of server configuration
 ```
 
+The protections arrive from two directions, and knowing which is which tells you whether the group is actually the cause:
+
+| Scope | Requirement | What stops working |
+|-------|-------------|--------------------|
+| Device-side | User signs in to a Windows 8.1 / Windows Server 2012 R2 or later host | No cached plaintext credentials for CredSSP or Windows Digest, no cached NTLM NTOWF, no cached Kerberos long-term keys after the initial TGT, no offline sign-in |
+| Domain-controller-side | Domain functional level Windows Server 2012 R2 or later | No NTLM authentication, no DES or RC4 in Kerberos preauthentication, **no delegation of any kind**, TGT capped at a non-renewable 4 hours |
+
+A member signing in to a host older than Windows 8.1 gets no additional protection at all — which is a common source of confusion when the group appears to work for some users and not others.
+
 **Fix options:**
 1. Remove the user from Protected Users if delegation is required: `Remove-ADGroupMember "Protected Users" -Members jsmith`
-2. Understand the implications: removing from Protected Users re-enables NTLM, RC4, and credential caching on domain controllers — evaluate the security tradeoff
-3. If the user is an admin account, consider whether delegation should be required at all — admin accounts should rarely need to be delegated
+2. Understand the implications: removing from Protected Users re-enables NTLM, RC4, and credential caching — evaluate the security trade-off before doing it
+3. Do not expect RBCD to work around it. The restriction covers unconstrained *and* constrained delegation, so no delegation model is exempt
+4. If the user is an admin account, question whether delegation should be involved at all — admin accounts should rarely be delegated
+5. Confirm the diagnosis from the `ProtectedUserFailures-DomainController` operational log (disabled by default; enable under Applications and Services Logs → Microsoft → Windows → Authentication). Event 100 is an NTLM sign-in failure, event 104 a DES/RC4 preauthentication failure. `ProtectedUser-Client` event 104 shows the client-side equivalent
+6. Consider Authentication Policies and Authentication Policy Silos as the more granular alternative — they apply at the same Windows Server 2012 R2 functional level and can restrict which hosts an account signs in from without disabling delegation wholesale
 
-**Related checks:** K26, K30
+**Related checks:** K26, K30, K38
 
 ---
 
@@ -949,16 +1002,21 @@ Get-ADGroupMember "Protected Users" | Where-Object { $_.Name -eq "sqlsvc" }
 # SQL Server cannot use delegation; clients may fail Kerberos authentication to the service
 ```
 
+Microsoft's guidance here is unusually direct: *"Accounts for services and computers should not be members of the Protected Users group. This group provides no local protection because the password or certificate is always available on the host. Authentication will fail with the error 'the user name or password is incorrect' for any service or computer that is added to the Protected Users group."*
+
+So this is not a trade-off to weigh — it is a misconfiguration with no upside. The account gains nothing, because the credential sits on the host regardless, and loses the ability to authenticate. The failure is certain rather than intermittent once the domain functional level reaches Windows Server 2012 R2.
+
 **Fix options:**
 1. Remove the service account from Protected Users immediately: `Remove-ADGroupMember "Protected Users" -Members sqlsvc`
-2. Restart the SQL Server service after removing (Kerberos settings are evaluated at service startup)
-3. Review why the service account was added to Protected Users — if it was a mistake, document the correction; if intentional, understand that this prevents all delegation scenarios
+2. Restart the SQL Server service afterwards so it re-acquires its Kerberos keys
+3. Protect the account properly instead. Authentication Policies and Authentication Policy Silos are designed for exactly this and explicitly support the User, Computer, Managed Service Account and Group Managed Service Account classes — unlike Protected Users, which targets interactive user accounts
+4. Audit for the same mistake elsewhere: `Get-ADGroupMember "Protected Users" | Where-Object { $_.objectClass -ne 'user' -or $_.Name -like '*svc*' }` is a rough first pass, but review the full membership by hand — any account backing a service or computer belongs out of the group
 
-**Related checks:** K27, K19, K21
+**Related checks:** K27, K19, K21, K38
 
 ---
 
-## Azure AD / Hybrid and Advanced Checks (K31–K40)
+## Entra ID / Hybrid and Advanced Checks (K31–K40)
 
 ### K31 — Azure AD Hybrid Join SPN Gap
 
@@ -994,18 +1052,46 @@ setspn -Q MSSQLSvc/SQLNODE1:1433
 
 ---
 
-### K33 — Azure SQL Managed Instance SPN for On-Premises Clients
+### K33 — Azure SQL MI Windows Authentication Flow Not Configured
 
-**What it means:** Azure SQL Managed Instance uses a private endpoint hostname for on-premises connectivity (via VPN or ExpressRoute). On-premises applications connecting via Windows-integrated authentication need a `MSSQLSvc/<mi-private-hostname>:1433` SPN registered in on-premises AD to obtain a Kerberos ticket.
+**What it means:** Windows Authentication against Azure SQL Managed Instance does not work the way it does on-premises, and there is **no `MSSQLSvc` SPN to register in on-premises AD for a managed instance**. Microsoft Entra ID acts as its own independent Kerberos realm and issues the tickets. Two flows exist, and one of them has to be set up before Windows Authentication works at all:
 
-**How to spot it:** Application receives Kerberos error when connecting to MI from on-premises; `setspn -Q MSSQLSvc/<mi-endpoint>:1433` returns no results.
+- **Modern interactive flow** — for Microsoft Entra joined or Entra hybrid joined clients on Windows 10 20H1 / Windows Server 2022 or later. Clients are redirected to Microsoft Entra Kerberos through a KDC proxy, so they need no line of sight to a domain controller and no trust object is created in the customer's AD. Only works from an interactive session, so it covers SSMS and web applications but not services.
+- **Incoming trust-based flow** — for AD joined clients on Windows 10 / Windows Server 2012 or later with line of sight to AD. A Trusted Domain Object is created in the customer's AD and registered in Microsoft Entra ID.
+
+Both require Active Directory to be synchronised to Microsoft Entra ID via Microsoft Entra Connect, and both require a system-assigned service principal on each managed instance.
+
+**How to spot it:** Windows Authentication to an MI hostname fails, and neither the KDC proxy group policy nor a Trusted Domain Object is present. `dsregcmd.exe /status` on the client shows the join state, which determines the eligible flow. Note that Windows Authentication for Microsoft Entra principals is not available for Linux clients at all.
+
+**Example:**
+```powershell
+# Which flow is the client eligible for?
+dsregcmd.exe /status
+# AzureAdJoined : YES / DomainJoined : YES  -> hybrid joined, modern interactive flow eligible
+# AzureAdJoined : NO  / DomainJoined : YES  -> AD joined, incoming trust-based flow
+
+# Incoming trust-based flow: create the Trusted Domain Object on the root domain
+Set-AzureADKerberosServer -Domain $domain `
+    -UserPrincipalName $cloudUserName `
+    -DomainCredential $domainCred `
+    -SetupCloudTrust
+
+# Confirm it was created
+Get-AzureADKerberosServer -Domain $domain -DomainCredential $domainCred `
+    -UserPrincipalName $cloudUserName | Select-Object -ExpandProperty CloudTrustDisplay
+```
+
+For the modern interactive flow, enable the `Administrative Templates\System\Kerberos\Specify KDC proxy servers for Kerberos clients` policy and map `KERBEROS.MICROSOFTONLINE.COM` to the tenant's KDC proxy URL.
 
 **Fix options:**
-1. Identify the MI private endpoint DNS name (visible in Azure Portal → SQL Managed Instance → Properties)
-2. Register the SPN: `setspn -S MSSQLSvc/<mi-private-endpoint>:1433 DOMAIN\sqlsvc`
-3. Ensure DNS resolution for the MI endpoint works from on-premises via the private DNS zone
+1. Synchronise AD with Microsoft Entra ID using Microsoft Entra Connect if that has not already been done — everything else depends on it
+2. Prefer the modern interactive flow where the client fleet qualifies; it needs no trust object and no domain controller line of sight
+3. Fall back to the incoming trust-based flow for AD joined clients, then deploy the Kerberos Proxy group policy
+4. Create the system-assigned service principal for each managed instance
+5. Rotate the Entra Kerberos key periodically with `Set-AzureADKerberosServer -RotateServerKey`; propagation between KDCs takes several hours, so the key can only be rotated once in 24 hours without `-Force`
+6. If users fail ticket requests within four hours of a client rebuild or upgrade, force a fresh TGT with `dsregcmd.exe /RefreshPrt`, then lock and unlock the session
 
-**Related checks:** K1, K12
+**Related checks:** K31, K32, K48
 
 ---
 
@@ -1057,40 +1143,95 @@ Get-ADServiceAccount sqlgMSA -Properties ServicePrincipalNames
 
 **Fix options:**
 1. Identify the forwarder replica's listener name from `sys.availability_group_listeners`
-2. Register `setspn -S MSSQLSvc/<forwarder-listener>:1433 DOMAIN\sqlsvc` on each replica's service account
+2. Register `setspn -S MSSQLSvc/<forwarder-listener>:1433 DOMAIN\sqlsvc` **once**, against the service account the replicas run under — registering it per replica creates the duplicate SPN K8 flags
 3. Verify with `setspn -Q MSSQLSvc/<forwarder-listener>:1433` from each replica
 
 **Related checks:** K12, K16, K6
 
 ---
 
-### K37 — S4U2Proxy Without Protocol Transition
+### K37 — TrustedToAuthForDelegation Set for an RBCD Path
 
-**What it means:** Resource-based Constrained Delegation (RBCD) requires two steps: S4U2Self (the initiating service obtains a service ticket for the user) followed by S4U2Proxy (forwarding the ticket to the target). S4U2Self only produces a forwardable ticket if the initiating service account has `TrustedToAuthForDelegation` enabled. Without it, the ticket obtained by S4U2Self is non-forwardable and S4U2Proxy fails silently.
+**What it means:** It is a common but incorrect belief that Resource-Based Constrained Delegation needs `TrustedToAuthForDelegation` ("Use any authentication protocol") on the initiating account so that S4U2Self can produce a forwardable ticket. Microsoft is explicit that the opposite is true: **RBCD cannot use the Trusted-to-Authenticate-for-Delegation bit that previously controlled protocol transition, and the KDC always allows protocol transition when performing RBCD as though the bit were set.**
 
-**How to spot it:** RBCD is configured (`msDS-AllowedToActOnBehalfOfOtherIdentity` present on target) but the initiating service account lacks `TrustedToAuthForDelegation = True`.
+So enabling the flag for an RBCD path does nothing for that path, while granting the account real protocol-transition privilege it does not need — a privilege that lets it obtain tickets for arbitrary users. This check therefore fires on the flag being *present*, not absent.
+
+Because the KDC does not limit protocol transition under RBCD, control is moved to the resource owner instead. Two well-known SIDs are stamped into the resulting ticket so a back-end service can tell how the user actually authenticated, and ACL accordingly:
+
+| SID | Meaning |
+|-----|---------|
+| `S-1-18-1` (`AUTHENTICATION_AUTHORITY_ASSERTED_IDENTITY`) | The client's identity was asserted by an authentication authority based on proof of possession of the client's own credentials |
+| `S-1-18-2` (`SERVICE_ASSERTED_IDENTITY`) | The client's identity was asserted by a service — that is, protocol transition occurred |
+
+**How to spot it:** RBCD is configured (`msDS-AllowedToActOnBehalfOfOtherIdentity` populated on the target) and the initiating account also has `TrustedToAuthForDelegation = True`, with no separate classic-KCD path that would justify it.
+
+**Example:**
+```powershell
+# Target is configured for RBCD...
+Get-ADComputer SQLTARGET -Properties PrincipalsAllowedToDelegateToAccount
+
+# ...and the initiator also carries the protocol transition bit, which RBCD ignores
+Get-ADUser sqlsvc -Properties TrustedToAuthForDelegation, msDS-AllowedToDelegateTo
+# TrustedToAuthForDelegation : True
+# msDS-AllowedToDelegateTo   : {}          <- no classic KCD path, so the bit has no purpose
+
+# Remove the unnecessary privilege
+Set-ADUser sqlsvc -TrustedToAuthForDelegation $false
+```
 
 **Fix options:**
-1. Enable "Use any authentication protocol" on the initiating service account in AD Users and Computers → Delegation tab
-2. Via PowerShell: `Set-ADUser sqlsvc -TrustedToAuthForDelegation $true`
-3. Note: protocol transition elevates the service account's privilege level — restrict the delegation targets in `msDS-AllowedToDelegateTo` to only the required SPNs
+1. Clear the flag when the account's only delegation path is RBCD — it is unused privilege
+2. Keep it only where the same account also serves a classic KCD path that genuinely needs protocol transition (K23); document which path requires it
+3. To restrict access by authentication method, ACL the back-end service against `S-1-18-1` and `S-1-18-2` rather than trying to control protocol transition on the initiator
+4. Before choosing RBCD at all, confirm the feature supports it — linked servers do not (K41)
 
-**Related checks:** K23, K24, K21
+**Related checks:** K23, K24, K41, K19
 
 ---
 
-### K38 — Kerberos FAST Armoring Incompatibility
+### K38 — Encryption Type Mismatch Between Account and KDC Policy
 
-**What it means:** Kerberos Flexible Authentication Secure Tunneling (FAST), also called Kerberos armoring, protects pre-authentication exchanges by requiring the client to prove its identity before the KDC issues a ticket. When enforced via Group Policy (`KDCArmorPolicy = Required`), accounts that only support RC4 encryption (no AES keys) fail to authenticate because FAST requires AES. SQL Server service accounts running without AES encryption types fail silently to NTLM. Applies to domain controllers running Windows Server 2012+.
+**What it means:** The KDC picks a ticket encryption type by intersecting what the client supports with what the target account advertises in `msDS-SupportedEncryptionTypes`. If that intersection is empty, no ticket is issued and the connection falls back to NTLM or fails outright. The attribute is a bitmask, combined by bitwise OR:
 
-**How to spot it:** Domain policy shows FAST/armoring required; `Get-ADUser sqlsvc -Properties KerberosEncryptionType` shows only RC4 or `DES` — no AES128 or AES256.
+| Bit (hex) | Decimal | Encryption type |
+|-----------|---------|-----------------|
+| `0x1` | 1 | DES-CBC-CRC (legacy) |
+| `0x2` | 2 | DES-CBC-MD5 (legacy) |
+| `0x4` | 4 | RC4-HMAC (legacy, transition only) |
+| `0x8` | 8 | AES128-CTS-HMAC-SHA1-96 |
+| `0x10` | 16 | AES256-CTS-HMAC-SHA1-96 |
+
+Common values: **24** (`0x18`) is AES-only, the hardened end state; **28** (`0x1C`) is RC4 plus AES, the usual transitional value; **0 / unset** means the KDC falls back to the domain-wide `DefaultDomainSupportedEncTypes` assumption rather than anything specific to the account.
+
+Kerberos FAST armoring is one case of this mismatch: when domain controllers enforce armoring, an account holding no AES keys cannot participate. But the far more common trigger today is straightforward AES enforcement in a domain that has disabled RC4 — see K47 for that specific case.
+
+**How to spot it:** `klist get MSSQLSvc/<fqdn>:1433` fails with "The encryption type requested is not supported by the KDC"; KDC events 4768 and 4769 carry error code `0xE` (`KDC_ERR_ETYPE_NOTSUPP`). The events also expose the `MSDS-SupportedEncryptionTypes` field for both the account and the service.
+
+**Example:**
+```powershell
+# Read the current bitmask (returned in decimal)
+$parameters = @{
+    Filter     = "Name -eq 'sqlsvc' -and (ObjectClass -eq 'Computer' -or ObjectClass -eq 'User')"
+    Properties = "msDS-SupportedEncryptionTypes"
+}
+Get-ADObject @parameters | Format-List DistinguishedName, msDS-SupportedEncryptionTypes, Name, ObjectClass
+# msDS-SupportedEncryptionTypes : 4      <- RC4 only; fails in an AES-enforced domain
+
+# Set AES support explicitly
+Set-ADUser sqlsvc -KerberosEncryptionType AES128,AES256    # bitmask becomes 24
+
+# Confirm a ticket can now be issued
+klist get MSSQLSvc/sqlnode1.contoso.com:1433
+```
 
 **Fix options:**
-1. Add AES support to the service account: `Set-ADUser sqlsvc -KerberosEncryptionType AES128,AES256`
-2. Update the service account's password after changing encryption types (forces the KDC to issue AES keys)
-3. Restart the SQL Server service so it picks up the new Kerberos session key
+1. Set the attribute explicitly on the account rather than depending on the domain default, so behaviour does not change when `DefaultDomainSupportedEncTypes` is hardened
+2. Use `Set-ADServiceAccount -KerberosEncryptionType` for an MSA or gMSA, and `New-ADServiceAccount -KerberosEncryptionType` when creating one
+3. Reset the account password if it predates AES support in Windows Kerberos and has never been changed — without a reset the account holds no AES-SHA1 keys at all, whatever the attribute says
+4. Restart the machine after changing policy so it refreshes its `msDS-SupportedEncryptionTypes` in AD
+5. Audit before enforcing: KDC events 4768 and 4769 on Windows Server 2019+ (and Windows Server 2016 from the January 2025 cumulative update) record RC4 usage, so you can find affected accounts before disabling RC4
 
-**Related checks:** K27, K30, K19
+**Related checks:** K47, K50, K27, K30
 
 ---
 
@@ -1131,7 +1272,514 @@ setspn -Q MSSQLSvc/SQLNODE1:1433    # Returns DOMAIN\sqlsvc — real host SPN ex
 
 ---
 
-## Quick Reference — All K1–K40 Checks
+## Double-Hop Platform Constraints (K41–K44)
+
+Delegation support is not uniform across SQL Server features. Two of the most common double-hop scenarios — linked servers and SSISDB package execution — have documented restrictions that make the generic "use constrained delegation" advice in K21 and K24 wrong. Check this section before recommending a delegation model.
+
+### K41 — Linked Server Delegation Path Relies on RBCD
+
+**What it means:** Microsoft documents linked server delegation support precisely: *"Linked servers support Active Directory pass-through authentication when using full delegation. Starting with SQL Server 2017 (14.x) CU17, pass-through authentication with constrained delegation is also supported; however, resource-based constrained delegation isn't supported."*
+
+Resource-Based Constrained Delegation is therefore never a valid answer for a linked-server double-hop, in any version. This matters because RBCD is otherwise the modern recommendation — it crosses domains, and it puts the decision in the resource owner's hands — so administrators reach for it naturally and then cannot work out why the second hop still lands as `ANONYMOUS LOGON`.
+
+**How to spot it:** A linked-server double-hop is described; the target computer or service account has `msDS-AllowedToActOnBehalfOfOtherIdentity` populated, and the middle-tier account's `msDS-AllowedToDelegateTo` is empty. The symptom is `Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'` on the second hop while every SPN check passes.
+
+**Example:**
+```powershell
+# The RBCD configuration that will not work for a linked server
+$MiddleTier = Get-ADUser -Identity sqlsvcA
+Set-ADComputer -Identity SQLTARGET -PrincipalsAllowedToDelegateToAccount $MiddleTier
+
+# What a linked server actually needs - classic KCD on the middle tier (SQL 2017 CU17+)
+Set-ADUser sqlsvcA -Add @{
+    'msDS-AllowedToDelegateTo' = @(
+        'MSSQLSvc/sqltarget.contoso.com:1433',
+        'MSSQLSvc/sqltarget.contoso.com'
+    )
+}
+
+# Remove the RBCD entry once the supported path works
+Set-ADComputer -Identity SQLTARGET -PrincipalsAllowedToDelegateToAccount $null
+```
+
+**Fix options:**
+1. Move to classic constrained delegation on the middle-tier service account, listing the target's `MSSQLSvc` SPNs in `msDS-AllowedToDelegateTo`. Requires SQL Server 2017 CU17 or later — see K42
+2. Where the version floor cannot be met, use full delegation ("Trust this user for delegation to any service") on the middle-tier account. This re-triggers K19 by design; report it as an accepted exception with the reason, not as a defect to remove
+3. Clear the RBCD ACL on the target once a supported path is working, so the configuration does not mislead the next person
+4. Remember that classic KCD cannot cross a domain boundary. If the linked server is in another domain and the version floor cannot be met, full delegation is the only remaining option — which is a strong argument for collapsing the hop instead
+
+**Related checks:** K21, K24, K37, K42, K19
+
+---
+
+### K42 — Linked Server Constrained Delegation Below SQL 2017 CU17
+
+**What it means:** Constrained delegation for linked-server pass-through authentication was added in SQL Server 2017 (14.x) CU17. On any earlier build, only full delegation carries the caller's identity across the second hop. A correctly populated `msDS-AllowedToDelegateTo` on an older instance produces no error — it simply does not take effect, and the second hop authenticates as `ANONYMOUS LOGON`.
+
+**How to spot it:** Constrained delegation is configured for a linked-server path, SPNs are correct, delegation targets exist, and the second hop still fails. Check the middle-tier build number before looking any further at AD.
+
+**Example:**
+```sql
+-- Establish the middle-tier build first
+SELECT
+    SERVERPROPERTY('ProductVersion')  AS product_version,
+    SERVERPROPERTY('ProductLevel')    AS product_level,
+    SERVERPROPERTY('ProductUpdateLevel') AS cu_level;
+-- 14.0.3238.1 / SP0 / CU17  -> constrained delegation supported
+-- 14.0.3045.24 / SP0 / CU12 -> NOT supported, full delegation required
+-- 13.x (SQL 2016) or older  -> NOT supported at any CU
+
+-- Confirm which identity actually arrived at the far end
+SELECT SYSTEM_USER AS arrived_as, ORIGINAL_LOGIN() AS original_login;
+```
+
+**Fix options:**
+1. Patch the middle-tier instance to SQL Server 2017 CU17 or later — this is the clean fix and does not weaken the delegation posture
+2. Use full delegation on the middle-tier service account as an interim measure, and record it as a known exception to K19 with a removal trigger tied to the patch
+3. Do not attempt RBCD as the workaround — it is unsupported for linked servers regardless of version (K41)
+4. Where neither is acceptable, remove the second hop: replicate the data, use a SQL Agent job with a stored credential, or query the far end directly from the client
+
+**Related checks:** K41, K21, K19
+
+---
+
+### K43 — SSISDB Package Double-Hop Under Constrained Delegation
+
+**What it means:** Remote execution of packages stored in the SSISDB catalog does not support constrained delegation. When a user on machine A launches a package that lives in the SSISDB catalog on machine B, and the package connects onward to machine C, the `ISServerExec.exe` process on B must delegate the user's credentials to C. Microsoft documents that this requires **unconstrained** delegation ("Trust this user for delegation to any service (Kerberos Only)") on the SQL Server service account hosting SSISDB, and that constrained delegation will not work.
+
+This is the one place in the skill where K19 — unconstrained delegation as a Critical finding — is expected rather than wrong. Report both checks together and state the dependency, so the reviewer does not "fix" K19 and break the packages.
+
+There is a genuine conflict worth surfacing: Windows Credential Guard mandates constrained delegation. Where Credential Guard is enabled, the two requirements cannot both be satisfied and the topology has to change.
+
+**How to spot it:** A package stored in SSISDB is executed from a remote SSMS session and fails with `Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'`, while the same package succeeds when launched from a session on the SSISDB host itself. That asymmetry — works locally, fails remotely — is the signature.
+
+**Example:**
+```
+Machine A (SSMS)  ->  Machine B (SSISDB + ISServerExec)  ->  Machine C (data source)
+                          ^
+                          |
+        needs unconstrained delegation on B's SQL Server service account
+
+Launch from B  -> single hop  -> succeeds
+Launch from A  -> double hop  -> "Login failed for user 'NT AUTHORITY\ANONYMOUS LOGON'"
+```
+
+```powershell
+# What SSISDB requires on the machine B service account
+Set-ADUser sqlsvcB -TrustedForDelegation $true
+
+# Verify - TrustedForDelegation True and msDS-AllowedToDelegateTo empty is correct here
+Get-ADUser sqlsvcB -Properties TrustedForDelegation, msDS-AllowedToDelegateTo
+```
+
+**Fix options:**
+1. Grant unconstrained delegation to the SQL Server service account on the SSISDB host, and document it as a required exception to K19 with the reason recorded
+2. Evaluate the security cost honestly first. Unconstrained delegation means a compromise of machine B yields the ability to impersonate any connecting user against any service — for a machine running arbitrary ETL packages, that is a meaningful blast radius
+3. Where Windows Credential Guard is enabled, the requirements are mutually exclusive. Move the packages out of the SSISDB catalog to file system or MSDB deployment, or eliminate the double hop by executing the package on the machine that owns the connection
+4. Alternatively, avoid delegation entirely: run the package under a SQL Agent job on machine B with an explicitly configured proxy or stored credential, so no caller identity needs forwarding
+
+**Related checks:** K19, K21, K41
+
+---
+
+### K44 — Named Instance Dynamic Port Prevents Kerberos
+
+**What it means:** Named instances default to dynamic ports: SQL Server picks an available port at startup, which can differ after every restart. An SPN registered against yesterday's port stops matching, so Kerberos works until the first restart and then silently degrades to NTLM — or fails outright. Microsoft's guidance is unambiguous: in environments that need Kerberos, set the named instance to a static port and register the SPN against that port.
+
+This is distinct from K5 and K13, which describe a wrong but *stable* port. Here the problem is that no port is stable enough to register.
+
+**How to spot it:** In SQL Server Configuration Manager, `TCP Dynamic Ports` holds a value and `TCP Port` is empty. Kerberos Configuration Manager reports this condition directly with a Dynamic Port status. Behaviourally, `auth_scheme` flips between `KERBEROS` and `NTLM` across restarts for the same client and connection string.
+
+**Example:**
+```sql
+-- Current port and auth scheme for this connection
+SELECT
+    c.net_transport,
+    c.auth_scheme,
+    c.local_tcp_port
+FROM sys.dm_exec_connections AS c
+WHERE c.session_id = @@SPID;
+-- local_tcp_port 49200 today, 51402 after the next restart
+-- and the SPN registered against 49200 no longer matches
+```
+
+**Fix options:**
+1. Pin a static port. SQL Server Configuration Manager → SQL Server Network Configuration → Protocols for the instance → TCP/IP → IP Addresses tab. If `Listen All` is `Yes`, clear `TCP Dynamic Ports` under `IPAll` and set `TCP Port`. If `Listen All` is `No`, do the same for each enabled IP entry. Restart the instance for the change to take effect
+2. Register the SPN against the new static port afterwards, and remove any SPN left over from a previous dynamic port — those become K10 stale entries and can collide as K8 duplicates
+3. Also register the instance-name SPN form (`MSSQLSvc/<FQDN>:<instancename>`), which is port-independent and covers named pipe and shared memory clients — see K2
+4. Where a static port genuinely cannot be assigned, accept that Kerberos over TCP is not achievable for that instance and plan around NTLM, rather than re-registering SPNs after every restart
+
+**Related checks:** K2, K5, K13, K14
+
+---
+
+## Kerberos Environment Prerequisites (K45–K48)
+
+Everything in this section breaks Kerberos while the SPN configuration is perfectly correct. They are worth ruling out early, because the symptoms — NTLM fallback, SSPI errors, refused logins — are indistinguishable from SPN problems, and a great deal of time gets spent re-registering SPNs that were never wrong.
+
+### K45 — Clock Skew Beyond Kerberos Tolerance
+
+**What it means:** Kerberos tickets carry timestamps set by the KDC, and every participant validates them. If the clock difference between a client or server and the domain controller exceeds five minutes, tickets are rejected as potentially replayed. The tolerance is a deliberate anti-replay control, not an implementation quirk.
+
+Windows normally keeps domain members in sync automatically, so this surfaces in two situations: the clock is out by more than 48 hours (beyond what automatic correction will fix), or the host is not using a domain controller in its own domain as its time source — commonly a virtual machine syncing to its hypervisor host instead, or a server pointed at an external NTP source directly.
+
+**How to spot it:** `KRB_AP_ERR_SKEW` in a network trace, or event ID 4 with `KERB_AP_ERR_SKEW` in the System log. Note that `KRB_AP_ERR_MODIFIED` (K53) can also be caused by clock skew, so check the offset before chasing key problems.
+
+**Example:**
+```powershell
+# Measure the offset against a domain controller
+w32tm /stripchart /computer:DC01.contoso.com /samples:5 /dataonly
+# 14:32:01, +00.0412297s   <- healthy
+# 14:32:01, +412.8830000s  <- ~7 minutes adrift, Kerberos will fail
+
+# Inspect and repair the time source
+w32tm /query /source
+w32tm /query /status
+w32tm /resync /rediscover
+```
+
+**Fix options:**
+1. Resynchronise the affected host against a domain controller in its own domain, then confirm with `w32tm /stripchart`
+2. Fix the time source rather than the symptom — a member server should inherit time from the domain hierarchy, not from a hypervisor host or an external NTP server
+3. For the forest, designate the forest-root PDC emulator as the single authoritative source, syncing to a reliable external stratum-1 or stratum-2 server; every other DC follows the domain hierarchy, and members follow their local DC. Multiple upstream sources across sites produce exactly the cross-site drift this check catches
+4. Where a DC's own clock is wrong, treat it as urgent — its members inherit the error and Kerberos may keep working locally while failing against everything else
+
+**Related checks:** K53, K20
+
+---
+
+### K46 — Kerberos Token Size Exceeded
+
+**What it means:** Kerberos carries the user's authorization data — the SIDs of the user and every group they belong to, plus any SIDs in `sIDHistory` — inside the Privilege Attribute Certificate in the ticket. That structure has a fixed maximum size, `MaxTokenSize`. A user in enough groups overflows it and cannot authenticate.
+
+SQL Server surfaces this as **error 17832**, which makes it one of the few Kerberos environment problems with a SQL-specific documented error to key on.
+
+Defaults: 12,000 bytes on Windows Server 2008 R2 and earlier, 48,000 bytes on Windows Server 2012 and later. As a rule of thumb, more than about 120 universal group memberships overflows the default. Estimate precisely with:
+
+```
+TokenSize = 1200 + 40d + 8s
+```
+
+where `d` is the count of universal groups outside the user's account domain plus SIDs in `sIDHistory`, and `s` is the count of in-domain universal, domain-local and global group memberships. Older Windows versions count domain-local memberships in `d` rather than `s`. If unconstrained delegation is in play, double the result.
+
+**How to spot it:** SQL Server error 17832, or authentication failures with "out of memory" or "Not enough storage is available to complete this operation" for specific users while others connect fine. The correlation with a single user's group membership is the tell.
+
+**Example:**
+```powershell
+# Count the memberships that drive token size for one user
+$user = Get-ADUser jsmith -Properties MemberOf, sIDHistory
+$groups = $user.MemberOf.Count
+$sidHistory = @($user.sIDHistory).Count
+"Groups: $groups  sIDHistory: $sidHistory  rough token estimate: $(1200 + 40*$sidHistory + 8*$groups) bytes"
+```
+
+**Fix options:**
+1. Reduce the token before raising the limit. Rationalise group membership, and clear `sIDHistory` entries left over from a forest migration — those count double, once for the user SID and once per group
+2. Where the registry must change, set `MaxTokenSize` (REG_DWORD, decimal) under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters` on **every** machine in the authentication chain — the client, any middle tier such as an IIS or SSRS server, and the SQL Server host — and restart each one. Setting it on the SQL Server alone does not help
+3. Keep the value at or below 48,000 where IIS is in the path. IIS caps HTTP request buffers at 64 KB, and base64 encoding inflates the ticket to about 133% of its size, so a larger token produces HTTP 400 errors instead of Kerberos errors
+4. Do not exceed 65,535 — values at or above that break other components, and setting the value as hexadecimal 65535 rather than decimal is a documented way to break Kerberos outright
+5. Get warning before failure: enable `Computer Configuration\Administrative Templates\System\KDC\Warning for large Kerberos tickets` to log event ID 31 when tokens approach the threshold
+6. Note the separate 1,010-group limit on the LSA access token, which fails similarly but is governed by different rules and affects NTLM too
+
+**Related checks:** K45, K20
+
+---
+
+### K47 — RC4-Only Encryption Types Under AES Enforcement
+
+**What it means:** As domains harden and disable RC4, any account still advertising RC4 as its only supported Kerberos encryption type stops being able to receive service tickets. For a SQL Server service account this means every Kerberos login to that instance fails at once, usually immediately after a domain hardening change that appears unrelated.
+
+Two states trigger it. Either `msDS-SupportedEncryptionTypes` is explicitly `4` (RC4 only), or it is unset — in which case the KDC falls back to the domain-wide `DefaultDomainSupportedEncTypes` assumption, and hardening that registry value changes the account's effective behaviour without anyone touching the account.
+
+A third case catches people out: an account created before AES support existed in Windows Kerberos, whose password has never been reset, holds no AES keys at all. Setting the attribute does not conjure them — only a password change generates them.
+
+**How to spot it:** `klist get MSSQLSvc/<fqdn>:1433` returns "The encryption type requested is not supported by the KDC" (`0xc00002fd`). KDC event 4769 shows error code `0xE`, `KDC_ERR_ETYPE_NOTSUPP`. Events 4768 and 4769 also expose the account's `MSDS-SupportedEncryptionTypes` and the ticket encryption type actually used — `0x17` there means RC4.
+
+**Example:**
+```powershell
+# What does the account actually advertise?
+$parameters = @{
+    Filter     = "Name -eq 'sqlsvc' -and (ObjectClass -eq 'Computer' -or ObjectClass -eq 'User')"
+    Properties = "msDS-SupportedEncryptionTypes"
+}
+Get-ADObject @parameters | Format-List DistinguishedName, msDS-SupportedEncryptionTypes, Name, ObjectClass
+# msDS-SupportedEncryptionTypes : 4    <- RC4 only
+
+# What has the domain been hardened to?
+Get-ItemProperty 'HKLM:\System\CurrentControlSet\services\KDC' -Name DefaultDomainSupportedEncTypes -ErrorAction SilentlyContinue
+# 0x18 (24) = AES only - so an RC4-only account cannot get a ticket
+
+# Fix and verify
+Set-ADUser sqlsvc -KerberosEncryptionType AES128,AES256
+klist purge
+klist get MSSQLSvc/sqlnode1.contoso.com:1433
+```
+
+**Fix options:**
+1. Set the encryption types explicitly on the account rather than relying on the domain default, so a later hardening change cannot alter its behaviour silently. `Set-ADUser -KerberosEncryptionType AES128,AES256` produces a bitmask of 24
+2. Use 28 (RC4 plus AES) as a transitional value if RC4 is still needed elsewhere, and plan the move to 24
+3. Reset the service account password if the account predates AES support — without it the account has no AES-SHA1 keys no matter what the attribute claims. Restart SQL Server afterwards
+4. Restart the machine after a policy change so it refreshes its own `msDS-SupportedEncryptionTypes` in the directory
+5. Audit before enforcing rather than after. KDC events 4768 and 4769 on Windows Server 2019+ (and on Windows Server 2016 from the January 2025 cumulative update) record RC4 usage, so RC4-dependent accounts can be found and fixed before RC4 is switched off
+6. Members of Protected Users (K27, K30) cannot use RC4 at all by design — if the account is in that group, the encryption type is a symptom rather than the cause
+
+**Related checks:** K38, K50, K27, K30
+
+---
+
+### K48 — Client and Server Across a Forest Boundary
+
+**What it means:** Kerberos authentication to SQL Server requires that the client and server computers be in the same Windows domain or in trusted domains. Where there is no trust path, no referral can be issued and no service ticket can be obtained — the connection falls back to NTLM if that is permitted, or fails. Microsoft's SSPI troubleshooting guidance adds that the SQL Server's domain and the connecting account's domain need to be in the same forest for SSPI to work.
+
+A trust that exists but does not advertise a shared encryption type produces the same practical outcome, with a different error.
+
+**How to spot it:** The connecting account's domain differs from the SQL Server's domain and `nltest /domain_trusts` shows no path between them. Where a trust does exist, an "unsupported etype" failure with KDC event ID 14 points at the trust object's encryption configuration rather than at either account.
+
+**Example:**
+```powershell
+# Is there a trust path at all?
+nltest /domain_trusts /all_trusts /v
+
+# Can the client resolve and reach the far KDC?
+nltest /dsgetdc:remote.contoso.com
+```
+
+```console
+:: If the trust exists but tickets fail with an unsupported etype,
+:: set the encryption types on the trust from a DC in the trusted domain
+ksetup /setenctypeattr child.contoso.com AES128-CTS-HMAC-SHA1-96 AES256-CTS-HMAC-SHA1-96
+```
+
+**Fix options:**
+1. Establish or repair the trust between the domains, or move the connecting principal into a domain that already has one
+2. Where the trust exists but tickets fail on encryption type, configure it on both sides — a two-way transitive trust needs `ksetup /setenctypeattr` run from a DC in each direction, or the referral ticket cannot be built
+3. Remember the delegation consequence: classic KCD (K21) is restricted to a single domain and cannot cross this boundary at all. RBCD (K24) can, because the delegation is configured on the resource side — but not for linked servers, which do not support RBCD (K41)
+4. Where no trust is possible, stop trying to make Windows Authentication work across the boundary. Use SQL Authentication, or a Microsoft Entra-based path, and document the decision
+
+**Related checks:** K21, K24, K33, K41
+
+---
+
+## SQL Server on Linux Kerberos (K49–K51)
+
+SQL Server on Linux does not register SPNs at startup and has no service account in the Windows sense. It authenticates from a **keytab** — a file holding the long-term Kerberos keys for its SPNs and for a privileged AD account — referenced from `mssql-conf`. The SPN checks earlier in this skill still apply, since the SPNs live in the same Active Directory; these three cover the Linux-specific state that has no Windows equivalent. Applies to SQL Server 2017 and later on Linux, including containers.
+
+### K49 — Keytab Not Configured in mssql-conf
+
+**What it means:** Two `mssql-conf` settings connect the instance to Active Directory: `network.kerberoskeytabfile`, the path to the keytab, and `network.privilegedadaccount`, the AD user whose entry in that keytab SQL Server uses to talk to the directory. If either is unset, or the keytab does not contain the SPNs clients ask for, Active Directory authentication does not work regardless of how correct the AD-side SPN registration is.
+
+Note that SPN registration and keytab creation are separate steps on Linux. `adutil spn addauto` registers the SPNs in AD; `adutil keytab createauto` or `mssql-conf setup-ad-keytab` writes the matching keys into the keytab. Doing one without the other leaves a half-configured instance.
+
+**How to spot it:** `mssql-conf validate-ad-config` reports failures, or `klist -kte` on the keytab shows no `MSSQLSvc` entries for the hostname and port clients use.
+
+**Example:**
+```bash
+# Validate the whole configuration in one step
+/opt/mssql/bin/mssql-conf validate-ad-config /var/opt/mssql/secrets/mssql.keytab
+
+# Inspect what the keytab actually contains
+klist -kte /var/opt/mssql/secrets/mssql.keytab
+# Expect MSSQLSvc/sqllinux.contoso.com:1433 and MSSQLSvc/sqllinux.contoso.com
+# plus an entry for the privileged account, e.g. sqluser@CONTOSO.COM
+
+# Read the current settings
+grep -E 'kerberoskeytabfile|privilegedadaccount' /var/opt/mssql/mssql.conf
+```
+
+```bash
+# Register the SPNs in AD, then build the keytab, then point SQL Server at it
+kinit privilegeduser@CONTOSO.COM
+adutil spn addauto -n sqluser -s MSSQLSvc -H sqllinux.contoso.com -p 1433
+
+su mssql
+/opt/mssql/bin/mssql-conf setup-ad-keytab /var/opt/mssql/secrets/mssql.keytab sqluser
+/opt/mssql/bin/mssql-conf set network.kerberoskeytabfile /var/opt/mssql/secrets/mssql.keytab
+/opt/mssql/bin/mssql-conf set network.privilegedadaccount sqluser
+sudo systemctl restart mssql-server
+```
+
+**Fix options:**
+1. Create the keytab with `mssql-conf setup-ad-keytab`, which is the preferred route when `adutil` is integrated with `mssql-conf`, or with `adutil keytab createauto -k <path> -p <port> -H <fqdn> -s MSSQLSvc` otherwise
+2. Set both settings, then restart with `systemctl restart mssql-server` and re-run `validate-ad-config`
+3. Supply `-p <port>` when registering SPNs with `adutil spn addauto`. Omitting it generates portless SPNs only, which work solely when SQL Server listens on the default 1433
+4. Confirm `/var/opt/mssql/mssql.conf` is owned by `mssql` rather than `root`, otherwise every `mssql-conf` command needs `sudo` and the setup steps behave differently from the documented flow
+5. For containers, build the keytab on a domain-joined Linux host and mount it into the container — the container host itself does not need to be domain joined
+6. Note that `adutil keytab create` and `createauto` append rather than overwrite. Re-running after a port change leaves stale entries behind alongside the new ones
+
+**Related checks:** K1, K2, K50, K51
+
+---
+
+### K50 — Keytab Encryption Types Mismatch the AD Account
+
+**What it means:** Every keytab entry is bound to a specific encryption type. If the types in the keytab do not intersect what the AD account and the domain will issue, ticket decryption fails even though the keytab exists and holds the right SPNs. The most common form is a keytab built with `arcfour-hmac` only, in a domain that has since disabled RC4.
+
+Linux hosts have an additional, non-obvious failure mode. Active Directory reads the `operatingSystemVersion` attribute to decide whether a host understands modern encryption types, parsing left to right and stopping at the first decimal point. A Linux machine account reporting `3.10.0x` yields `3`, below the threshold of six, so the KDC **ignores `msDS-SupportedEncryptionTypes` entirely** and falls back to the domain's assumed types. This is by design, to accommodate Windows 2000 and XP era clients. It means setting the attribute on a Linux account may have no effect at all, and the fix has to come from `DefaultDomainSupportedEncTypes` or from the keytab side.
+
+**How to spot it:** `klist -kte` shows only `arcfour-hmac`, or shows types the domain no longer accepts. Ticket requests fail with an unsupported-etype error while the SPNs are demonstrably present.
+
+**Example:**
+```bash
+klist -kte /var/opt/mssql/secrets/mssql.keytab
+# KVNO Timestamp           Principal
+# ---- ------------------- ------------------------------------------------------
+#    3 01/15/2026 09:14:22 MSSQLSvc/sqllinux.contoso.com:1433@CONTOSO.COM (arcfour-hmac)
+#    3 01/15/2026 09:14:22 MSSQLSvc/sqllinux.contoso.com@CONTOSO.COM (arcfour-hmac)
+# ^ RC4 only - fails in an AES-enforced domain
+
+# Rebuild with AES
+adutil keytab createauto -k /var/opt/mssql/secrets/mssql.keytab \
+    -p 1433 -H sqllinux.contoso.com -s MSSQLSvc \
+    -e aes256-cts-hmac-sha1-96 --password '<password>'
+```
+
+**Fix options:**
+1. Rebuild the keytab entries with an AES type the domain supports, passing `-e` to `adutil` to avoid the interactive prompt
+2. On the domain controller, enable **This account supports Kerberos AES 128 bit encryption** and **This account supports Kerberos AES 256 bit encryption** on the privileged AD account, under the Account tab
+3. Choose encryption types the host *and* the domain both support — `adutil` accepts several, and more than one entry per principal is normal and useful during transition
+4. Treat `arcfour-hmac` as transitional only; Microsoft documents it as weak and not recommended for production
+5. If AES still is not negotiated after all of the above, check `operatingSystemVersion` on the Linux machine account before assuming the keytab is wrong — the attribute-ignoring behaviour described above is the usual explanation for Linux accounts stuck on RC4
+
+**Related checks:** K38, K47, K49
+
+---
+
+### K51 — Keytab File Ownership or Permissions Wrong
+
+**What it means:** The keytab holds long-term Kerberos keys — cryptographically equivalent to the service account's password. Two failure modes sit on either side of the same setting. Too permissive, and any local user can read credentials that authenticate as SQL Server and as the privileged AD account. Too restrictive, or owned by the wrong user, and the `mssql` process cannot read its own keytab, so Active Directory authentication stops entirely.
+
+Microsoft's documented state is ownership by `mssql` with mode `440` — read for owner and group, nothing for others, no write for anyone.
+
+**How to spot it:** `ls -l` on the keytab shows an owner other than `mssql`, or a mode granting more than owner and group read.
+
+**Example:**
+```bash
+ls -l /var/opt/mssql/secrets/mssql.keytab
+# -rw-r--r-- 1 root root 1129 Jan 15 09:14 mssql.keytab
+# ^ owned by root, world-readable - both wrong
+
+chown mssql /var/opt/mssql/secrets/mssql.keytab
+chmod 440 /var/opt/mssql/secrets/mssql.keytab
+
+ls -l /var/opt/mssql/secrets/mssql.keytab
+# -r--r----- 1 mssql root 1129 Jan 15 09:14 mssql.keytab
+```
+
+**Fix options:**
+1. `chown mssql <keytab>` then `chmod 440 <keytab>`
+2. Treat any period of world-readability as a credential exposure. Rotate the affected passwords and rebuild the keytab rather than only tightening the mode — the keys may already have been copied
+3. Apply the same care in containers, where the keytab is mounted from the host: set ownership and mode on the host copy before mounting, since a permissive file on the host is exposed regardless of what the container sees
+4. Keep the keytab out of backups and configuration management repositories that have a wider audience than the host itself
+
+**Related checks:** K49, K50
+
+---
+
+## Client Driver and Service State (K52–K54)
+
+### K52 — Legacy Provider Cannot Use Kerberos Over Named Pipes
+
+**What it means:** The legacy OLE DB provider (`SQLOLEDB`) and the legacy ODBC driver (`SQL Server`), both bundled with Windows, do not support Kerberos authentication over Named Pipes at all — they support only NTLM on that protocol. No amount of SPN correction changes this. It is a driver limitation, and the fix is on the client side.
+
+This is worth checking early whenever `auth_scheme` reports `NTLM` while every SPN check passes, because the natural instinct is to keep re-examining AD.
+
+**How to spot it:** `sys.dm_exec_connections` shows `net_transport = 'Named pipe'` and `auth_scheme = 'NTLM'` for a connection whose SPNs are demonstrably correct, and the application uses a legacy provider in its connection string.
+
+**Example:**
+```sql
+SELECT
+    c.session_id,
+    c.net_transport,
+    c.auth_scheme,
+    s.program_name,
+    s.client_interface_name
+FROM sys.dm_exec_connections AS c
+JOIN sys.dm_exec_sessions AS s
+    ON s.session_id = c.session_id
+WHERE c.auth_scheme = 'NTLM';
+-- net_transport 'Named pipe' + client_interface_name 'SQLOLEDB' or 'ODBC'
+-- explains the NTLM without any SPN being wrong
+```
+
+**Fix options:**
+1. Switch the connection to TCP. Microsoft recommends TCP over Named Pipes regardless of driver version, and it resolves this immediately
+2. Migrate to a current driver — `MSOLEDBSQL` (the Microsoft OLE DB Driver for SQL Server) or ODBC Driver 17 or later. Note that SQL Server Native Client (`SQLNCLI`, `SQLNCLI11`) was removed in SQL Server 2022 and is not the upgrade path
+3. Confirm with `sys.dm_exec_connections` after the change rather than assuming
+4. Record the finding clearly when it fires: this is a client configuration issue, and re-registering SPNs will not move it
+
+**Related checks:** K20, K44
+
+---
+
+### K53 — Service Account Password Changed Without Service Restart
+
+**What it means:** SQL Server derives its Kerberos long-term key from the service account password at service start. Change the password in Active Directory and the running service keeps using the old key, so it can no longer decrypt service tickets the KDC has encrypted with the new one. The instance keeps running and accepting SQL logins; only Windows Authentication breaks.
+
+Account lockout produces a closely related failure, and is worth checking at the same time.
+
+**How to spot it:** Windows Authentication began failing at a time that correlates with a password change or a lockout, with "Cannot generate SSPI context" on the client or `KRB_AP_ERR_MODIFIED` in a trace. The instance has not been restarted since.
+
+`KRB_AP_ERR_MODIFIED` means "the client couldn't decrypt the service ticket" and has more than one cause, so confirm the others before settling here: a duplicate SPN (K8), a service account name that is not unique across the forest, or clock skew (K45).
+
+**Example:**
+```powershell
+# When did the password last change, and has the service restarted since?
+Get-ADUser sqlsvc -Properties PasswordLastSet, LockedOut, BadLogonCount |
+    Format-List Name, PasswordLastSet, LockedOut, BadLogonCount
+
+Get-CimInstance Win32_Service -Filter "Name='MSSQLSERVER'" |
+    ForEach-Object { Get-Process -Id $_.ProcessId } |
+    Select-Object Name, StartTime
+# PasswordLastSet later than StartTime -> the running service holds a stale key
+```
+
+**Fix options:**
+1. Verify the account can sign in to Windows with the current password and is not locked out — that separates a stale key from a broken credential
+2. Restart the SQL Server service so it re-derives its Kerberos key. Change the password through SQL Server Configuration Manager rather than in AD alone, so the stored credential and the directory stay in step
+3. Rule out the other causes of `KRB_AP_ERR_MODIFIED` first: duplicate SPN (K8), non-unique service account name across the forest, clock skew (K45)
+4. Remove the failure mode entirely by moving to a gMSA or MSA, where Windows rotates and applies the password without a service restart. This is the durable fix for environments with a password rotation policy — see K11 and K34
+
+**Related checks:** K8, K45, K11, K34, K20
+
+---
+
+### K54 — Report Server Missing RSWindowsNegotiate
+
+**What it means:** A Reporting Services or Power BI Report Server only attempts Kerberos when `RSWindowsNegotiate` appears in the `<AuthenticationTypes>` section of `rsreportserver.config`, and it should be first in that list. Without it the report server authenticates with NTLM, and NTLM cannot delegate — so a report that connects onward to a SQL Server or Analysis Services data source as the viewing user fails, no matter how completely SPNs and delegation attributes are configured.
+
+The inverse also causes trouble: `RSWindowsNegotiate` present *without* an `HTTP` SPN on a domain service account produces repeated credential prompts followed by an empty browser window. The two settings have to move together, which is why this check pairs with K17.
+
+**How to spot it:** `<AuthenticationTypes>` in `rsreportserver.config` lacks `RSWindowsNegotiate`, or lists it after `RSWindowsNTLM`. Symptomatically: reports render when the data source uses stored credentials but fail with a connection error when set to use the viewing user's credentials.
+
+**Example:**
+```xml
+<!-- Kerberos will not be attempted -->
+<AuthenticationTypes>
+    <RSWindowsNTLM />
+</AuthenticationTypes>
+
+<!-- Correct - Negotiate first -->
+<AuthenticationTypes>
+    <RSWindowsNegotiate />
+    <RSWindowsKerberos />
+    <RSWindowsNTLM />
+</AuthenticationTypes>
+```
+
+A quick way to confirm the diagnosis is to remove `RSWindowsNegotiate` temporarily and retry — if the symptom changes, the failure was Kerberos-related.
+
+**Fix options:**
+1. Add `<RSWindowsNegotiate />` as the first entry in `<AuthenticationTypes>`, then stop and restart the Report Server service from Report Server Configuration Manager. Configuration file changes do not take effect until the service restarts
+2. Register the matching `HTTP` SPNs on the report server service account at the same time — both NetBIOS and FQDN forms, no port. See K17
+3. Configure delegation on the report server service account so it can reach the data source, and register the data source's own SPNs (`MSSQLSvc` for SQL Server, `MSOLAPSvc.3` for Analysis Services). A named Analysis Services instance also needs the SQL Browser SPN on that machine
+4. Where Kerberos is not actually required, the documented alternative is to remove `RSWindowsNegotiate` and leave only `RSWindowsNTLM`. That permits a domain service account with no SPN at all, at the cost of losing delegation — acceptable when every data source uses stored credentials
+5. For trace-log evidence of what the report server was doing when a report failed, see `/ssrstracelog-review`
+
+**Related checks:** K17, K21, K22
+
+---
+
+## Quick Reference — All K1–K54 Checks
 
 | Check | Name | AD Object Type | Severity |
 |-------|------|---------------|---------|
@@ -1167,11 +1815,25 @@ setspn -Q MSSQLSvc/SQLNODE1:1433    # Returns DOMAIN\sqlsvc — real host SPN ex
 | K30 | Service Account in Protected Users | Service account | Critical |
 | K31 | Azure AD Hybrid Join SPN Gap | Service account (on-premises AD) | Critical |
 | K32 | Entra-Only Auth With Orphaned AD SPN | Service account | Warning |
-| K33 | Azure SQL MI SPN for On-Premises Clients | Service account (on-premises AD) | Critical |
+| K33 | Azure SQL MI Windows Authentication Flow Not Configured | Entra ID tenant / Trusted Domain Object | Critical |
 | K34 | gMSA Password Rollover SPN Drift | gMSA account | Warning |
 | K35 | FCI Node-Specific SPN Leak | Service account | Warning |
 | K36 | Distributed AG Forwarder Listener SPN Missing | Service account | Critical |
-| K37 | S4U2Proxy Without Protocol Transition | Initiating service account | Warning |
-| K38 | Kerberos FAST Armoring Incompatibility | Service account | Warning |
+| K37 | TrustedToAuthForDelegation Set for an RBCD Path | Initiating service account | Warning |
+| K38 | Encryption Type Mismatch Between Account and KDC Policy | Service account | Warning |
 | K39 | Write-SPN Blocked by AdminSDHolder | Service account (AD ACL) | Warning |
 | K40 | DNS CNAME Alias Without SPN | Service account | Critical |
+| K41 | Linked Server Delegation Path Relies on RBCD | Target computer / service account | Critical |
+| K42 | Linked Server Constrained Delegation Below SQL 2017 CU17 | Middle-tier instance build | Critical |
+| K43 | SSISDB Package Double-Hop Under Constrained Delegation | SSISDB host service account | Critical |
+| K44 | Named Instance Dynamic Port Prevents Kerberos | Instance TCP configuration | Critical |
+| K45 | Clock Skew Beyond Kerberos Tolerance | Host time configuration | Critical |
+| K46 | Kerberos Token Size Exceeded | Connecting user / MaxTokenSize registry | Critical |
+| K47 | RC4-Only Encryption Types Under AES Enforcement | Service account | Critical |
+| K48 | Client and Server Across a Forest Boundary | Domain / forest trust | Warning |
+| K49 | Keytab Not Configured in mssql-conf | Linux keytab / mssql-conf | Critical |
+| K50 | Keytab Encryption Types Mismatch the AD Account | Linux keytab / AD account | Critical |
+| K51 | Keytab File Ownership or Permissions Wrong | Linux keytab file | Warning |
+| K52 | Legacy Provider Cannot Use Kerberos Over Named Pipes | Client driver | Warning |
+| K53 | Service Account Password Changed Without Service Restart | Service account / service state | Warning |
+| K54 | Report Server Missing RSWindowsNegotiate | rsreportserver.config | Warning |
