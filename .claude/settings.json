@@ -28,9 +28,9 @@
       "Bash(npm run *)",
       "Bash(npx wrangler*)",
       "Bash(npx ecc-agentshield*)",
-      "mcp__Microsoft_Learn__microsoft_docs_search",
-      "mcp__Microsoft_Learn__microsoft_docs_fetch",
-      "mcp__Microsoft_Learn__microsoft_code_sample_search"
+      "mcp__microsoft-learn__microsoft_docs_search",
+      "mcp__microsoft-learn__microsoft_docs_fetch",
+      "mcp__microsoft-learn__microsoft_code_sample_search"
     ],
     "deny": [
       "Bash(git push --force*)",

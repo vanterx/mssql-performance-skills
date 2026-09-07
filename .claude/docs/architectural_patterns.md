@@ -9,8 +9,7 @@ Patterns that appear across multiple files in this repository. Follow these when
 All skills in this repo must follow the Anthropic skill-creator best practices:
 → [skill-creator-best-practices.md](skill-creator-best-practices.md)
 
-Key criteria enforced by `scripts/verify-docs.sh` (Checks 21–31):
-- SKILL.md > 900 lines → warn; > 1000 lines → fail (Check 21)
+Key criteria enforced by `scripts/verify-docs.sh` (Checks 22–31):
 - `description:` field ≥ 30 words (Check 22)
 - `description:` includes at least one trigger phrase ("Use this skill when…", "Trigger when…", "whenever a user…") (Check 23)
 - `triggers:` field present in frontmatter (Check 24)

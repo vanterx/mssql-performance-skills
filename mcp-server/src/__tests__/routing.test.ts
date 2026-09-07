@@ -4,6 +4,7 @@ import type { SkillMeta } from "../skill-loader.js";
 
 const ALL_SKILL_NAMES = [
   "mssql-performance-review",
+  "sqlag-review",
   "sqlbootstraplog-review",
   "sqlclusterlog-review",
   "sqldbconfig-review",
@@ -14,6 +15,9 @@ const ALL_SKILL_NAMES = [
   "sqlhadr-review",
   "sqlindex-advisor",
   "sqlmemory-review",
+  "sqlmigration-objects-review",
+  "sqlmigration-review",
+  "sqlmigration-security-review",
   "sqlplan-batch",
   "sqlplan-compare",
   "sqlplan-review",
@@ -41,7 +45,7 @@ function makeSkills(names: readonly string[], withRefs = false): SkillMeta[] {
 }
 
 describe("ARTIFACT_SKILL_MAP", () => {
-  it("covers all 18 specialised skills (none left unreachable)", () => {
+  it("covers all specialised skills (none left unreachable)", () => {
     const specialised = ALL_SKILL_NAMES.filter((n) => n !== "mssql-performance-review");
     const reachable = new Set(Object.values(ARTIFACT_SKILL_MAP).flat());
     for (const skill of specialised) {

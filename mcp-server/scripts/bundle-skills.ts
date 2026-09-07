@@ -13,6 +13,10 @@ interface SkillMeta {
   content: string;
 }
 
+// Normalise CRLF so the generated bundle is byte-identical regardless of the
+// checkout's core.autocrlf setting (Windows checkouts otherwise embed CRLF).
+const lf = (s: string): string => s.replace(/\r\n/g, "\n");
+
 const repoRoot = resolve(__dirname, "../..");
 const skillsDir = join(repoRoot, "skills");
 
@@ -27,7 +31,7 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
   .filter((p) => existsSync(p))
   .map((p) => {
     const skillDir = p.replace(/[\\/]SKILL\.md$/, "");
-    const raw = readFileSync(p, "utf-8");
+    const raw = lf(readFileSync(p, "utf-8"));
     const { meta } = parseFrontmatter(raw);
     const description = (meta["description"] as string) ?? "";
     const countMatch = description.match(/\b(\d+)(?:\s+\w+){0,3}\s+(?:checks?|patterns?)\b/i);
@@ -39,7 +43,7 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
         .filter((f) => f.isFile())
         .sort((a, b) => a.name.localeCompare(b.name))
         .forEach((f) => {
-          references[f.name] = readFileSync(join(refsDir, f.name), "utf-8");
+          references[f.name] = lf(readFileSync(join(refsDir, f.name), "utf-8"));
         });
     }
 
@@ -55,10 +59,10 @@ const skills: SkillMeta[] = readdirSync(skillsDir, { withFileTypes: true })
   .sort((a, b) => a.name.localeCompare(b.name));
 
 const guidePath = join(repoRoot, "PERFORMANCE_TUNING_GUIDE.md");
-const guideContent = existsSync(guidePath) ? readFileSync(guidePath, "utf-8") : "";
+const guideContent = existsSync(guidePath) ? lf(readFileSync(guidePath, "utf-8")) : "";
 
 const vcPath = join(repoRoot, "skills", "VERSION_COMPATIBILITY.md");
-const vcContent = existsSync(vcPath) ? readFileSync(vcPath, "utf-8") : "";
+const vcContent = existsSync(vcPath) ? lf(readFileSync(vcPath, "utf-8")) : "";
 
 const output = `// AUTO-GENERATED — do not edit. Run: npm run bundle
 import type { SkillMeta } from "./skill-loader.js";

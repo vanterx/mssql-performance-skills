@@ -1,6 +1,6 @@
 # MCP Server — Detailed Reference
 
-Remote MCP server exposing 16 SQL Server performance tuning skills, deployed on Cloudflare Workers.
+Remote MCP server exposing 26 SQL Server performance tuning skills, deployed on Cloudflare Workers.
 
 **Live endpoint:** `https://mssql-mcp.tsx113.workers.dev`
 
@@ -35,7 +35,7 @@ The server has two completely separate phases. Code that runs at build time neve
 BUILD TIME
 ─────────────────────────────────────────────────────────────────
 skills/*/SKILL.md          bundle-skills.ts         skills-data.ts
-(16 Markdown files)  ───►  (Node.js script)   ───►  (generated TS)
+(26 Markdown files)  ───►  (Node.js script)   ───►  (generated TS)
 PERFORMANCE_TUNING
 _GUIDE.md            ───►
 
@@ -44,13 +44,13 @@ RUNTIME (Cloudflare Workers — stateless, per-request)
 HTTP request  ──►  index.ts (fetch handler)
                    │
                    ├─ OPTIONS  →  204 + CORS headers (preflight)
-                   ├─ GET /health  →  200 {"status":"ok","skills":16}
+                   ├─ GET /health  →  200 {"status":"ok","skills":26}
                    │
                    └─ MCP request  →  try/catch
                        ├─ createServer()
                        │   ├─ tools.ts      registerTools(server, SKILLS)
                        │   │   └─ uses prompt-builder.ts  buildAnalysisPrompt()
-                       │   ├─ resources.ts  registerResources(server, SKILLS, GUIDE_CONTENT)
+                       │   ├─ resources.ts  registerResources(server, SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT)
                        │   └─ prompts.ts    registerPrompts(server, SKILLS)
                        │       └─ uses prompt-builder.ts  buildAnalysisPrompt()
                        │
@@ -64,7 +64,7 @@ HTTP request  ──►  index.ts (fetch handler)
 |----------|-----------|
 | Skills bundled at build time, not loaded at runtime | Cloudflare Workers have no filesystem; bundling avoids needing KV storage or external fetches |
 | Stateless — new server instance per request | Workers have no persistent memory between requests; this matches the execution model |
-| No authentication layer | The server is a public read-only knowledge base; all 16 skills are public Markdown |
+| No authentication layer | The server is a public read-only knowledge base; all 26 skills are public Markdown |
 | Zod validation on all tool inputs | Prevents malformed inputs reaching routing and lookup logic |
 | `WebStandardStreamableHTTPServerTransport` | Implements the MCP streamable HTTP transport over standard `Request`/`Response` — compatible with Cloudflare Workers' fetch API |
 
@@ -201,16 +201,16 @@ fetch(request)
   │
   ├── OPTIONS  →  204 + CORS headers  (browser preflight, no further processing)
   │
-  ├── GET /health  →  200 {"status":"ok","skills":16}  (liveness probe, no MCP overhead)
+  ├── GET /health  →  200 {"status":"ok","skills":26}  (liveness probe, no MCP overhead)
   │
   └── (all other methods) try/catch
         ├── new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
         │     └── stateless mode — no session tracking
         │
         ├── createServer()
-        │     ├── registerTools(server, SKILLS)      →  19 tools registered (3 utility + 16 per-skill)
-        │     ├── registerResources(server, SKILLS, GUIDE_CONTENT)  →  18 resources registered
-        │     └── registerPrompts(server, SKILLS)    →  16 prompts registered
+        │     ├── registerTools(server, SKILLS)      →  30 tools registered (4 utility + 26 per-skill)
+        │     ├── registerResources(server, SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT)  →  skills index, 26 SKILL.md, per-skill reference index + files, guide, version-compat resources registered
+        │     └── registerPrompts(server, SKILLS)    →  26 prompts registered
         │
         ├── server.connect(transport)
         ├── transport.handleRequest(request)  →  Response
@@ -225,7 +225,7 @@ All responses include `Access-Control-Allow-*` headers so browser-based MCP clie
 
 ### `GET /health`
 
-Returns `{"status":"ok","skills":16}` — a lightweight liveness probe that confirms the Worker is running and the skill bundle loaded, without triggering a full MCP handshake.
+Returns `{"status":"ok","skills":26}` — a lightweight liveness probe that confirms the Worker is running and the skill bundle loaded, without triggering a full MCP handshake.
 
 ### Error handling
 
@@ -252,6 +252,7 @@ export interface SkillMeta {
   triggers: string[];  // e.g. ["/tsql-review"]
   checkCount: number;  // extracted from description, e.g. 78
   content: string;     // full raw SKILL.md string including frontmatter
+  references: Record<string, string>; // references/*.md keyed by filename (check explanations, how-tos, concepts)
 }
 ```
 
@@ -269,32 +270,43 @@ The `.js` extension in imports (`import type { SkillMeta } from "./skill-loader.
 This is the only file in `src/` that is generated rather than hand-authored. It exports:
 
 ```ts
-export const SKILLS: SkillMeta[]      // 16 skills, alphabetically sorted
+export const SKILLS: SkillMeta[]      // 26 skills, alphabetically sorted
 export const GUIDE_CONTENT: string    // full PERFORMANCE_TUNING_GUIDE.md
+export const VERSION_COMPAT_CONTENT: string  // full skills/VERSION_COMPATIBILITY.md
 ```
 
-The 16 skills in alphabetical order:
+The 26 skills in alphabetical order:
 
 | # | Name | Checks |
 |---|------|--------|
-| 1 | sqlclusterlog-review | 30 |
-| 2 | sqlerrorlog-review | 33 |
-| 3 | sqlhadr-review | 27 |
-| 4 | mssql-performance-review | 0 (dispatcher) |
-| 5 | sqlprocstats-review | 25 |
-| 6 | sqlquerystore-review | 32 |
-| 7 | sqlspn-review | 40 |
-| 8 | sqlplan-batch | 0 (dispatcher) |
-| 9 | sqlplan-compare | 20 |
-| 10 | sqldeadlock-review | 16 |
-| 11 | sqlindex-advisor | 8 |
-| 12 | sqlplan-review | 111 |
-| 13 | sqlstats-review | 27 |
-| 14 | sqltrace-review | 25 |
-| 15 | sqlwait-review | 44 |
-| 16 | tsql-review | 85 |
+| 1 | mssql-performance-review | 0 (dispatcher) |
+| 2 | sqlag-review | 37 |
+| 3 | sqlbootstraplog-review | 24 |
+| 4 | sqlclusterlog-review | 30 |
+| 5 | sqldbconfig-review | 29 |
+| 6 | sqldeadlock-review | 17 |
+| 7 | sqldiskio-review | 15 |
+| 8 | sqlencryption-review | 112 |
+| 9 | sqlerrorlog-review | 33 |
+| 10 | sqlhadr-review | 27 |
+| 11 | sqlindex-advisor | 13 |
+| 12 | sqlmemory-review | 20 |
+| 13 | sqlmigration-objects-review | 16 |
+| 14 | sqlmigration-review | 15 |
+| 15 | sqlmigration-security-review | 15 |
+| 16 | sqlplan-batch | 0 (dispatcher) |
+| 17 | sqlplan-compare | 20 |
+| 18 | sqlplan-review | 111 |
+| 19 | sqlprocstats-review | 25 |
+| 20 | sqlquerystore-review | 32 |
+| 21 | sqlspn-review | 54 |
+| 22 | sqlstats-review | 27 |
+| 23 | sqltrace-review | 25 |
+| 24 | sqlwait-review | 44 |
+| 25 | ssrstracelog-review | 24 |
+| 26 | tsql-review | 85 |
 
-**Total: 520 checks across 14 analytical skills + 2 dispatcher skills**
+**Total: 850 checks across 24 analytical skills + 2 dispatcher skills**
 
 ---
 
@@ -302,13 +314,13 @@ The 16 skills in alphabetical order:
 
 **File:** [src/tools.ts](src/tools.ts)
 
-Three utility tools are registered, plus one per-skill tool for each of the 16 skills (19 total). All inputs are validated with Zod schemas before any logic executes.
+Four utility tools are registered (`list_skills`, `get_skill`, `get_reference`, `route_artifact`), plus one per-skill tool for each of the 26 skills (30 total). All inputs are validated with Zod schemas before any logic executes.
 
 ### `list_skills`
 
 ```
 Input:   none
-Output:  JSON array of { name, description, triggers, checkCount } for all 16 skills
+Output:  JSON array of { name, description, triggers, checkCount } for all 26 skills
 Purpose: Discovery — lets a client enumerate available skills before calling get_skill
 ```
 
@@ -336,10 +348,20 @@ if (!skill) {
 }
 ```
 
+### `get_reference`
+
+```
+Input:   skill: string, reference: string  (e.g. "sqlencryption-review", "howto-tde-setup.md")
+Output:  Full reference file content as plain text, or an error listing the available filenames
+Zod:     z.string() for both — isError returned if the skill or the filename is not found
+```
+
+Every `references/*.md` file (check explanations, how-to guides, concepts, error references) is bundled next to its SKILL.md at build time. `get_skill` appends the list of available reference filenames to its response; `get_reference` fetches one of them. Keeping reference material behind a second call stops the large explanation files from inflating every `get_skill` response.
+
 ### `route_artifact`
 
 ```
-Input:   artifact_type: enum (13 values)
+Input:   artifact_type: enum (25 values)
 Output:  JSON array of { name, description, primaryTrigger } for recommended skills
 Zod:     z.enum([...]) — exhaustive enum, rejects any unrecognised value at the SDK level
 ```
@@ -347,9 +369,11 @@ Zod:     z.enum([...]) — exhaustive enum, rejects any unrecognised value at th
 The routing table is a static `Record<string, string[]>` at the top of the file:
 
 ```ts
-const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
+export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   tsql:        ["tsql-review"],
   sqlplan:     ["sqlplan-review", "sqlindex-advisor"],
+  plancompare: ["sqlplan-compare"],
+  planbatch:   ["sqlplan-batch"],
   deadlock:    ["sqldeadlock-review"],
   waits:       ["sqlwait-review"],
   trace:       ["sqltrace-review"],
@@ -360,6 +384,16 @@ const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   clusterlog:  ["sqlclusterlog-review"],
   errorlog:    ["sqlerrorlog-review"],
   spn:         ["sqlspn-review"],
+  memory:      ["sqlmemory-review"],
+  diskio:      ["sqldiskio-review"],
+  encryption:  ["sqlencryption-review"],
+  dbconfig:    ["sqldbconfig-review"],
+  setuplog:    ["sqlbootstraplog-review"],
+  ssrslog:     ["ssrstracelog-review"],
+  agconfig:    ["sqlag-review"],
+  migration:   ["sqlmigration-review"],
+  migrationsecurity: ["sqlmigration-security-review"],
+  migrationobjects:  ["sqlmigration-objects-review"],
   mixed:       ["mssql-performance-review"],
 };
 ```
@@ -372,14 +406,17 @@ Some artifact types map to two skills (`sqlplan` → review + index advisor). Th
 
 **File:** [src/resources.ts](src/resources.ts)
 
-Resources are URI-addressable, read-only data that MCP clients can fetch directly — analogous to REST GET endpoints. 18 resources are registered.
+Resources are URI-addressable, read-only data that MCP clients can fetch directly — analogous to REST GET endpoints.
 
 ### Resource index
 
 ```
-mssql://skills             application/json    Index of all 16 skills with metadata
-mssql://skills/{name}      text/markdown       Full SKILL.md for a specific skill (×16)
-mssql://guide              text/markdown       Full PERFORMANCE_TUNING_GUIDE.md
+mssql://skills                              application/json    Index of all 26 skills with metadata
+mssql://skills/{name}                       text/markdown       Full SKILL.md for a specific skill (×26)
+mssql://skills/{name}/references            application/json    List of reference files for a skill
+mssql://skills/{name}/references/{file}     text/markdown       One reference file (check-explanations.md, howto-*.md, concepts.md …)
+mssql://guide                               text/markdown       Full PERFORMANCE_TUNING_GUIDE.md
+mssql://version-compat                      text/markdown       Full skills/VERSION_COMPATIBILITY.md
 ```
 
 ### Implementation pattern
@@ -420,7 +457,7 @@ The `skill.content` value referenced inside the closure is captured by reference
 
 **File:** [src/prompts.ts](src/prompts.ts)
 
-One prompt is registered per skill (16 total). A prompt is a parameterised message template — the MCP client provides arguments and receives a fully assembled message ready to send to an LLM.
+One prompt is registered per skill (26 total). A prompt is a parameterised message template — the MCP client provides arguments and receives a fully assembled message ready to send to an LLM.
 
 ### Input schema
 

@@ -138,9 +138,9 @@ Once connected, the following are available in any conversation:
 
 | MCP Primitive | What's exposed |
 |---------------|----------------|
-| **3 Tools** | `list_skills`, `get_skill`, `route_artifact` (13 types: `tsql`, `sqlplan`, `deadlock`, `waits`, `trace`, `stats`, `querystore`, `procstats`, `hadr`, `clusterlog`, `errorlog`, `spn`, `mixed`) |
-| **18 Resources** | `mssql://skills`, `mssql://skills/{name}` (×16), `mssql://guide` |
-| **16 Prompts** | One per skill — pass your artifact as `input` |
+| **30 Tools** | `list_skills`, `get_skill`, `get_reference`, `route_artifact` (25 artifact types: `tsql`, `sqlplan`, `plancompare`, `planbatch`, `deadlock`, `waits`, `trace`, `stats`, `querystore`, `procstats`, `hadr`, `clusterlog`, `errorlog`, `spn`, `memory`, `diskio`, `encryption`, `dbconfig`, `setuplog`, `ssrslog`, `agconfig`, `migration`, `migrationsecurity`, `migrationobjects`, `mixed`), plus one tool per skill (×26) that accepts your artifact as `input` |
+| **Resources** | `mssql://skills` index, `mssql://skills/{name}` (×26), `mssql://skills/{name}/references` index plus one resource per reference file, `mssql://guide`, `mssql://version-compat` |
+| **26 Prompts** | One per skill — pass your artifact as `input` |
 
 > The server auto-deploys via GitHub Actions on every push. Source: [`mcp-server/`](mcp-server/)
 
@@ -1833,9 +1833,9 @@ See [`skills/sqlplan-review/examples/horrible-analysis.md`](skills/sqlplan-revie
 | S1–S38 | 38 | sqlplan-review | Execution plan — statement-level |
 | N1–N73 | 73 | sqlplan-review | Execution plan — node-level |
 | C1–C20 | 20 | sqlplan-compare | Plan regression checks |
-| D1–D8 | 8 | sqlindex-advisor | Index derivation rules |
+| D1–D13 | 13 | sqlindex-advisor | Index derivation rules |
 | P1–P17 | 17 | sqldeadlock-review | Deadlock patterns |
-| Q1–Q30 | 30 | sqlquerystore-review | Query Store health + regressions + IQP/PSP/CE/DOP feedback |
+| Q1–Q32 | 32 | sqlquerystore-review | Query Store health + regressions + IQP/PSP/CE/DOP feedback |
 | R1–R25 | 25 | sqlprocstats-review | Procedure/trigger/function stats |
 | L1–L30 | 30 | sqlclusterlog-review | WSFC cluster log analysis |
 | H1–H28 | 27 | sqlhadr-review | Always On AG health checks, including seeding/initialization integrity (H21 retired — merged into sqlag-review F15) |
