@@ -1,7 +1,7 @@
 {
   "name": "mssql-performance-skills-mcp",
   "version": "1.0.0",
-  "description": "Remote MCP server exposing 19 SQL Server performance tuning skills — deployed on Cloudflare Workers",
+  "description": "Remote MCP server exposing 26 SQL Server performance tuning skills — deployed on Cloudflare Workers",
   "scripts": {
     "bundle": "tsx scripts/bundle-skills.ts",
     "dev": "npm run bundle && wrangler dev",

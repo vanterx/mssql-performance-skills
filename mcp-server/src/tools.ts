@@ -24,6 +24,10 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   dbconfig:    ["sqldbconfig-review"],
   setuplog:    ["sqlbootstraplog-review"],
   ssrslog:     ["ssrstracelog-review"],
+  agconfig:    ["sqlag-review"],
+  migration:   ["sqlmigration-review"],
+  migrationsecurity: ["sqlmigration-security-review"],
+  migrationobjects:  ["sqlmigration-objects-review"],
   mixed:       ["mssql-performance-review"],
 };
 
@@ -112,7 +116,8 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
           "tsql", "sqlplan", "plancompare", "planbatch",
           "deadlock", "waits", "trace", "stats", "querystore",
           "procstats", "hadr", "clusterlog", "errorlog", "spn",
-          "memory", "diskio", "encryption", "dbconfig", "setuplog", "ssrslog", "mixed",
+          "memory", "diskio", "encryption", "dbconfig", "setuplog", "ssrslog",
+          "agconfig", "migration", "migrationsecurity", "migrationobjects", "mixed",
         ])
         .describe(
           "Type of artifact to analyze. " +
@@ -121,6 +126,10 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
           "encryption = TDE/AE/CLE/TLS audit output; dbconfig = sp_configure/sys.databases output; " +
           "setuplog = Setup Bootstrap logs (Summary.txt, Detail.txt, MSI logs, ConfigurationFile.ini); " +
           "ssrslog = SSRS report server trace logs, RSReportServer.config/ReportingServicesService.exe.config excerpts, ExecutionLog3 output, or Report Server Windows Service Event Log entries. " +
+          "agconfig = AG catalog output (sys.availability_groups, sys.availability_replicas, listeners, endpoints); " +
+          "migration = migration-readiness facts (source version/edition, features in use, target platform); " +
+          "migrationsecurity = login, permission, credential, and certificate inventory for a migration; " +
+          "migrationobjects = SQL Agent jobs, linked servers, Database Mail, and other instance-level objects for a migration. " +
           "Use 'mixed' when the artifact combines multiple types or the type is unknown — routes to the mssql-performance-review orchestrator."
         ),
     },

@@ -18,7 +18,7 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 
 | File | Purpose |
 |------|---------|
-| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 22 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
+| [skills/mssql-performance-review/SKILL.md](skills/mssql-performance-review/SKILL.md) | Agentic offline orchestrator: `mssql-performance-review`. No checks of its own (dispatcher, like `sqlplan-batch`). Routes mixed artifacts to the 25 specialised skills, runs adversarial root-cause check, emits evidence chain + risk-rated fixes + rollback. |
 | [skills/tsql-review/SKILL.md](skills/tsql-review/SKILL.md) | Static T-SQL source analysis: `tsql-review`. 85 checks (T1–T85) — structural, correctness, security, deprecated syntax, performance smells, SQL 2017–2022 modern syntax |
 | [skills/sqlstats-review/SKILL.md](skills/sqlstats-review/SKILL.md) | STATISTICS IO/TIME parser + analysis: `sqlstats-review`. 27 checks (I1–I18 IO, W1–W9 time), per-statement tables, grand totals |
 | [skills/sqltrace-review/SKILL.md](skills/sqltrace-review/SKILL.md) | Profiler / XE trace analysis: `sqltrace-review`. 25 checks (X1–X12 event-level, X13–X25 workload aggregate), top-consumer tables |
@@ -102,8 +102,8 @@ Provides twenty-six slash-command skills — twenty-two specialised review skill
 | [mcp-server/src/skills-data.ts](mcp-server/src/skills-data.ts) | Generated file — run `npm run bundle` to regenerate from `skills/*/SKILL.md`. Do not edit manually |
 | [mcp-server/scripts/bundle-skills.ts](mcp-server/scripts/bundle-skills.ts) | Build-time codegen: reads all SKILL.md files + PERFORMANCE_TUNING_GUIDE.md → writes `skills-data.ts` |
 | [mcp-server/wrangler.toml](mcp-server/wrangler.toml) | Cloudflare Workers config — worker name `mssql-mcp`, live at `https://mssql-mcp.tsx113.workers.dev` |
-| [mcp-server/src/tools.ts](mcp-server/src/tools.ts) | MCP tools: `list_skills`, `get_skill`, `route_artifact` (13 artifact types including `mixed` → orchestrator) |
-| [mcp-server/src/resources.ts](mcp-server/src/resources.ts) | MCP resources: `mssql://skills`, `mssql://skills/{name}` (×18), `mssql://guide` |
+| [mcp-server/src/tools.ts](mcp-server/src/tools.ts) | MCP tools: `list_skills`, `get_skill`, `get_reference`, `route_artifact` (25 artifact types including `mixed` → orchestrator), plus one per-skill tool that accepts `input` |
+| [mcp-server/src/resources.ts](mcp-server/src/resources.ts) | MCP resources: `mssql://skills`, `mssql://skills/{name}` (×26), per-skill `/references` index and reference files, `mssql://guide`, `mssql://version-compat` |
 | [mcp-server/src/prompts.ts](mcp-server/src/prompts.ts) | MCP prompts: one per skill, accepts `{ input }` and returns analysis prompt via shared `buildAnalysisPrompt` |
 | [mcp-server/src/prompt-builder.ts](mcp-server/src/prompt-builder.ts) | Shared `buildAnalysisPrompt(skillName, skillContent, input)` helper used by both `tools.ts` and `prompts.ts` |
 | [.github/workflows/deploy-mcp.yml](.github/workflows/deploy-mcp.yml) | GitHub Actions CD — auto-deploys to Cloudflare Workers on push when `mcp-server/`, `skills/`, or `PERFORMANCE_TUNING_GUIDE.md` changes |
@@ -210,7 +210,7 @@ The hook watches for staged `skills/*/SKILL.md` changes and automatically runs `
 Rules discovered during development that must be respected in every session.
 
 ### Skill authoring standard
-All new and modified skills must conform to the Anthropic skill-creator best practices. Reference: [`.claude/docs/skill-creator-best-practices.md`](.claude/docs/skill-creator-best-practices.md). Automated checks run in `scripts/verify-docs.sh` (Checks 21–25): line count ≤ 900 guideline (hard fail at 1000), description ≥ 30 words with trigger phrases, `triggers:` field present, no bare ALWAYS/NEVER/MUST in body.
+All new and modified skills must conform to the Anthropic skill-creator best practices. Reference: [`.claude/docs/skill-creator-best-practices.md`](.claude/docs/skill-creator-best-practices.md). Automated checks run in `scripts/verify-docs.sh` (Checks 22–25): description ≥ 30 words with trigger phrases, `triggers:` field present, no bare ALWAYS/NEVER/MUST in body.
 
 ### Branch policy
 Every change must be made on a new branch — never commit directly to `main`. Before starting work, create a branch (e.g. `git checkout -b <type>/<short-description>`), commit there, and open a PR to merge into `main`. This keeps `main` clean and ensures all changes go through review. Branch names follow the commit `<type>` vocabulary (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`).

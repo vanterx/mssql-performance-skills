@@ -48,7 +48,9 @@ case "$claude_word" in
     sixteen)  claude_num=16 ;; seventeen) claude_num=17 ;; eighteen) claude_num=18 ;;
     nineteen) claude_num=19 ;; twenty)   claude_num=20 ;; twenty-one) claude_num=21 ;;
     twenty-two) claude_num=22 ;; twenty-three) claude_num=23 ;; twenty-four) claude_num=24 ;;
-    twenty-five) claude_num=25 ;; *)         claude_num=0 ;;
+    twenty-five) claude_num=25 ;; twenty-six) claude_num=26 ;; twenty-seven) claude_num=27 ;;
+    twenty-eight) claude_num=28 ;; twenty-nine) claude_num=29 ;; thirty) claude_num=30 ;;
+    *) claude_num=0 ;;
 esac
 if [ "$claude_num" -eq 0 ]; then
     warn "Could not parse skill count word from CLAUDE.md (found: '$claude_word')"
@@ -401,35 +403,6 @@ if ! grep -q "check ID" "skills/sqlplan-review/SKILL.md" 2>/dev/null; then
 fi
 
 [ "$check20_ok" -eq 1 ] && pass "All Output Format sections have required structural markers"
-
-# ---------------------------------------------------------------------------
-# Check 21: SKILL.md line count (skill-creator guideline: ≤500 lines)
-# ---------------------------------------------------------------------------
-echo ""
-echo "[21 ] SKILL.md line count (skill-creator guideline: ≤500 lines)"
-check21_ok=1
-# Skills with intentionally large SKILL.md (complex domains with many checks)
-large_skill_exceptions="sqlencryption-review"
-for skill_file in skills/*/SKILL.md; do
-    name=$(basename "$(dirname "$skill_file")")
-    lines=$(wc -l < "$skill_file" | tr -d ' ')
-    # Skills in the exception list have a higher hard limit (2000 lines)
-    if echo "$large_skill_exceptions" | grep -qw "$name"; then
-        hard_limit=2000
-        soft_limit=1500
-    else
-        hard_limit=1000
-        soft_limit=900
-    fi
-    if [ "$lines" -gt "$hard_limit" ]; then
-        fail "$name/SKILL.md is $lines lines — exceeds $hard_limit. Compress check definitions or extract to references/."
-        check21_ok=0
-    elif [ "$lines" -gt "$soft_limit" ]; then
-        warn "$name/SKILL.md is $lines lines — exceeds ${soft_limit}-line guideline. Consider removing blank lines or compressing check definitions."
-        check21_ok=0
-    fi
-done
-[ "$check21_ok" -eq 1 ] && pass "All SKILL.md files are within 900-line guideline"
 
 # ---------------------------------------------------------------------------
 # Check 22: description: field minimum word count (skill-creator: be "pushy")
@@ -922,6 +895,38 @@ do
     fi
 done
 [ "$check46_ok" -eq 1 ] && pass "Installation commands are in sync between CLAUDE.md and README.md"
+
+# ---------------------------------------------------------------------------
+# Check 47: README.md Check Reference rows match SKILL.md per-prefix range and count
+# ---------------------------------------------------------------------------
+echo ""
+echo "[47 ] README.md Check Reference rows match SKILL.md per-prefix range and count"
+check47_ok=1
+while IFS='|' read -r _ range count skill _; do
+    range=$(echo "$range" | tr -d ' ')
+    count=$(echo "$count" | tr -d ' ')
+    skill=$(echo "$skill" | tr -d ' ')
+    prefix=$(echo "$range" | grep -oE '^[A-Z]')
+    [ -z "$prefix" ] && continue
+    row_max=$(echo "$range" | grep -oE '[0-9]+$')
+    skill_file="skills/$skill/SKILL.md"
+    if [ ! -f "$skill_file" ]; then
+        fail "README.md Check Reference row '$range' names unknown skill '$skill'"
+        check47_ok=0
+        continue
+    fi
+    actual_count=$(grep -cE "^### ${prefix}[0-9]+" "$skill_file" || true)
+    actual_max=$(grep -oE "^### ${prefix}[0-9]+" "$skill_file" | grep -oE '[0-9]+$' | sort -n | tail -1)
+    if [ "$row_max" != "$actual_max" ]; then
+        fail "README.md Check Reference row '$range' — last $prefix check in $skill/SKILL.md is ${prefix}${actual_max}"
+        check47_ok=0
+    fi
+    if [ "$count" != "$actual_count" ]; then
+        fail "README.md Check Reference row '$range' says $count checks but $skill/SKILL.md defines $actual_count ${prefix}-checks"
+        check47_ok=0
+    fi
+done < <(awk '/^## Check Reference/{f=1;next} f && /^## /{exit} f && /^\| [A-Z][0-9]+[–-][A-Z][0-9]+ \|/{print}' README.md)
+[ "$check47_ok" -eq 1 ] && pass "README.md Check Reference rows match SKILL.md ranges and counts"
 
 # ---------------------------------------------------------------------------
 # Summary

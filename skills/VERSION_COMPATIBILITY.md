@@ -311,12 +311,12 @@ These checks analyze behaviors present since SQL Server 2008 R2:
 
 | "I'm on SQL…" | Run these skills without restrictions | Skip or expect partial results |
 |---|---|---|
-| **2022** | All 22 skills | Azure-specific checks silently skip on-premises |
-| **2019** | All 22 skills | 29 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback, TLS 1.3) skip |
-| **2017** | All 22 skills | Above + 22 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata, Always Encrypted Advanced) skip |
-| **2016** | All 22 skills | Above + 13 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
-| **2014** | 21 skills (no `sqlquerystore-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
-| **2012** | 21 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available); A22–A25, A72 (Backup Encryption, SQL 2014+); O15–O17 (BPE/ColumnStore/XTP clerks, SQL 2014+) unavailable |
-| **2008 R2** | 19 skills (no `sqlhadr-review`, `sqlclusterlog-review`, `sqlquerystore-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23); O3 (per-NUMA PLE, SQL 2012+) |
+| **2022** | All 26 skills | Azure-specific checks silently skip on-premises |
+| **2019** | All 26 skills | 29 SQL 2022-only checks (PSP, CE Feedback, Ledger, DOP Feedback, QS Hints, Plan Feedback, TLS 1.3) skip |
+| **2017** | All 26 skills | Above + 22 SQL 2019 checks (ADR, Scalar UDF inlining, BMoR, LOG_RATE_GOVERNOR, TempDB metadata, Always Encrypted Advanced) skip |
+| **2016** | All 26 skills | Above + 13 SQL 2017 checks (Interleaved Execution, STRING_AGG, QS wait stats, auto-tuning) skip |
+| **2014** | 25 skills (no `sqlquerystore-review`) | Above + all QS checks; R21 fires (In-Memory OLTP available) |
+| **2012** | 25 skills (no `sqlquerystore-review`) | Above + R21 (In-Memory OLTP not yet available); A22–A25, A72 (Backup Encryption, SQL 2014+); O15–O17 (BPE/ColumnStore/XTP clerks, SQL 2014+) unavailable |
+| **2008 R2** | 23 skills (no `sqlhadr-review`, `sqlclusterlog-review`, `sqlquerystore-review`) | Above + all HADR/cluster checks; Columnstore checks (I16, X23); O3 (per-NUMA PLE, SQL 2012+) |
 | **Azure SQL DB** | `tsql-review`, `sqlstats-review`, `sqlplan-review`, `sqlindex-advisor`, `sqldeadlock-review`, `sqlplan-batch`, `sqlplan-compare`, `sqlquerystore-review`, `sqlprocstats-review` | `sqlhadr-review`, `sqlclusterlog-review` not applicable; `sqltrace-review`/`sqlwait-review` partial (wait types and XE event classes differ); `sqlspn-review` partial (K1–K31 not relevant for Entra-only auth); `sqlerrorlog-review`, `sqlencryption-review`, `sqldbconfig-review`, `sqlmemory-review`, `sqldiskio-review`, `mssql-performance-review` partial (instance-level settings are platform-managed); `sqlbootstraplog-review` not applicable (no user-visible setup); `ssrstracelog-review` not applicable (SSRS does not run on Azure SQL Database) |
-| **Azure SQL MI** | 20 skills (no `sqlbootstraplog-review`, `ssrstracelog-review` — neither has a user-visible footprint on managed instances) | `sqlhadr-review`/`sqlclusterlog-review` partial (MI uses managed HA, not all WSFC constructs apply) |
+| **Azure SQL MI** | 24 skills (no `sqlbootstraplog-review`, `ssrstracelog-review` — neither has a user-visible footprint on managed instances) | `sqlhadr-review`/`sqlclusterlog-review` partial (MI uses managed HA, not all WSFC constructs apply) |

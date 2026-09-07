@@ -29,7 +29,7 @@ shipped and a public advisory published after the patch is live.
 
 ### MCP Server
 
-- **No authentication** — the server is a public read-only knowledge base. All 16 skills are
+- **No authentication** — the server is a public read-only knowledge base. All 26 skills are
   public Markdown. No user data, credentials, or sensitive information is stored or transmitted.
 - **No database** — all content is bundled as static TypeScript constants at build time.
   There is no SQL, no ORM, no dynamic queries.
