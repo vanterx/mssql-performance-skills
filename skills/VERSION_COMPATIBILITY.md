@@ -1,6 +1,6 @@
 # SQL Server Version Compatibility
 
-Which of the 836 checks in this library apply to your SQL Server version.
+Which of the 850 checks in this library apply to your SQL Server version.
 
 ---
 
@@ -56,7 +56,7 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 - `sqlquerystore-review` requires **Query Store** (SQL 2016+). On SQL 2016 the check count is partial because `sys.query_store_wait_stats` (SQL 2017+) and IQP/PSP/CE Feedback signals (SQL 2019–2022) are not available.
 - `sqlwait-review` on Azure SQL DB/MI: many wait types differ or are not exposed. Core I/O, lock, and parallelism checks still apply.
 - `sqltrace-review` on Azure: Extended Events are available but some event classes (XE trace capture mechanics) differ from on-premises.
-- `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Azure AD–only auth; K32–K33 are Azure-specific.
+- `sqlspn-review` on Azure: K1–K31 (on-premises SPN/Kerberos) are not relevant for Entra-only auth; K32–K33 are Azure-specific. K33 covers Azure SQL Managed Instance Windows Authentication via Microsoft Entra Kerberos — there is no on-premises `MSSQLSvc` SPN to register for a managed instance. K49–K51 apply only to SQL Server on Linux.
 - `sqlencryption-review` on SQL 2008 R2: A9–A16 (AE, SQL 2016+), A22–A25 (backup enc, SQL 2014+), A82 (SSISDB, SQL 2012+), A87/A88 (DDM, SQL 2016+) not applicable. On SQL 2012: A82 applicable, A87/A88 still skipped. On SQL 2016: A9–A16, A87/A88 applicable; A10/A12 (enclave), A63–A67 (AE Advanced, SQL 2019+) skipped. On SQL 2019: A59, A73–A76, A94 (TLS 1.3, Ledger, GDPR append-only, SQL 2022+) skipped. Azure SQL DB/MI: A50, A51, A77–A80, A101, A112 are Azure-specific; A53 (`sys.sensitivity_classifications`) available SQL 2019+/Azure.
 - `sqldbconfig-review` on SQL 2008 R2–SQL 2016 (pre-SP2): B8 (`sql_memory_model_desc` — SQL 2012 SP4+), B22 (`sys.dm_server_services.instant_file_initialization_enabled` — SQL 2012 SP4+), and B19 via `sys.dm_db_log_info` (SQL 2016 SP2+) fall back to ERRORLOG or `DBCC LOGINFO` — mark as [Unverified] if those sources are not included in the input. B1/B3 `numa_node_count` in `sys.dm_os_sys_info` requires SQL 2016 SP2+; use `cpu_count` as a proxy on older versions. All B10–B18 checks (sys.databases columns) are available SQL 2005+. B29 (service-SID `NT SERVICE\*` sysadmin membership) applies SQL 2012+ (per-service-SID/virtual-account era), Windows only. Azure SQL DB: most instance-level sp_configure checks (B1–B9, B24–B28) are not user-configurable and should be skipped, as is B29 (no Windows service accounts on the managed platform); B10–B18 database-level checks apply.
 - `sqlmemory-review`: O3 (per-NUMA-node PLE) requires SQL 2012+. O15 (Buffer Pool Extension) applies SQL 2014+ (Enterprise/Standard editions only). O16 (ColumnStore clerk) and O17 (XTP clerk) require SQL 2014+. On Azure SQL DB: O3, O15, O18 (OS-level pressure) do not apply, and O19 (LPIM)/O20 (Max Server Memory) are platform-managed.
@@ -69,17 +69,17 @@ Each check's **Trigger** line documents its minimum SQL Server version using the
 
 ## Active Check Count by SQL Server Version
 
-These cumulative counts show how many of the 836 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
+These cumulative counts show how many of the 850 total checks are active on a given version of on-premises SQL Server. Checks that gate on absent features are automatically skipped (`NOT ASSESSED`). The 45 migration-readiness checks (Y1–Y15, J1–J15, M1–M16) are not version-gated — they assess portability of a planned move rather than a feature available on the running version — so they are active on every row below. H21 is retired (merged into `sqlag-review` F15) and is not counted on any row.
 
 | SQL Server Version | Active checks | Notes |
 |--------------------|:-------------:|-------|
-| SQL Server 2022 | **760** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
-| SQL Server 2019 | **729** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
-| SQL Server 2017 | **707** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
-| SQL Server 2016 | **694** | −13 SQL 2017-only checks unavailable |
-| SQL Server 2014 | **655** | −39 more: S37/S38 (SQL 2016 SP2+/SP1+) unavailable; U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
-| SQL Server 2012 | **649** | −6 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable |
-| SQL Server 2008 R2 | **553** | −96 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), I16, X23, B29 (service-SID sysadmin membership, SQL 2012+) unavailable |
+| SQL Server 2022 | **774** | Azure-specific checks (I15, I17, K32, K33, A50, A51, A77–A80, A112) not applicable; E33 and L27 apply when Azure Arc agent is installed |
+| SQL Server 2019 | **743** | −31 SQL 2022-only checks unavailable (includes A59, A73–A76, A94, F31) |
+| SQL Server 2017 | **721** | −22 SQL 2019-only checks unavailable (includes A2, A10, A12, A53, A63–A67) |
+| SQL Server 2016 | **704** | −17 SQL 2017-only checks unavailable (includes K42 linked-server KCD floor and K49–K51 SQL Server on Linux) |
+| SQL Server 2014 | **665** | −39 more: S37/S38 (SQL 2016 SP2+/SP1+) unavailable; U20/U21 (setup-time IFI/TempDB parameters, SQL 2016+) unavailable; all Query Store base checks unavailable; A9/A11/A13–A16 (AE, SQL 2016+), A87/A88 (DDM, SQL 2016+), F32 (distributed AG, SQL 2016+) unavailable |
+| SQL Server 2012 | **657** | −8 more: A22–A25 (Backup Encryption, SQL 2014+), A72, R21 unavailable; K11/K34 (gMSA service account, SQL 2014+) unavailable |
+| SQL Server 2008 R2 | **560** | −97 more: all 57 active Always On AG/WSFC checks and 37 AG-config checks (F1–F37) unavailable; A82 (SSISDB, SQL 2012+), K43 (SSISDB double-hop, SQL 2012+), I16, X23, B29 (service-SID sysadmin membership, SQL 2012+) unavailable |
 
 **Azure SQL Database / Azure SQL Managed Instance:** Active check counts vary significantly by service tier and feature availability — use the skill matrix above and the cloud-specific notes below.
 
@@ -118,6 +118,8 @@ These checks require features introduced in SQL Server 2012.
 | A24 | `sqlencryption-review` | Backup Encryption Using TRIPLE_DES_3KEY or AES_128 | Backup encryption algorithm metadata (SQL 2014+) |
 | A25 | `sqlencryption-review` | Backup Encryption Certificate Expiring Within 90 Days | Encrypted backup cert tracking (SQL 2014+) |
 | A72 | `sqlencryption-review` | Log Backup Encryption Not Enabled | Log backup encryption (`WITH ENCRYPTION` on log backups) — SQL 2014+ |
+| K11 | `sqlspn-review` | MSA/gMSA Auto-Registration Gap | gMSA as a SQL Server service account: standalone instances SQL 2014+, failover cluster instances and availability groups SQL 2016+ |
+| K34 | `sqlspn-review` | gMSA Password Rollover SPN Drift | gMSA as a SQL Server service account: standalone instances SQL 2014+, failover cluster instances and availability groups SQL 2016+ |
 
 ### SQL Server 2016+
 
@@ -130,6 +132,7 @@ These checks require features introduced in SQL Server 2012.
 | U21 | `sqlbootstraplog-review` | TempDB Setup Parameters Undersized | Setup-time TempDB parameters `SQLTEMPDB*` (SQL 2016+) |
 | H25 | `sqlhadr-review` | Parallel Redo Worker Saturation | Parallel redo for AG secondaries (SQL 2016+) |
 | K36 | `sqlspn-review` | Distributed AG Forwarder Listener SPN Missing | Distributed Availability Groups (SQL 2016+) |
+| K43 | `sqlspn-review` | SSISDB Package Double-Hop Under Constrained Delegation | SSISDB catalog (SQL 2012+) |
 | F32 | `sqlag-review` | Distributed AG Replication Link Set to Synchronous | Distributed Availability Groups (SQL 2016+) |
 | P16 | `sqldeadlock-review` | Ledger / Temporal History Table Deadlock | Temporal tables only (SQL 2016+); see SQL 2022+ for Ledger aspect |
 | R25 | `sqlprocstats-review` | QS Plan Instability Correlated to Procstats Variance | Query Store (SQL 2016+) |
@@ -160,6 +163,10 @@ These checks require features introduced in SQL Server 2012.
 | Q21 | `sqlquerystore-review` | Parallel Execution Wait Ratio Above Threshold | `sys.query_store_wait_stats` (SQL 2017+) |
 | Q22 | `sqlquerystore-review` | Log I/O Wait Dominant for High-Write Queries | `sys.query_store_wait_stats` (SQL 2017+) |
 | Q32 | `sqlquerystore-review` | Automatic Tuning FORCE_LAST_GOOD_PLAN Not Enabled | `sys.dm_db_tuning_recommendations` + `sys.database_automatic_tuning_options` (SQL 2017+) |
+| K42 | `sqlspn-review` | Linked Server Constrained Delegation Below SQL 2017 CU17 | Linked server pass-through authentication with constrained delegation (SQL 2017 CU17+; full delegation only below that build) |
+| K49 | `sqlspn-review` | Keytab Not Configured in mssql-conf | SQL Server on Linux (SQL 2017+), including containers |
+| K50 | `sqlspn-review` | Keytab Encryption Types Mismatch the AD Account | SQL Server on Linux (SQL 2017+), including containers |
+| K51 | `sqlspn-review` | Keytab File Ownership or Permissions Wrong | SQL Server on Linux (SQL 2017+), including containers |
 
 ### SQL Server 2019+
 
@@ -244,7 +251,7 @@ These checks only fire on Azure SQL Database or Azure SQL Managed Instance. They
 | I15 | `sqlstats-review` | Azure SQL Page Server Reads Detected | Azure SQL Hyperscale only |
 | I17 | `sqlstats-review` | Remote Page Server Reads Dominant | Azure SQL Hyperscale only |
 | K32 | `sqlspn-review` | Entra-Only Auth With Orphaned AD SPN | Azure SQL (Entra ID / EXTERNAL_PROVIDER auth) |
-| K33 | `sqlspn-review` | Azure SQL MI SPN for On-Premises Clients | Azure SQL Managed Instance only |
+| K33 | `sqlspn-review` | Azure SQL MI Windows Authentication Flow Not Configured | Azure SQL Managed Instance only (Microsoft Entra Kerberos — modern interactive or incoming trust-based flow) |
 | A50 | `sqlencryption-review` | Azure Key Vault BYOK TDE Without Automatic Key Rotation | Azure SQL / SQL on Azure VM with AKV TDE protector |
 | A51 | `sqlencryption-review` | TDE Using Service-Managed Key in Compliance-Sensitive Azure SQL Environment | Azure SQL service-managed TDE (`encryptor_type = SERVICE_MANAGED`) |
 | A101 | `sqlencryption-review` | Azure Key Vault Soft-Delete or Purge Protection Not Enabled | Azure SQL using AKV BYOK TDE or AE CMK |
@@ -280,7 +287,7 @@ SQL Server allows a database to run at a **compatibility level lower than the in
 
 ## Universal Checks (SQL 2008 R2+)
 
-**553 of 836 checks (66.1%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
+**560 of 850 checks (65.9%)** have no version gate and apply to every supported SQL Server version from SQL Server 2008 R2 through SQL Server 2022, Azure SQL Database, and Azure SQL Managed Instance.
 
 These checks analyze behaviors present since SQL Server 2008 R2:
 
