@@ -16,7 +16,7 @@
   SQL statement — useful for identifying expensive statements inside ad-hoc
   batches, ORMs, or dynamic SQL that is not wrapped in a procedure.
 
-  Feed report output into: /procstats-review (R1–R15 checks apply equally)
+  Feed report output into: /sqlprocstats-review (R1–R15 checks apply equally)
   Or use the query_stats report query at the bottom of 04_report_queries.sql.
 ================================================================================
 */

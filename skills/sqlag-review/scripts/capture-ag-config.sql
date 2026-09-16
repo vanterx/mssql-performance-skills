@@ -63,26 +63,29 @@ JOIN sys.availability_group_listener_ip_addresses aglip
     ON agl.listener_id = aglip.listener_id;
 
 PRINT '--- Query 4: Mirroring Endpoint ---';
+-- port is on sys.tcp_endpoints, not sys.database_mirroring_endpoints
 SELECT
-    name,
-    state_desc,
-    role_desc,
-    connection_auth_desc,
-    is_encryption_enabled,
-    encryption_algorithm_desc,
-    port
-FROM sys.database_mirroring_endpoints;
+    dme.name,
+    dme.state_desc,
+    dme.role_desc,
+    dme.connection_auth_desc,
+    dme.is_encryption_enabled,
+    dme.encryption_algorithm_desc,
+    te.port
+FROM sys.database_mirroring_endpoints dme
+JOIN sys.tcp_endpoints te ON te.endpoint_id = dme.endpoint_id;
 
 PRINT '--- Query 5: AG Database Recovery Models ---';
+-- LEFT JOIN: databases not yet joined on this replica have no local sys.databases row
 SELECT
-    adc.ag_database_id,
-    db.name                                             AS database_name,
+    adc.group_database_id,
+    adc.database_name,
     db.recovery_model_desc,
     db.is_read_committed_snapshot_on,
     db.state_desc
 FROM sys.availability_databases_cluster adc
-JOIN sys.databases db ON adc.database_id = db.database_id
-ORDER BY db.name;
+LEFT JOIN sys.databases db ON db.group_database_id = adc.group_database_id
+ORDER BY adc.database_name;
 
 PRINT '--- Query 6: Endpoint Certificates (certificate auth only) ---';
 SELECT
@@ -97,23 +100,31 @@ ORDER BY expiry_date;
 
 PRINT '--- Query 7: Automatic Seeding Status (if applicable) ---';
 SELECT
-    local_physical_seeding_id,
-    ag_id,
-    local_database_id,
-    remote_machine_name,
-    seeding_id,
-    start_time,
-    completion_time,
-    failure_message,
-    number_of_attempts
-FROM sys.dm_hadr_automatic_seeding;
+    ag.name                                             AS ag_name,
+    adc.database_name,
+    autos.ag_remote_replica_id,
+    autos.is_source,
+    autos.start_time,
+    autos.completion_time,
+    autos.current_state,
+    autos.performed_seeding,
+    autos.failure_state_desc,
+    autos.error_code,
+    autos.number_of_attempts
+FROM sys.dm_hadr_automatic_seeding autos
+LEFT JOIN sys.availability_groups ag
+    ON ag.group_id = autos.ag_id
+LEFT JOIN sys.availability_databases_cluster adc
+    ON adc.group_database_id = autos.ag_db_id
+ORDER BY autos.start_time DESC;
 
 PRINT '--- Query 8: XE Sessions for AG Diagnostics ---';
 SELECT
     name,
-    event_session_address,
+    address,
     create_time,
-    total_dispatched_count
+    dropped_event_count,
+    dropped_buffer_count
 FROM sys.dm_xe_sessions
 WHERE name LIKE '%hadr%'
    OR name LIKE '%ag%'

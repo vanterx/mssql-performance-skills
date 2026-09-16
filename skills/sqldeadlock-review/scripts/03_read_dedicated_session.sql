@@ -1,10 +1,10 @@
 /*
 ================================================================================
-  skills/sqlplan-deadlock/scripts/03_read_dedicated_session.sql
-  Read DeadlockAndBlocking Session for /sqlplan-deadlock
+  skills/sqldeadlock-review/scripts/03_read_dedicated_session.sql
+  Read DeadlockAndBlocking Session for /sqldeadlock-review
 ================================================================================
   Reads from the DeadlockAndBlocking session created by 02_create_dedicated_xe_session.sql.
-  Paste the deadlock_xml column value into /sqlplan-deadlock.
+  Paste the deadlock_xml column value into /sqldeadlock-review.
 ================================================================================
 */
 

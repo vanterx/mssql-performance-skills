@@ -6,7 +6,7 @@
   Run any of these queries after at least ONE collection has completed
   (two collections are needed for meaningful delta values).
 
-  Paste the result grid into Claude and run:  /procstats-review
+  Paste the result grid into Claude and run:  /sqlprocstats-review
 
   Queries:
     Q1  Top CPU Consumers         (feeds R1, R6, R8, R9, R14)
@@ -36,7 +36,7 @@ GO
 
 /* ============================================================================
    Q1  — Top CPU Consumers (most recent snapshot)
-   Paste this output into /procstats-review for checks R1, R6, R8, R9, R14.
+   Paste this output into /sqlprocstats-review for checks R1, R6, R8, R9, R14.
    ============================================================================ */
 
 DECLARE @latest_collection datetime2(7) =
@@ -68,7 +68,7 @@ GO
 
 /* ============================================================================
    Q2  — Top Read Consumers (most recent snapshot)
-   Paste this output into /procstats-review for checks R2, R5, R7, R15.
+   Paste this output into /sqlprocstats-review for checks R2, R5, R7, R15.
    ============================================================================ */
 
 DECLARE @latest_collection datetime2(7) =
@@ -102,7 +102,7 @@ GO
 
 /* ============================================================================
    Q3  — Top Execution Frequency (most recent snapshot)
-   Paste this output into /procstats-review for checks R4, R11, R12.
+   Paste this output into /sqlprocstats-review for checks R4, R11, R12.
    ============================================================================ */
 
 DECLARE @latest_collection datetime2(7) =
@@ -134,7 +134,7 @@ GO
 
 /* ============================================================================
    Q4  — Per-Execution Averages (most recent snapshot)
-   Paste this output into /procstats-review for checks R6, R7, R8, R9, R10.
+   Paste this output into /sqlprocstats-review for checks R6, R7, R8, R9, R10.
    Min execution filter (>= 5) prevents noise from one-off executions.
    ============================================================================ */
 
@@ -175,7 +175,7 @@ GO
 
 /* ============================================================================
    Q5  — Trend / Time Series (all snapshots for top objects by CPU)
-   Paste this output into /procstats-review for checks R16, R17, R18, R19, R20.
+   Paste this output into /sqlprocstats-review for checks R16, R17, R18, R19, R20.
    Requires >= 3 completed snapshots. Shows the last 24 hours by default.
    ============================================================================ */
 
@@ -216,5 +216,5 @@ ORDER BY
     p.database_name, p.object_name, p.collection_time;
 GO
 
-PRINT 'Report queries ready. Copy any result set and paste into /procstats-review.';
+PRINT 'Report queries ready. Copy any result set and paste into /sqlprocstats-review.';
 GO

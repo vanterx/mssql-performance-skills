@@ -15,7 +15,7 @@
   After running this script, execute in order:
     02_usp_collect_procstats.sql  — procedure/trigger/function stats collector
     03_usp_calculate_deltas.sql   — delta calculator (called by 02)
-    04_report_queries.sql         — reporting queries to paste into /procstats-review
+    04_report_queries.sql         — reporting queries to paste into /sqlprocstats-review
     05_create_agent_job.sql       — SQL Agent job (calls usp_CollectAll)
     06_usp_collect_wait_stats.sql — sys.dm_os_wait_stats collector
     07_usp_collect_query_stats.sql — sys.dm_exec_query_stats collector

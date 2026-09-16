@@ -35,11 +35,16 @@ SELECT TOP 5000
     app_name        = xdr.value('(action[@name="client_app_name"]/value)[1]', 'nvarchar(128)'),
     host_name       = xdr.value('(action[@name="client_hostname"]/value)[1]', 'nvarchar(128)'),
     login_name      = xdr.value('(action[@name="server_principal_name"]/value)[1]', 'nvarchar(128)'),
-    query_hash      = xdr.value('(action[@name="query_hash"]/value)[1]',    'binary(8)')
+    /* XE emits query_hash as uint64 text; map to binary(8) so it matches
+       sys.dm_exec_query_stats.query_hash */
+    query_hash      = CAST(CAST(CASE WHEN qh.qh_dec > 9223372036854775807
+                                     THEN qh.qh_dec - 18446744073709551616
+                                     ELSE qh.qh_dec END AS bigint) AS binary(8))
 FROM (
     SELECT CAST(event_data AS xml) AS xdr_raw
     FROM sys.fn_xe_file_target_read_file(@xe_file_path, NULL, NULL, NULL)
     WHERE object_name IN ('sql_statement_completed', 'rpc_completed', 'sql_batch_completed')
 ) AS raw_data
 CROSS APPLY raw_data.xdr_raw.nodes('event') AS XEventData(xdr)
+CROSS APPLY (SELECT qh_dec = xdr.value('(action[@name="query_hash"]/value)[1]', 'decimal(20,0)')) AS qh
 ORDER BY start_time DESC;

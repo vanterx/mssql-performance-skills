@@ -52,7 +52,7 @@ END;
 EXECUTE msdb.dbo.sp_add_job
     @job_name             = @job_name,
     @enabled              = 1,
-    @description          = N'DMV Collection Framework — captures sys.dm_exec_procedure_stats, dm_exec_trigger_stats, dm_exec_function_stats, dm_os_wait_stats, dm_exec_query_stats, dm_io_virtual_file_stats, dm_os_memory_clerks, and dm_os_performance_counters into the collect schema. Feed report output into /procstats-review or /sqlwait-review.',
+    @description          = N'DMV Collection Framework — captures sys.dm_exec_procedure_stats, dm_exec_trigger_stats, dm_exec_function_stats, dm_os_wait_stats, dm_exec_query_stats, dm_io_virtual_file_stats, dm_os_memory_clerks, and dm_os_performance_counters into the collect schema. Feed report output into /sqlprocstats-review or /sqlwait-review.',
     @category_name        = N'[Uncategorized (Local)]',
     @owner_login_name     = N'sa',
     @job_id               = @job_id OUTPUT;

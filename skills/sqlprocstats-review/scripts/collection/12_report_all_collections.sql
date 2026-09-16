@@ -7,10 +7,10 @@
   produce output for each skill:
 
     Section 1  — collect.wait_stats      → paste into /sqlwait-review
-    Section 2  — collect.query_stats     → paste into /procstats-review
+    Section 2  — collect.query_stats     → paste into /sqlprocstats-review
     Section 3  — collect.file_io_stats   → paste into /sqlwait-review (V40)
     Section 4  — collect.memory_stats    → context for /sqlwait-review
-    Section 5  — collect.perf_counter_stats → context for /sqlwait-review / /procstats-review
+    Section 5  — collect.perf_counter_stats → context for /sqlwait-review / /sqlprocstats-review
     Section 6  — collect.collection_log  → health check (confirm collection is working)
 ================================================================================
 */
@@ -47,7 +47,7 @@ WHERE collection_time = @latest
 ORDER BY wait_time_ms_delta DESC;
 
 /* ============================================================================
-   SECTION 2 — Query Stats Top CPU Report  (paste into /procstats-review)
+   SECTION 2 — Query Stats Top CPU Report  (paste into /sqlprocstats-review)
    Shows top statement-level CPU consumers in the most recent interval.
    ============================================================================ */
 
@@ -58,7 +58,6 @@ DECLARE @latest_qs datetime2(7) =
 SELECT TOP 20
     collection_time,
     database_name,
-    object_name        = ISNULL(object_name, '(ad-hoc)'),
     sql_preview        = LEFT(
                             CAST(DECOMPRESS(query_text_compressed) AS nvarchar(max)),
                             200),

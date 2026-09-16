@@ -42,6 +42,8 @@ FROM sys.query_store_plan AS p
 JOIN sys.query_store_runtime_stats AS rs ON rs.plan_id = p.plan_id
 WHERE p.query_id = @query_id
 ORDER BY rs.last_execution_time DESC;
+/* New batch — Method B declares its own @query_id */
+GO
 
 /* ============================================================================
    B — Get baseline + regressed plan pair for /sqlplan-compare

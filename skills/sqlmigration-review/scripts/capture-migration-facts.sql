@@ -25,7 +25,9 @@ FROM sys.tables t
 WHERE t.is_memory_optimized = 1;
 
 -- Query 5: Backup chain -- full/differential/log, most recent 14 days
-SELECT database_name, type_desc, backup_start_date, backup_finish_date,
+-- backupset.type: D = full, I = differential, L = log, F = file/filegroup,
+-- G = differential file, P = partial, Q = differential partial
+SELECT database_name, type AS backup_type, is_copy_only, backup_start_date, backup_finish_date,
        differential_base_lsn, first_lsn, last_lsn,
        is_password_protected, key_algorithm, encryptor_type
 FROM msdb.dbo.backupset

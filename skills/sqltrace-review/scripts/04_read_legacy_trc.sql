@@ -25,7 +25,7 @@ SELECT TOP 5000
     start_time      = CAST(t.StartTime AS datetime2(3)),
     database_name   = t.DatabaseName,
     object_name     = t.ObjectName,
-    sql_text        = LEFT(t.TextData, 500),
+    sql_text        = LEFT(CAST(t.TextData AS nvarchar(max)), 500),  /* TextData is ntext */
     duration_us     = t.Duration,              /* microseconds */
     cpu_ms          = t.CPU,                   /* milliseconds */
     logical_reads   = t.Reads,
@@ -57,7 +57,7 @@ SELECT TOP 20
     event_name        = te.name,
     database_name     = t.DatabaseName,
     object_name       = t.ObjectName,
-    sql_preview       = LEFT(MAX(t.TextData), 200),
+    sql_preview       = LEFT(MAX(CAST(t.TextData AS nvarchar(max))), 200),
     execution_count   = COUNT(*),
     total_duration_ms = SUM(t.Duration) / 1000,
     avg_duration_ms   = AVG(t.Duration) / 1000,
