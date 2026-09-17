@@ -25,8 +25,6 @@ GO
 SET NOCOUNT ON;
 GO
 
-DECLARE @duration_filter bigint = 100000;   /* microseconds — change as needed */
-
 /* ── Drop existing session if present ─────────────────────────────────────── */
 
 IF EXISTS (SELECT 1 FROM sys.server_event_sessions WHERE name = N'WorkloadCapture')
@@ -38,49 +36,54 @@ GO
 
 /* ── Option A: Ring buffer target (ad-hoc, short captures) ─────────────────── */
 
+/* Inside each ADD EVENT ( ... ) the clause order is SET, ACTION, WHERE.
+   duration is in microseconds: 100000 = 100 ms — change all three thresholds together. */
 CREATE EVENT SESSION [WorkloadCapture] ON SERVER
 ADD EVENT sqlserver.sql_statement_completed
     (
-        WHERE (duration > 100000)   /* change threshold here */
         ACTION
         (
             sqlserver.client_app_name,
             sqlserver.client_hostname,
             sqlserver.database_name,
             sqlserver.server_principal_name,
+            sqlserver.session_id,
             sqlserver.sql_text,
             sqlserver.plan_handle,
             sqlserver.query_hash
         )
+        WHERE (duration > 100000)   /* change threshold here */
     ),
 ADD EVENT sqlserver.rpc_completed
     (
-        WHERE (duration > 100000)
         ACTION
         (
             sqlserver.client_app_name,
             sqlserver.client_hostname,
             sqlserver.database_name,
             sqlserver.server_principal_name,
+            sqlserver.session_id,
             sqlserver.sql_text,
             sqlserver.plan_handle,
             sqlserver.query_hash
         )
+        WHERE (duration > 100000)
     ),
 ADD EVENT sqlserver.sql_batch_completed
     (
-        WHERE (duration > 100000)
         ACTION
         (
             sqlserver.client_app_name,
             sqlserver.client_hostname,
             sqlserver.database_name,
             sqlserver.server_principal_name,
+            sqlserver.session_id,
             sqlserver.sql_text
         )
+        WHERE (duration > 100000)
     )
 ADD TARGET package0.ring_buffer
-    (SET max_memory = 4096,      /* 4 MB — keep ≤ 4096 KB; larger values can pin significant memory */
+    (SET max_memory = 1024,      /* KB — Microsoft recommends ≤ 1024 KB to avoid truncated target XML */
          max_events_limit = 1000)
 WITH
 (

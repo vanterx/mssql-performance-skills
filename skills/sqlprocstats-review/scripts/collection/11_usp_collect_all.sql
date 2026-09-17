@@ -31,9 +31,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE
-        @start_time datetime2(7) = SYSDATETIME(),
-        @collectors TABLE (name sysname, seq int);
+    DECLARE @start_time datetime2(7) = SYSDATETIME();
+    /* A table variable must be the only variable in its DECLARE statement */
+    DECLARE @collectors TABLE (name sysname, seq int);
 
     INSERT @collectors (name, seq) VALUES
         ('usp_CollectWaitStats',    1),

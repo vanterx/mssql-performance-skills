@@ -1,7 +1,7 @@
 /*
 ================================================================================
-  skills/sqlplan-deadlock/scripts/01_read_system_health_deadlocks.sql
-  Deadlock Graph Capture for /sqlplan-deadlock
+  skills/sqldeadlock-review/scripts/01_read_system_health_deadlocks.sql
+  Deadlock Graph Capture for /sqldeadlock-review
 ================================================================================
   The system_health Extended Events session captures deadlock graphs
   automatically on every SQL Server instance (2012+). No setup required.
@@ -9,7 +9,7 @@
   capture xml_deadlock_report events — use Profiler or a custom XE session there.
 
   Run Query A to retrieve recent deadlock graphs, then either:
-    a) Paste the XML directly into Claude and run /sqlplan-deadlock
+    a) Paste the XML directly into Claude and run /sqldeadlock-review
     b) Save as .xdl file and open in SSMS to view the visual graph
 
   Queries:
@@ -22,12 +22,12 @@
 
 /* ============================================================================
    QUERY A — Read Deadlock XML from system_health Ring Buffer
-   Run this, then paste the XML column value into /sqlplan-deadlock
+   Run this, then paste the XML column value into /sqldeadlock-review
    ============================================================================ */
 
 SELECT
     deadlock_time  = xdr.value('@timestamp', 'datetime2(3)'),
-    deadlock_xml   = CAST(xdr.query('.') AS xml)   /* paste this XML into /sqlplan-deadlock */
+    deadlock_xml   = CAST(xdr.query('.') AS xml)   /* paste this XML into /sqldeadlock-review */
 FROM (
     SELECT CAST(target_data AS xml) AS target_data
     FROM sys.dm_xe_sessions s
@@ -51,7 +51,7 @@ ORDER BY deadlock_time DESC;
    ============================================================================ */
 
 SELECT
-    deadlock_hour  = DATEADD(HOUR, DATEDIFF(HOUR, 0, xdr.value('@timestamp', 'datetime2(3)')), 0),
+    deadlock_hour  = h.deadlock_hour,
     deadlock_count = COUNT(*)
 FROM (
     SELECT CAST(target_data AS xml) AS target_data
@@ -63,8 +63,12 @@ FROM (
 ) AS raw_data
 CROSS APPLY
     target_data.nodes('//RingBufferTarget/event[@name="xml_deadlock_report"]') AS events(xdr)
-GROUP BY DATEADD(HOUR, DATEDIFF(HOUR, 0, xdr.value('@timestamp', 'datetime2(3)')), 0)
-ORDER BY deadlock_hour DESC;
+/* XML methods are not allowed in GROUP BY — compute the hour bucket in an APPLY */
+CROSS APPLY (
+    SELECT deadlock_hour = DATEADD(HOUR, DATEDIFF(HOUR, 0, xdr.value('@timestamp', 'datetime2(3)')), 0)
+) AS h
+GROUP BY h.deadlock_hour
+ORDER BY h.deadlock_hour DESC;
 
 /* ============================================================================
    QUERY C — Read from system_health File Target

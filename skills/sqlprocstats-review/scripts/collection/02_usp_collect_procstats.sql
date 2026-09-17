@@ -130,6 +130,9 @@ BEGIN
             row_hash            = NULL    /* computed below */
         FROM sys.dm_exec_procedure_stats AS ps
         WHERE ps.execution_count >= @min_execs
+          /* DB_NAME() is NULL for the Resource database (32767) and dropped
+             databases — database_name is NOT NULL, so skip those rows */
+          AND DB_NAME(ps.database_id) IS NOT NULL
           AND (  @exclude_sys = 0
               OR ps.database_id NOT IN (1, 2, 3, 4))  /* skip master/model/msdb/tempdb */
         OPTION (RECOMPILE);
@@ -152,6 +155,7 @@ BEGIN
             NULL, NULL, NULL, NULL
         FROM sys.dm_exec_trigger_stats AS ts
         WHERE ts.execution_count >= @min_execs
+          AND DB_NAME(ts.database_id) IS NOT NULL
           AND (  @exclude_sys = 0
               OR ts.database_id NOT IN (1, 2, 3, 4))
         OPTION (RECOMPILE);
@@ -175,6 +179,7 @@ BEGIN
                 NULL, NULL, NULL, NULL
             FROM sys.dm_exec_function_stats AS fs
             WHERE fs.execution_count >= @min_execs
+              AND DB_NAME(fs.database_id) IS NOT NULL
               AND (  @exclude_sys = 0
                   OR fs.database_id NOT IN (1, 2, 3, 4))
             OPTION (RECOMPILE);
@@ -239,7 +244,9 @@ BEGIN
                   AND h.object_id     = s.object_id
                   AND h.plan_handle   = s.plan_handle
                   AND h.row_hash      = s.row_hash);
-            PRINT CONCAT('Staged rows: ', (SELECT COUNT(*) FROM #staged),
+            /* PRINT does not allow subqueries — capture the count first */
+            DECLARE @rows_staged int = (SELECT COUNT(*) FROM #staged);
+            PRINT CONCAT('Staged rows: ', @rows_staged,
                          '  |  Unchanged (skip): ', @rows_skipped);
         END;
 

@@ -1,6 +1,6 @@
 /*
 ================================================================================
-  skills/sqlplan-deadlock/scripts/02_create_dedicated_xe_session.sql
+  skills/sqldeadlock-review/scripts/02_create_dedicated_xe_session.sql
   Dedicated Deadlock + Blocking Capture Session (Optional)
 ================================================================================
   Use this when:
@@ -9,7 +9,7 @@
     - You want deadlocks persisted to a file for long-term analysis
 
   The session captures:
-    - xml_deadlock_report    → deadlock graphs for /sqlplan-deadlock
+    - xml_deadlock_report    → deadlock graphs for /sqldeadlock-review
     - blocked_process_report → blocking chains (requires blocked process threshold > 0)
 
   Read the output with 03_read_dedicated_session.sql.
@@ -22,6 +22,9 @@ SET NOCOUNT ON;
 GO
 
 /* ── Ensure blocked process threshold is set (required for blocking reports) */
+/* blocked process threshold is an advanced option — show advanced options first */
+EXEC sys.sp_configure 'show advanced options', 1;
+RECONFIGURE;
 EXEC sys.sp_configure 'blocked process threshold (s)', 5;  /* alert if blocked > 5 seconds */
 RECONFIGURE;
 GO
@@ -56,7 +59,7 @@ ADD EVENT sqlserver.blocked_process_report
         sqlserver.sql_text
     ))
 ADD TARGET package0.ring_buffer
-    (SET max_memory = 51200),          /* 50 MB ring buffer */
+    (SET max_memory = 1024),           /* KB — Microsoft recommends ≤ 1024 KB to avoid truncated target XML; the file target keeps history */
 ADD TARGET package0.event_file
     (SET filename = N'DeadlockAndBlocking',   /* SQL Server appends path + .xel */
          max_file_size = 100,                 /* MB per file */
@@ -74,5 +77,5 @@ GO
 
 PRINT 'DeadlockAndBlocking XE session created and started.';
 PRINT '';
-PRINT 'Read results with: skills/sqlplan-deadlock/scripts/03_read_dedicated_session.sql';
+PRINT 'Read results with: skills/sqldeadlock-review/scripts/03_read_dedicated_session.sql';
 GO

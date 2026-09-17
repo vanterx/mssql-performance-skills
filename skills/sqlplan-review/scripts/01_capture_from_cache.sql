@@ -6,7 +6,7 @@
   Retrieves .sqlplan XML from sys.dm_exec_cached_plans without needing SSMS.
   Three capture methods:
 
-    A — By stored procedure / object name  → best for procstats-review findings
+    A — By stored procedure / object name  → best for sqlprocstats-review findings
     B — By query text fragment             → best for ad-hoc SQL
     C — By query_hash                      → best for tracking a specific query
 
@@ -28,7 +28,7 @@ DECLARE
 
 SELECT
     cached_plan_type   = cp.objtype,
-    plan_creation_time = cp.creation_time,
+    plan_creation_time = qs.creation_time,
     last_execution     = qs.last_execution_time,
     execution_count    = qs.execution_count,
     avg_cpu_ms         = qs.total_worker_time   / NULLIF(qs.execution_count, 0) / 1000.,
@@ -54,7 +54,7 @@ ORDER BY qs.total_worker_time DESC;
 /*
 SELECT TOP 10
     cached_plan_type   = cp.objtype,
-    plan_creation_time = cp.creation_time,
+    plan_creation_time = qs.creation_time,
     last_execution     = qs.last_execution_time,
     execution_count    = qs.execution_count,
     avg_cpu_ms         = qs.total_worker_time   / NULLIF(qs.execution_count, 0) / 1000.,
@@ -78,7 +78,7 @@ DECLARE @query_hash binary(8) = 0xABCD1234ABCD1234;  /* from procstats Q1 or que
 
 SELECT TOP 5
     cached_plan_type   = cp.objtype,
-    plan_creation_time = cp.creation_time,
+    plan_creation_time = qs.creation_time,
     last_execution     = qs.last_execution_time,
     execution_count    = qs.execution_count,
     avg_cpu_ms         = qs.total_worker_time   / NULLIF(qs.execution_count, 0) / 1000.,

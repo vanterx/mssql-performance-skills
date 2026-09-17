@@ -75,6 +75,14 @@ BEGIN
                 total_logical_reads,
                 total_physical_reads,
                 total_logical_writes,
+                /* Target columns must be exposed by the CTE for UPDATE c SET ... */
+                sample_seconds,
+                execution_count_delta,
+                total_worker_time_delta,
+                total_elapsed_time_delta,
+                total_logical_reads_delta,
+                total_physical_reads_delta,
+                total_logical_writes_delta,
                 ROW_NUMBER() OVER
                 (
                     PARTITION BY database_name, object_id, plan_handle

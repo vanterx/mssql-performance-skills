@@ -10,14 +10,16 @@
     sys.dm_os_memory_clerks    — buffer pool, plan cache, other clerks
     sys.dm_os_process_memory   — SQL Server process memory usage
     sys.dm_os_sys_memory       — total system memory, available memory
-    sys.dm_os_sys_info         — committed_target_kb, physical_memory_kb
+    sys.dm_os_sys_info         — committed_target_kb
+    sys.dm_os_performance_counters — Memory Manager: Stolen Server Memory (KB)
+    sys.configurations         — max server memory (MB)
 
   Collection type: POINT-IN-TIME (no deltas — values are instantaneous)
 
   Key indicators:
     buffer_pool_mb              — data pages in memory (should be as large as possible)
     plan_cache_mb               — compiled plans in memory
-    stolen_mb                   — memory taken from buffer pool by other clerks
+    stolen_mb                   — memory used for non-database-page purposes (Stolen Server Memory counter)
     available_physical_mb       — free RAM on OS (should be > 1 GB; < 200 MB = critical)
     page_fault_count_delta      — OS page faults since last collection (non-zero = memory pressure)
     memory_utilization_pct      — SQL Server memory as % of committed target
@@ -44,8 +46,8 @@ BEGIN
         /* Memory clerks (aggregated) */
         buffer_pool_mb         decimal(19, 2) NOT NULL,
         plan_cache_mb          decimal(19, 2) NOT NULL,
-        stolen_mb              decimal(19, 2) NOT NULL,   /* other clerks from buffer pool */
-        other_memory_mb        decimal(19, 2) NOT NULL,   /* non-stolen non-buffer clerks */
+        stolen_mb              decimal(19, 2) NOT NULL,   /* Stolen Server Memory (KB) / 1024 */
+        other_memory_mb        decimal(19, 2) NOT NULL,   /* clerks other than buffer pool and plan cache */
         total_clerk_mb         decimal(19, 2) NOT NULL,
         /* Process memory */
         physical_memory_in_use_mb   decimal(19, 2) NOT NULL,
@@ -113,16 +115,20 @@ BEGIN
                                         THEN pages_kb / 1024. ELSE 0. END),
             @plan_cache_mb   = SUM(CASE WHEN type IN ('CACHESTORE_SQLCP', 'CACHESTORE_OBJCP')
                                         THEN pages_kb / 1024. ELSE 0. END),
-            @stolen_mb       = SUM(CASE WHEN type != 'MEMORYCLERK_SQLBUFFERPOOL'
-                                          AND is_buffer_pool_page = 1
-                                        THEN pages_kb / 1024. ELSE 0. END),
             @other_memory_mb = SUM(CASE WHEN type NOT IN ('MEMORYCLERK_SQLBUFFERPOOL',
                                                            'CACHESTORE_SQLCP',
                                                            'CACHESTORE_OBJCP')
-                                          AND (is_buffer_pool_page = 0 OR is_buffer_pool_page IS NULL)
                                         THEN pages_kb / 1024. ELSE 0. END),
             @total_clerk_mb  = SUM(pages_kb / 1024.)
         FROM sys.dm_os_memory_clerks
+        OPTION (RECOMPILE);
+
+        /* Stolen memory (non-database-page use) — memory clerks carry no
+           per-page stolen flag, so read the Memory Manager counter instead */
+        SELECT @stolen_mb = cntr_value / 1024.
+        FROM sys.dm_os_performance_counters
+        WHERE object_name  LIKE N'%Memory Manager%'
+          AND counter_name  = N'Stolen Server Memory (KB)'
         OPTION (RECOMPILE);
 
         /* ── Process memory ─────────────────────────────────────────────── */
@@ -146,10 +152,13 @@ BEGIN
         /* ── Server memory targets ──────────────────────────────────────── */
 
         SELECT
-            @committed_target_mb = committed_target_kb / 1024.,
-            @max_server_mb       = physical_memory_kb  / 1024.  /* approximation */
+            @committed_target_mb = committed_target_kb / 1024.
         FROM sys.dm_os_sys_info
         OPTION (RECOMPILE);
+
+        SELECT @max_server_mb = CAST(value_in_use AS bigint)
+        FROM sys.configurations
+        WHERE name = N'max server memory (MB)';
 
         /* ── Pressure detection: compare to previous snapshot ──────────── */
 

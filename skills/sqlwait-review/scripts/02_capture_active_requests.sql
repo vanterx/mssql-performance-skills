@@ -52,7 +52,7 @@ ORDER BY r.wait_time DESC, r.total_elapsed_time DESC;
 WITH blocking_chain AS (
     SELECT
         session_id       = s.session_id,
-        blocking_id      = s.blocking_session_id,
+        blocking_id      = r.blocking_session_id,   /* on dm_exec_requests, not dm_exec_sessions */
         wait_type        = r.wait_type,
         wait_time_sec    = CAST(r.wait_time / 1000.0 AS decimal(10, 2)),
         wait_resource    = r.wait_resource,
@@ -83,7 +83,8 @@ SELECT
     program_name,
     sql_text
 FROM blocking_chain
-ORDER BY blocking_id NULLS LAST, session_id;
+/* T-SQL has no NULLS LAST — idle head blockers (no request row) sort after blocked sessions */
+ORDER BY CASE WHEN blocking_id IS NULL THEN 1 ELSE 0 END, blocking_id, session_id;
 
 /* ============================================================================
    QUERY C — Wait type aggregation from active requests (summary view)

@@ -1,10 +1,10 @@
 /*
 ================================================================================
-  skills/query-store-review/scripts/01_capture_queries.sql
-  Query Store Capture Queries for /query-store-review
+  skills/sqlquerystore-review/scripts/01_capture_queries.sql
+  Query Store Capture Queries for /sqlquerystore-review
 ================================================================================
   Run these queries INSIDE the user database (USE YourDatabase first).
-  Paste any combination of result sets into Claude and run: /query-store-review
+  Paste any combination of result sets into Claude and run: /sqlquerystore-review
 
   Queries:
     Query A — Top resource consumers (required — feeds Q1–Q18 checks)
@@ -16,7 +16,7 @@
     1. Connect to the database you want to analyze
     2. Run Query A and optionally B/C/D
     3. Paste all result sets into one message to Claude
-    4. Run /query-store-review
+    4. Run /sqlquerystore-review
 
   Adjust @start_date / @end_date to your observation window.
   Default: last 7 days.
@@ -45,12 +45,13 @@ SELECT TOP (@top_n)
     query_hash                     = q.query_hash,
     plan_count                     = COUNT(DISTINCT p.plan_id),
     total_executions               = SUM(rs.count_executions),
-    avg_duration_ms                = SUM(rs.avg_duration)        / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
-    avg_cpu_ms                     = SUM(rs.avg_cpu_time)        / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
-    avg_logical_reads              = SUM(rs.avg_logical_io_reads) / NULLIF(SUM(rs.count_executions), 0),
-    avg_physical_reads             = SUM(rs.avg_physical_io_reads) / NULLIF(SUM(rs.count_executions), 0),
-    avg_logical_writes             = SUM(rs.avg_logical_io_writes) / NULLIF(SUM(rs.count_executions), 0),
-    avg_memory_grant_mb            = SUM(rs.avg_query_max_used_memory) / NULLIF(SUM(rs.count_executions), 0) * 8.0 / 1024.0,
+    /* runtime_stats rows hold per-interval averages — weight by count_executions */
+    avg_duration_ms                = SUM(rs.avg_duration * rs.count_executions)          / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
+    avg_cpu_ms                     = SUM(rs.avg_cpu_time * rs.count_executions)          / NULLIF(SUM(rs.count_executions), 0) / 1000.0,
+    avg_logical_reads              = SUM(rs.avg_logical_io_reads * rs.count_executions)  / NULLIF(SUM(rs.count_executions), 0),
+    avg_physical_reads             = SUM(rs.avg_physical_io_reads * rs.count_executions) / NULLIF(SUM(rs.count_executions), 0),
+    avg_logical_writes             = SUM(rs.avg_logical_io_writes * rs.count_executions) / NULLIF(SUM(rs.count_executions), 0),
+    avg_memory_grant_mb            = SUM(rs.avg_query_max_used_memory * rs.count_executions) / NULLIF(SUM(rs.count_executions), 0) * 8.0 / 1024.0,
     max_duration_ms                = MAX(rs.max_duration) / 1000.0,
     min_duration_ms                = MIN(rs.min_duration) / 1000.0,
     max_cpu_ms                     = MAX(rs.max_cpu_time) / 1000.0,
@@ -62,7 +63,7 @@ SELECT TOP (@top_n)
     aborted_count                  = SUM(CASE WHEN rs.execution_type = 3 THEN rs.count_executions ELSE 0 END),
     exception_count                = SUM(CASE WHEN rs.execution_type = 4 THEN rs.count_executions ELSE 0 END),
     avg_tempdb_mb                  = TRY_CAST(
-                                         SUM(rs.avg_tempdb_space_used)
+                                         SUM(rs.avg_tempdb_space_used * rs.count_executions)
                                          / NULLIF(SUM(rs.count_executions), 0) * 8.0 / 1024.0
                                          AS decimal(18, 2))   /* NULL on SQL 2016 */
 FROM sys.query_store_query AS q
@@ -86,31 +87,33 @@ GO
    Skip on SQL 2016 — sys.query_store_wait_stats does not exist.
    ============================================================================ */
 
-BEGIN TRY
+/* TRY/CATCH cannot trap a missing-object error raised in the same scope,
+   so test for the view first. */
+IF OBJECT_ID(N'sys.query_store_wait_stats') IS NULL
+    SELECT 'Query B skipped — sys.query_store_wait_stats requires SQL Server 2017+' AS note;
+ELSE
+    /* query_store_wait_stats has no timestamp column — filter through the
+       runtime stats interval. Do not join runtime_stats here: it multiplies
+       the wait rows (one per plan per interval per execution type). */
     SELECT TOP 30
         database_name       = DB_NAME(),
         wait_category_desc  = ws.wait_category_desc,
         query_sql_text      = TRY_CAST(qt.query_sql_text AS nvarchar(200)),
         query_hash          = q.query_hash,
         total_wait_time_ms  = SUM(ws.total_query_wait_time_ms),
-        avg_wait_time_ms    = AVG(ws.avg_query_wait_time_ms),
-        total_executions    = SUM(rs.count_executions)
+        max_wait_time_ms    = MAX(ws.max_query_wait_time_ms)
     FROM sys.query_store_wait_stats AS ws
+    JOIN sys.query_store_runtime_stats_interval AS rsi
+      ON ws.runtime_stats_interval_id = rsi.runtime_stats_interval_id
     JOIN sys.query_store_plan AS p
       ON ws.plan_id        = p.plan_id
     JOIN sys.query_store_query AS q
       ON p.query_id        = q.query_id
     JOIN sys.query_store_query_text AS qt
       ON q.query_text_id   = qt.query_text_id
-    JOIN sys.query_store_runtime_stats AS rs
-      ON p.plan_id         = rs.plan_id
-    WHERE ws.last_execution_time >= DATEADD(DAY, -7, GETUTCDATE())
+    WHERE rsi.start_time >= DATEADD(DAY, -7, SYSUTCDATETIME())
     GROUP BY ws.wait_category_desc, qt.query_sql_text, q.query_hash
     ORDER BY total_wait_time_ms DESC;
-END TRY
-BEGIN CATCH
-    SELECT 'Query B skipped — sys.query_store_wait_stats requires SQL Server 2017+' AS note;
-END CATCH;
 GO
 
 /* ============================================================================
