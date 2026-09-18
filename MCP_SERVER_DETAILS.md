@@ -281,7 +281,7 @@ The 27 skills in alphabetical order:
 |---|------|--------|
 | 1 | mssql-performance-review | 0 (dispatcher) |
 | 2 | sqlag-review | 37 |
-| 3 | sqlblocking-review | 36 |
+| 3 | sqlblocking-review | 54 |
 | 4 | sqlbootstraplog-review | 24 |
 | 5 | sqlclusterlog-review | 30 |
 | 6 | sqldbconfig-review | 29 |
@@ -307,7 +307,7 @@ The 27 skills in alphabetical order:
 | 26 | ssrstracelog-review | 24 |
 | 27 | tsql-review | 85 |
 
-**Total: 886 checks across 25 analytical skills + 2 dispatcher skills**
+**Total: 904 checks across 25 analytical skills + 2 dispatcher skills**
 
 ---
 

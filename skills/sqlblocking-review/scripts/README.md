@@ -14,11 +14,14 @@ analyzes, in one batch.
 | 3 | Waiting tasks joined to the lock each waits for | BL2, BL18–BL22 |
 | 4 | Lock footprint grouped per session, resource type, and mode | BL16, BL17, BL22, BL23 |
 | 5 | Blocked process threshold, database concurrency options, blocking XE sessions, escalation trace flags | BL29–BL34, BL36 |
+| 6 | Historical evidence that survives the incident: per-index lock wait hot spots and escalation attempts, Query Store lock wait history, blocking performance counters, instance-wide lock wait share | BL37–BL42 |
 
 **How to run**
 
 1. Run it on the instance **while the blocking is happening** — sections 1–4
    read live lock manager state and show nothing once the chain has cleared.
+   Section 6 is the exception: it works after the fact, and is what to run when
+   the incident is already over.
 2. Run it **twice, 30–60 seconds apart**, when you can. A falling `wait_time`
    on a changing `wait_resource` means progress; the same values twice mean a
    stalled head blocker. Two captures are also what BL7 compares.
@@ -38,6 +41,17 @@ sqlcmd -S <server> -E -i capture-blocking.sql -o blocking_capture_1.txt
 - On Azure SQL Database, sections 1–4 work with `VIEW DATABASE STATE`;
   section 5a (`sys.configurations`) does not apply, since the blocked process
   threshold is not user-configurable there.
+
+**If the blocking has already cleared**
+
+Run section 6 alone. It attributes historical lock waits to objects and queries
+(BL37–BL42) without needing anything to have been enabled in advance, and tells
+you what to turn on so the next occurrence is captured live. Sections 6a and 6b
+are database-scoped — run them in the affected database.
+
+For blocking too short for the blocked process report (under about five seconds),
+log a chain snapshot on a schedule instead — `sp_WhoIsActive @find_block_leaders = 1,
+@destination_table = '<table>'` is the usual pattern. See BL42.
 
 **Safety**
 

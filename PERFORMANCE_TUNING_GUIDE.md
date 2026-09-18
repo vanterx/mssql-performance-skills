@@ -17,7 +17,7 @@ A decision guide for choosing the right skill — or combination of skills — f
 | [`sqlindex-advisor`](#sqlindex-advisor) | `/sqlindex-advisor` | `.sqlplan` XML | Ranked `CREATE INDEX` script from plan operators + optimizer suggestions |
 | [`sqlplan-compare`](#sqlplan-compare) | `/sqlplan-compare` | Two `.sqlplan` files | Diffs two plans — 20 checks (C1–C20): seek→scan, batch mode lost, implicit conversion, partition elimination, PSP detection |
 | [`sqldeadlock-review`](#sqldeadlock-review) | `/sqldeadlock-review` | Deadlock XML / `.xdl` file | Root-cause analysis and fix plan — 17 patterns (P1–P17): lock order, RCSI bypass, MERGE, heap RID, DTC, TempDB, lock escalation, ledger/temporal, optimized locking/TID |
-| [`sqlblocking-review`](#sqlblocking-review) | `/sqlblocking-review` | Blocking chain DMV output, blocked process report XML, `sp_who2` output | Live blocking analysis — 36 checks (BL1–BL36): head blocker identification, chain topology, head-blocker state classification, lock escalation and Sch-M evidence, transaction/isolation faults, blocked process report readiness |
+| [`sqlblocking-review`](#sqlblocking-review) | `/sqlblocking-review` | Blocking chain DMV output, blocked process report XML, `sp_who2` output | Live and historical blocking analysis — 54 checks (BL1–BL54): head blocker identification, chain topology, head-blocker state classification, lock escalation and Sch-M evidence, transaction/isolation faults, per-index and Query Store lock wait history, statistics/lock-partitioning/foreign-key causes, ORM and platform patterns, capture and alerting readiness |
 | [`sqlplan-batch`](#sqlplan-batch) | `/sqlplan-batch` | Folder of `.sqlplan` files | Bulk review of many plans — dashboard, top offenders, consolidated indexes |
 | [`sqlquerystore-review`](#sqlquerystore-review) | `/sqlquerystore-review` | `sys.query_store_*` DMV output | Query Store workload analysis — 32 checks for regressed queries, plan instability, resource hotspots, query-level waits, configuration health, SQL 2019/2022 IQP/PSP/DOP/CE feedback, QS hints, and auto-tuning |
 | [`sqlprocstats-review`](#sqlprocstats-review) | `/sqlprocstats-review` | Output from `sql/procstats/04_report_queries.sql` pasted from `collect.proc_stats` | Procedure/trigger/function runtime stats — 25 checks (R1–R25): top consumers, per-execution efficiency, N+1 patterns, parameter sniffing, trend analysis, natively compiled proc regression, CLR ratio, trigger dominance, parallel-to-serial regression |
@@ -187,7 +187,7 @@ Common root causes found by `/sqlspn-review`:
 
 **Use: `/sqlblocking-review`**
 
-Run `skills/sqlblocking-review/scripts/capture-blocking.sql` while the blocking is happening and paste the output — twice, 30–60 seconds apart, if you can. A blocked process report, `sp_who2` output, or the `BlkBy` column from Activity Monitor also works. The skill applies 36 checks (BL1–BL36): it finds the head blocker, classifies its state against the documented blocking scenarios to answer whether the block resolves on its own or needs a `KILL`, reads the lock evidence (escalation, `Sch-M`, key-range, conversion), and names the transaction or isolation design fault behind it.
+Run `skills/sqlblocking-review/scripts/capture-blocking.sql` while the blocking is happening and paste the output — twice, 30–60 seconds apart, if you can. A blocked process report, `sp_who2` output, or the `BlkBy` column from Activity Monitor also works. The skill applies 54 checks (BL1–BL54): it finds the head blocker, classifies its state against the documented blocking scenarios to answer whether the block resolves on its own or needs a `KILL`, reads the lock evidence (escalation, `Sch-M`, key-range, conversion), and names the transaction or isolation design fault behind it.
 
 ```
 /sqlblocking-review blocking_capture.txt
@@ -622,7 +622,7 @@ The query is fast for one parameter value, slow for another.
 
 Work stalls, then either clears on its own or ends in application timeouts.
 
-1. **`/sqlblocking-review`** — capture the blocking chain and find the head blocker. The head blocker's `status`, `wait_type`, and `open_transaction_count` decide the response: sleeping with an open transaction (BL9/BL10) needs a `KILL` and a client-side fix; a running query (BL8) needs tuning; a rollback (BL11) needs patience.
+1. **`/sqlblocking-review`** — capture the blocking chain and find the head blocker. If the incident is already over, it works the historical evidence instead (BL37–BL42: instance-wide lock wait share, per-index lock hot spots from `sys.dm_db_index_operational_stats`, Query Store lock waits) and names the capture to enable before the next one. The head blocker's `status`, `wait_type`, and `open_transaction_count` decide the response: sleeping with an open transaction (BL9/BL10) needs a `KILL` and a client-side fix; a running query (BL8) needs tuning; a rollback (BL11) needs patience.
 2. **`/sqlwait-review`** — sizes the problem: how much of the instance's wait time is `LCK_M_*` rather than I/O or CPU.
 3. Common durable fixes: shorten transactions (BL24), enable RCSI so readers stop waiting on writers (BL29), batch large writes so they stop escalating to table locks (BL16), and turn on the blocked process report so the next occurrence is captured (BL31–BL33).
 
@@ -748,7 +748,8 @@ Blocking (live)           │  blocking chain DMVs / blocked process report
 /sqlblocking-review       │  Blocking: who is the head blocker, and does
                           │  this clear on its own? BL1–BL36: chain
                           │  topology, head-blocker state, lock evidence,
-                          │  transaction/isolation design, BPR readiness
+                          │  transaction/isolation design, historical
+                          │  per-index evidence, BPR readiness
 
 Deadlock                  │  deadlock XML / .xdl
 ──────────────────────────┼─────────────────────────────────────────
@@ -1031,9 +1032,9 @@ Each check has an ID you can use when discussing findings or searching the `refe
 | `J1–J15` | `sqlmigration-security-review` | Migration security objects: orphaned users, SID mismatch, login type platform support, password policy, default database, server/database role membership, explicit grants/denies, ownership chains, credentials, proxy/credential sequencing, linked server logins, certificate/key migration, DMK backup, CMS registrations | 15 |
 | `M1–M16` | `sqlmigration-objects-review` | Migration operational objects: Agent job database scope, job owner, operator notification reachability, alert message dependency, proxy/credential sequencing, schedule time zone, linked server provider/connectivity/collation, Database Mail profile/relay, backup device path, custom error messages, server triggers, XE sessions, non-AG endpoints | 16 |
 
-| `BL1–BL36` | `sqlblocking-review` | Blocking: head blocker identification, long lock wait, chain depth, fan-out, cross-database chain, concurrency exhaustion, chronic head blocker, long-running query at head, sleeping session with open transaction, orphaned transaction, rollback state, client not consuming results, client/server distributed deadlock, non-lock wait at head, maintenance at head, lock escalation, object-level X lock, Sch-M blocking, hot resource, key-range locks, conversion wait, application lock, lock footprint, long open transaction, transaction across round-trips, elevated isolation, implicit transactions, lock hints, RCSI candidate, version store effects, blocked process threshold off/ineffective, no capture target, escalation overrides, scan-driven footprint, ADR/optimized locking | 36 |
+| `BL1–BL54` | `sqlblocking-review` | Blocking: head blocker identification, long lock wait, chain depth, fan-out, cross-database chain, concurrency exhaustion, chronic head blocker, long-running query at head, sleeping session with open transaction, orphaned transaction, rollback state, client not consuming results, client/server distributed deadlock, non-lock wait at head, maintenance at head, lock escalation, object-level X lock, Sch-M blocking, hot resource, key-range locks, conversion wait, application lock, lock footprint, long open transaction, transaction across round-trips, elevated isolation, implicit transactions, lock hints, RCSI candidate, version store effects, blocked process threshold off/ineffective, no capture target, escalation overrides, scan-driven footprint, ADR/optimized locking, instance-wide lock wait share, per-index lock hot spots, escalation attempts per index, Query Store lock waits, blocking counters, sampled blocking log, queued Sch-M behind a benign reader, statistics update blocking, lock partitioning, unindexed foreign key, trigger/cascade, write locking rows it reads, ORM/driver defaults, timeout and retry policy, Azure platform differences, readable secondary redo, commit acknowledgement wait, alerting path | 54 |
 
-**Total: 886 checks across all skills.**
+**Total: 904 checks across all skills.**
 
 ---
 

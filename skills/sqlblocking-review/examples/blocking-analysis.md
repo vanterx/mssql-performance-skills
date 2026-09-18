@@ -126,10 +126,24 @@ Chain B — session 54 (head)   running, PAGEIOLATCH_SH 18 s, SERIALIZABLE, HOLD
 
 ---
 
+## Historical Evidence
+
+Not supplied with this capture. Two sources would have added attribution without needing a live chain, and are worth collecting before the next occurrence:
+
+| Source | What it would answer | Check |
+|--------|---------------------|-------|
+| `sys.dm_db_index_operational_stats` (section 6a of the capture script) | Whether `dbo.Orders` and `dbo.Inventory` are chronic lock-wait hot spots, and whether the 4,863 range locks on `dbo.Inventory` have been driving escalation attempts | BL38, BL39 |
+| `sys.query_store_wait_stats` where `wait_category_desc = 'Lock'` | Which queries have been the repeat victims over the retention window, and whether the ETL extract is a new arrival | BL40 |
+| *Processes blocked* counter samples | Whether 7 blocked sessions is this instance's normal state or today's incident | BL41 |
+
+---
+
 ## Passed Checks
 
 BL5 (single database per chain), BL6 (7 blocked of 94 active requests = 7.4%, no `THREADPOOL` waits), BL11 (no session in rollback), BL12 (no `ASYNC_NETWORK_IO` at either head), BL13 (head blocker host `WKS-FIN-14` does not match any victim host), BL15 (neither head blocker is maintenance or a system session), BL16 (no escalation evidence — trace flag 1211 prevents it), BL18 (no `Sch-M` locks), BL19 (no single resource with a queue beyond the chain structure), BL21 (no `CONVERT` request status), BL22 (no `APPLICATION` locks), BL27 (session 71's input buffer contains an explicit `BEGIN TRANSACTION`, so this is not implicit transactions), BL30 (no row versioning enabled, so no version store exposure), BL32 (threshold is 0, covered by BL31 rather than this check), BL35 (no scan or lookup evident in the blocking statements — all seek on `OrderId`).
 
-**Not evaluated:** BL7 (chronic head blocker) — the two captures are 60 seconds apart within one incident. Compare `query_hash` at level 0 across separate incidents, or collect blocked process reports over a week, to evaluate it.
+Also clean in this capture: BL43 (the level-1 waiter on chain A holds no incompatible table-level request — the sessions below 84 are queued on the same KEY resource, not behind a `Sch-M`), BL44 (no statistics operation in the chain), BL46 (the blocking statements seek on primary keys; no foreign-key scan evidence), BL48 (rows modified match the locks held), BL52 and BL53 (no readable-secondary or commit-acknowledgement waits at either head).
 
-> Analyzed by: `sqlblocking-review` (BL1–BL36)
+**Not evaluated:** BL7 (chronic head blocker) — the two captures are 60 seconds apart within one incident. Compare `query_hash` at level 0 across separate incidents, or collect blocked process reports over a week, to evaluate it. BL37–BL42 (historical evidence) — not supplied; see the Historical Evidence section above for what to collect. BL45 (lock partitioning) — the capture does not state the instance's logical CPU count or include `resource_lock_partition`; re-run section 4 with that column if the instance has 16 or more logical CPUs. BL47 (triggers and cascades) — the lock footprint names only tables the statements reference, but the capture does not rule out triggers on `dbo.Orders`. BL49 (ORM defaults) — `OrderEntry.exe` and `InventorySync.exe` are custom clients; check their connection configuration for isolation level and implicit transactions. BL50 and BL54 (timeout, retry, and alerting policy) — organisational, not visible in a DMV capture.
+
+> Analyzed by: `sqlblocking-review` (BL1–BL54)

@@ -198,3 +198,73 @@ DBCC TRACESTATUS(1211, 1224, -1);
    FROM sys.tables
    WHERE lock_escalation_desc <> 'TABLE';
 */
+
+/* ------------------------------------------------------------------
+   6. Historical evidence — works after the blocking has cleared
+      (BL37-BL42). Run sections 6a and 6b in the affected database.
+   ------------------------------------------------------------------ */
+PRINT '--- 6a. Lock wait hot spots per index ---';
+SELECT  table_name = OBJECT_SCHEMA_NAME(i.object_id) + '.' + OBJECT_NAME(i.object_id),
+        index_name = ISNULL(i.name, '(heap)'),
+        i.index_id,
+        os.partition_number,
+        os.row_lock_wait_count,
+        os.row_lock_wait_in_ms,
+        os.page_lock_wait_count,
+        os.page_lock_wait_in_ms,
+        total_lock_wait_ms   = os.row_lock_wait_in_ms + os.page_lock_wait_in_ms,
+        avg_row_lock_wait_ms = os.row_lock_wait_in_ms  / NULLIF(os.row_lock_wait_count, 0),
+        avg_page_lock_wait_ms= os.page_lock_wait_in_ms / NULLIF(os.page_lock_wait_count, 0),
+        os.index_lock_promotion_attempt_count,
+        os.index_lock_promotion_count
+FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS os
+JOIN sys.indexes AS i
+  ON i.object_id = os.object_id AND i.index_id = os.index_id
+WHERE os.row_lock_wait_in_ms + os.page_lock_wait_in_ms > 0
+ORDER BY total_lock_wait_ms DESC;
+
+/* Counters are cumulative since the index's metadata entered the cache and
+   reset when it is evicted or the object is rebuilt. Only row and page lock
+   waits are counted — OBJECT, METADATA and APPLICATION lock waits are not. */
+
+PRINT '--- 6b. Query Store lock wait history (SQL Server 2017+, Azure SQL) ---';
+SELECT TOP (25)
+        qsq.query_id,
+        qsp.plan_id,
+        total_lock_wait_ms = SUM(ws.total_query_wait_time_ms),
+        query_sql_text     = MIN(qst.query_sql_text)
+FROM sys.query_store_wait_stats AS ws
+JOIN sys.query_store_plan       AS qsp ON qsp.plan_id      = ws.plan_id
+JOIN sys.query_store_query      AS qsq ON qsq.query_id     = qsp.query_id
+JOIN sys.query_store_query_text AS qst ON qst.query_text_id = qsq.query_text_id
+WHERE ws.wait_category_desc = 'Lock'
+GROUP BY qsq.query_id, qsp.plan_id
+ORDER BY total_lock_wait_ms DESC;
+
+PRINT '--- 6c. Blocking performance counters (sample twice for a rate) ---';
+SELECT  object_name   = RTRIM(object_name),
+        counter_name  = RTRIM(counter_name),
+        instance_name = RTRIM(instance_name),
+        cntr_value, cntr_type
+FROM sys.dm_os_performance_counters
+WHERE (object_name LIKE '%General Statistics%' AND counter_name = 'Processes blocked')
+   OR (object_name LIKE '%Locks%' AND counter_name IN
+        ('Lock Waits/sec', 'Lock Wait Time (ms)', 'Lock Timeouts/sec',
+         'Number of Deadlocks/sec', 'Average Wait Time (ms)'));
+
+PRINT '--- 6d. Instance-wide lock wait share (BL37) ---';
+SELECT TOP (15)
+        wait_type,
+        wait_time_ms,
+        waiting_tasks_count,
+        pct_of_total = CONVERT(decimal(5,2),
+            100.0 * wait_time_ms / NULLIF(SUM(wait_time_ms) OVER (), 0))
+FROM sys.dm_os_wait_stats
+WHERE wait_time_ms > 0
+  AND wait_type NOT IN ('CLR_SEMAPHORE','LAZYWRITER_SLEEP','RESOURCE_QUEUE',
+      'SLEEP_TASK','SLEEP_SYSTEMTASK','SQLTRACE_BUFFER_FLUSH','WAITFOR',
+      'BROKER_TASK_STOP','CHECKPOINT_QUEUE','REQUEST_FOR_DEADLOCK_SEARCH',
+      'XE_TIMER_EVENT','XE_DISPATCHER_JOIN','XE_DISPATCHER_WAIT','FT_IFTS_SCHEDULER_IDLE_WAIT',
+      'DIRTY_PAGE_POLL','SP_SERVER_DIAGNOSTICS_SLEEP','HADR_FILESTREAM_IOMGR_IOCOMPLETION',
+      'DISPATCHER_QUEUE_SEMAPHORE','BROKER_TO_FLUSH','BROKER_EVENTHANDLER')
+ORDER BY wait_time_ms DESC;

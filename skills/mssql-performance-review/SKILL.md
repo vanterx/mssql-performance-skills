@@ -61,7 +61,7 @@ Content-based, not extension-reliant:
 | `EventClass`, `Duration`, `CPU`, `TextData` tabular headers, `.trc` / `.xel` files | sqltrace-review |
 | `wait_type`, `wait_time_ms`, `waiting_tasks_count` columns | sqlwait-review |
 | `<deadlock>` root + `<victim-list>` | sqldeadlock-review |
-| `blocking_session_id` / `blocked_by` columns, `<blocked-process-report>` XML, `sp_who2` `BlkBy` column, `sys.dm_tran_locks` request_mode/request_status output | sqlblocking-review |
+| `blocking_session_id` / `blocked_by` columns, `<blocked-process-report>` XML, `sp_who2` `BlkBy` column, `sp_WhoIsActive` `blocked_session_count` output, `sys.dm_tran_locks` request_mode/request_status output, `row_lock_wait_in_ms` / `index_lock_promotion_attempt_count` from `sys.dm_db_index_operational_stats` | sqlblocking-review |
 | `query_store_*` table refs, plan_id / runtime_stats columns | sqlquerystore-review |
 | `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | sqlprocstats-review |
 | `replica_id`, `synchronization_state` columns | sqlhadr-review |
@@ -464,7 +464,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlplan-compare` — Two-plan diff for regression cases. Routed when two plans for the same query are provided.
 - `/sqlindex-advisor` — Index DDL recommendations. Runs after sqlplan-review to consolidate suggestions.
 - `/sqldeadlock-review` — Deadlock graph analysis. Routed on `.xdl` / system_health XE output.
-- `/sqlblocking-review` — Live blocking chain analysis. Routed when blocking chain DMV output, a blocked process report, or `sp_who2` output is present, or when `LCK_M_*` waits dominate and the user asks who is blocking whom.
+- `/sqlblocking-review` — Live and historical blocking analysis. Routed when blocking chain DMV output, a blocked process report, `sp_WhoIsActive`/`sp_BlitzWho` output, or `sp_who2` output is present; when `LCK_M_*` waits dominate and the user asks who is blocking whom; or when the incident is over and only per-index lock waits, Query Store lock waits, or blocking counters survive.
 - `/sqlplan-batch` — Folder-of-plans dashboard. Routed when more than ~10 `.sqlplan` files are present, instead of per-plan sqlplan-review.
 - `/sqlquerystore-review` — Query Store DMV analysis. Routed when Query Store output is present; informs regression hypotheses.
 - `/sqlprocstats-review` — Procedure / trigger / function runtime stats. Routed when `sys.dm_exec_procedure_stats` output is present.

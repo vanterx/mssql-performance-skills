@@ -1,6 +1,6 @@
 ---
 name: sqlblocking-review
-description: Analyze SQL Server lock blocking from sys.dm_exec_requests, sys.dm_exec_sessions, sys.dm_os_waiting_tasks, sys.dm_tran_locks, open-transaction DMVs, and blocked process reports. Applies 36 checks (BL1–BL36) covering blocking chain topology and head-blocker identification, head-blocker state classification against the six documented blocking scenarios, lock-level evidence such as escalation and Sch-M and key-range locks, transaction and isolation-level design faults, and blocking observability configuration. Use this skill whenever sessions are blocked, applications report lock timeouts, LCK_M waits dominate, or a DBA pastes blocking chain output and asks who is blocking whom. Trigger when blocked_session_id, blocking_session_id, blocked process report XML, or sp_who2 BlkBy output is present.
+description: Analyze SQL Server lock blocking from sys.dm_exec_requests, sys.dm_exec_sessions, sys.dm_os_waiting_tasks, sys.dm_tran_locks, open-transaction DMVs, blocked process reports, index operational stats, Query Store lock waits, and community tool output such as sp_WhoIsActive, sp_BlitzWho and sp_HumanEvents. Applies 54 checks (BL1–BL54) covering blocking chain topology and head-blocker identification, head-blocker state classification against the six documented blocking scenarios, lock-level evidence such as escalation and Sch-M and key-range locks, transaction and isolation-level design faults, historical and aggregate blocking evidence when nobody was watching, structural engine-level causes such as statistics updates and lock partitioning, and client, tooling and platform patterns. Use this skill whenever sessions are blocked, applications report lock timeouts, LCK_M waits dominate, or a DBA pastes blocking chain output and asks who is blocking whom. Trigger when blocked_session_id, blocking_session_id, blocked process report XML, sp_WhoIsActive or sp_who2 BlkBy output is present.
 triggers:
   - /sqlblocking-review
   - /blocking-review
@@ -12,7 +12,7 @@ triggers:
 
 ## Purpose
 
-Identify the head of a blocking chain, explain why it holds its locks, and give a ranked remediation path. Applies 36 checks (BL1–BL36) across five categories:
+Identify the head of a blocking chain, explain why it holds its locks, and give a ranked remediation path. Applies 54 checks (BL1–BL54) across eight categories:
 
 - **BL1–BL7** — Blocking chain topology: head blocker identification, block duration, chain depth, fan-out, cross-database chains, concurrency exhaustion, and chronic recurrence across captures
 - **BL8–BL15** — Head-blocker state classification: maps the head blocker to the documented blocking scenarios (long-running query, sleeping session with an open transaction, orphaned transaction, rollback, client not fetching results, client/server distributed deadlock), plus non-lock waits and maintenance work at the head
@@ -31,6 +31,8 @@ Accept any of:
 - **DMV output** from the blocking-chain capture queries below — `sys.dm_exec_requests`, `sys.dm_exec_sessions`, `sys.dm_os_waiting_tasks`, `sys.dm_tran_locks`, `sys.dm_tran_active_transactions`, `sys.dm_exec_input_buffer`, `sys.dm_exec_sql_text` (preferred; two or more captures minutes apart give the strongest evidence)
 - **A blocked process report** — the XML payload of the `blocked_process_report` Extended Event, or the equivalent Profiler event, containing `<blocked-process>` and `<blocking-process>` elements
 - **`sp_who2` / Activity Monitor output** — the `BlkBy` column, SSMS "Activity - All Blocking Transactions" report text, or a screenshot transcription
+- **Community tool output** — `sp_WhoIsActive` (ideally run with `@find_block_leaders = 1, @sort_order = '[blocked_session_count] DESC'`), `sp_BlitzWho`, `sp_BlitzFirst @SinceStartup = 1` wait totals, `sp_HumanEvents @event_type = 'blocking'` or `sp_HumanEventsBlockViewer` output, or a blocking-tree script's indented chain. Read `blocked_session_count`, `blocking_session_id`, `sql_text`, `status`, `open_tran_count`, `wait_info` and map them onto the same checks — the columns differ in name, not in meaning
+- **Historical / aggregate artifacts**, when the incident is over: `sys.dm_db_index_operational_stats` lock wait columns, `sys.query_store_wait_stats` rows with `wait_category_desc = 'Lock'`, `sys.dm_os_performance_counters` rows for *Processes blocked* and the *Locks* object, or a table of logged `sp_WhoIsActive` samples
 - **Wait statistics** showing `LCK_M_*` waits when the user asks "what is blocking?" — analyze what is available and name the extra capture needed
 - **A natural language description** of symptoms ("every morning at 09:05 all order inserts stall for two minutes, then clear on their own")
 
@@ -165,7 +167,59 @@ JOIN sys.server_event_session_events AS e ON e.event_session_id = s.event_sessio
 WHERE e.name IN ('blocked_process_report', 'lock_escalation', 'xml_deadlock_report', 'locking_stats');
 ```
 
+```sql
+-- 6. Historical evidence, for blocking that has already ended (BL37-BL42)
+
+-- 6a. Lock wait hot spots per index (run in the affected database).
+--     Counters reset when the index's metadata cache object is evicted,
+--     so treat them as "since roughly the last restart", not as exact history.
+SELECT  table_name = OBJECT_SCHEMA_NAME(i.object_id) + '.' + OBJECT_NAME(i.object_id),
+        index_name = ISNULL(i.name, '(heap)'),
+        i.index_id,
+        os.row_lock_wait_count, os.row_lock_wait_in_ms,
+        os.page_lock_wait_count, os.page_lock_wait_in_ms,
+        total_lock_wait_ms = os.row_lock_wait_in_ms + os.page_lock_wait_in_ms,
+        avg_row_lock_wait_ms = os.row_lock_wait_in_ms
+                               / NULLIF(os.row_lock_wait_count, 0),
+        avg_page_lock_wait_ms = os.page_lock_wait_in_ms
+                               / NULLIF(os.page_lock_wait_count, 0),
+        os.index_lock_promotion_attempt_count,
+        os.index_lock_promotion_count
+FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS os
+JOIN sys.indexes AS i
+  ON i.object_id = os.object_id AND i.index_id = os.index_id
+WHERE os.row_lock_wait_in_ms + os.page_lock_wait_in_ms > 0
+ORDER BY total_lock_wait_ms DESC;
+
+-- 6b. Query Store lock wait history (SQL Server 2017 and later, Azure SQL)
+SELECT TOP (25)
+        qsq.query_id, qsp.plan_id,
+        total_lock_wait_ms = SUM(ws.total_query_wait_time_ms),
+        avg_lock_wait_ms   = SUM(ws.avg_query_wait_time_ms),
+        executions         = SUM(ws.total_query_wait_time_ms)
+                             / NULLIF(SUM(ws.avg_query_wait_time_ms), 0),
+        query_sql_text     = MIN(qst.query_sql_text)
+FROM sys.query_store_wait_stats AS ws
+JOIN sys.query_store_plan       AS qsp ON qsp.plan_id  = ws.plan_id
+JOIN sys.query_store_query      AS qsq ON qsq.query_id = qsp.query_id
+JOIN sys.query_store_query_text AS qst ON qst.query_text_id = qsq.query_text_id
+WHERE ws.wait_category_desc = 'Lock'
+GROUP BY qsq.query_id, qsp.plan_id
+ORDER BY total_lock_wait_ms DESC;
+
+-- 6c. Blocking performance counters (sample twice to get a rate)
+SELECT  object_name = RTRIM(object_name), counter_name = RTRIM(counter_name),
+        instance_name = RTRIM(instance_name), cntr_value, cntr_type
+FROM sys.dm_os_performance_counters
+WHERE (object_name LIKE '%General Statistics%' AND counter_name = 'Processes blocked')
+   OR (object_name LIKE '%Locks%' AND counter_name IN
+        ('Lock Waits/sec', 'Lock Wait Time (ms)', 'Lock Timeouts/sec',
+         'Number of Deadlocks/sec', 'Average Wait Time (ms)'));
+```
+
 > Optimized-locking instances also expose `is_optimized_locking_on` in `sys.databases` and `XACT` lock resources in `sys.dm_tran_locks`. See BL36.
+>
+> Live capture beats every historical source: sections 1–4 name the blocker, sections 6a–6c only narrow down where and when. Lock waits are recorded by the *blocked* session, never by the blocker, so no wait-based artifact can name the head blocker on its own — see BL37.
 
 ---
 
@@ -194,8 +248,14 @@ Report the head blocker's *identity, statement, and state* before any recommenda
 | Locks held by a single session on one table or index | < 2,500 | 2,500–4,999 | ≥ 5,000 (escalation threshold) |
 | `blocked process threshold (s)` setting | 5–30 | 31–86,400 | 0 (off) or 1–4 (ineffective) |
 | Repeat appearances of the same head-blocker statement across captures | 1 | 2 | ≥ 3 |
+| `LCK_M_*` share of instance-wide wait time | < 5% | 5–19% | ≥ 20% |
+| Average lock wait per index (`row_lock_wait_in_ms` / `row_lock_wait_count`) | < 200 ms | 200–999 ms | ≥ 1,000 ms |
+| Total lock wait per index (`row_lock_wait_in_ms` + `page_lock_wait_in_ms`) | < 1 min | 1–5 min | > 5 min |
+| `index_lock_promotion_attempt_count` per index | 0 | 1–10 | > 10 |
+| *Processes blocked* performance counter, sustained across samples | 0 | 1–4 | ≥ 5 |
+| Logical CPUs at which lock partitioning changes table-lock behaviour | < 16 | — | ≥ 16 |
 
-> **Threshold provenance:** The 5,000-lock escalation threshold and the `blocked process threshold (s)` range (5 to 86,400, with a 5-second lock-monitor wake interval) are Microsoft-documented values. The wait-duration, chain-depth, fan-out, transaction-age, and recurrence cutoffs are operational heuristics for prioritisation — compare them against the workload's own baseline before calling a number a problem.
+> **Threshold provenance:** The 5,000-lock escalation threshold (per single reference to a table, re-checked every 1,250 new locks) and the `blocked process threshold (s)` range (5 to 86,400, with a 5-second lock-monitor wake interval) are Microsoft-documented values, as is lock partitioning being enabled automatically on instances with a larger number of logical CPUs. The per-index cutoffs (1 s average lock wait, 5 minutes total, 10 escalation attempts) follow the First Responder Kit's `sp_BlitzIndex` "aggressive indexes" rule. The wait-duration, chain-depth, fan-out, transaction-age, recurrence, and counter cutoffs are operational heuristics for prioritisation — compare them against the workload's own baseline before calling a number a problem.
 
 ---
 
@@ -401,6 +461,110 @@ These map the head blocker to the documented blocking scenarios. `status`, `wait
 
 ---
 
+## Historical and Aggregate Blocking Evidence (BL37–BL42)
+
+Most blocking is reported after it ends. These checks work the artifacts that survive the incident, and say what to turn on so the next one is captured live.
+
+### BL37 — Lock Waits Dominate but No Chain Was Captured
+- **Trigger:** `LCK_M_*` waits reach the Warning share of instance-wide wait time in `sys.dm_os_wait_stats` (or `sp_BlitzFirst @SinceStartup = 1`), and the input contains no blocking chain, blocked process report, or sampled capture
+- **Severity:** Warning; Critical at the Critical share
+- **Fix:** Lock waits are accumulated by the *blocked* session, never by the blocker, so wait statistics prove blocking happened and can never name who caused it. Treat this input as sizing, not diagnosis: report the share and the dominant lock modes (`LCK_M_S`/`LCK_M_IS` means readers waiting on writers and points at BL29; `LCK_M_X`/`LCK_M_U` means writer-on-writer; `LCK_M_SCH_S` means something holds `Sch-M`, see BL18 and BL43), then name the capture that closes the gap — the blocked process report (BL31–BL33) for blocks over five seconds, a sampled `sp_WhoIsActive` log (BL42) for shorter ones, and the per-index evidence in BL38 for where.
+
+### BL38 — Lock Wait Hot Spots by Index
+- **Trigger:** `sys.dm_db_index_operational_stats` shows an index whose average lock wait, total lock wait, or escalation attempts reach the Warning bands in the Thresholds Reference
+- **Severity:** Warning; Critical when one index carries the majority of the database's lock wait time
+- **Fix:** This is the only widely available artifact that attributes historical blocking to a specific object without a live capture, so it answers "where" when the chain is gone. Rank objects by `row_lock_wait_in_ms + page_lock_wait_in_ms`, then treat the top object as the target for index and query work (BL35, BL46) and for transaction shortening (BL24). Two caveats belong in the report: the counters are cumulative since the index's metadata entered the cache and reset when it is evicted or the object is rebuilt, so they are "roughly since restart" rather than a true history; and they cover row and page lock waits only — object, metadata, and application lock waits do not appear, so a `Sch-M` or `sp_getapplock` problem is invisible here.
+
+### BL39 — Lock Escalation Attempts Recorded Against an Index
+- **Trigger:** `index_lock_promotion_attempt_count` exceeds the Warning threshold, especially when it substantially exceeds `index_lock_promotion_count`
+- **Severity:** Warning; Critical when attempts exceed the threshold on a table that also appears in a live chain
+- **Fix:** Attempts far above completions mean the engine repeatedly tried to escalate and was refused because another session held an incompatible table lock; it then kept acquiring fine-grained locks and retried at every 1,250 further locks. That pattern is both a large lock footprint (BL23) and a warning that a table lock is one scheduling accident away. Fix the statement that accumulates the locks — batch it, or index it so it touches fewer rows (BL16, BL35) — rather than reaching for the escalation overrides in BL34.
+
+### BL40 — Query Store Lock Wait History Unused or Concentrated
+- **Trigger:** SQL Server 2017 and later (or Azure SQL): Query Store is off, or `sys.query_store_wait_stats` shows queries with `wait_category_desc = 'Lock'` accumulating significant wait time
+- **Severity:** Info when Query Store is off; Warning when a small set of queries carries most lock waits
+- **Fix:** Query Store attributes lock waits to individual queries and keeps them after the incident, which plain wait statistics cannot do. Turn it on where it is off, then rank queries by lock wait category to identify the repeat victims. Remember the direction of the evidence: these are the queries that *waited*, not the ones that blocked, so pair the result with BL38 (which object) and the blocked process report (which blocker) before concluding anything about root cause.
+
+### BL41 — Blocking Performance Counters Not Baselined
+- **Trigger:** *Processes blocked* (`General Statistics` object) is non-zero across repeated samples, or *Lock Waits/sec* and *Lock Wait Time (ms)* are elevated with no baseline recorded
+- **Severity:** Info with an established baseline; Warning when the counter stays non-zero across samples with no alerting in place
+- **Fix:** *Processes blocked* is the cheapest continuous signal that blocking is happening at all, and it is what a monitoring alert should watch between deep captures. A steady non-zero value means blocking is chronic rather than incidental (pair with BL7). Collect the counters on a schedule from `sys.dm_os_performance_counters`, record a normal range for the workload, and wire the alert to fire the deeper capture — an alert with no capture attached produces a number nobody can act on.
+
+### BL42 — No Sampled Blocking Log for Short-Duration Blocking
+- **Trigger:** Users report repeated short stalls or timeouts, the blocked process report shows little or nothing, and no periodic capture (logged `sp_WhoIsActive`, `sp_BlitzWho`, or equivalent monitoring) exists
+- **Severity:** Warning
+- **Fix:** The blocked process report cannot see below its threshold, and the lock monitor only wakes every five seconds, so high-frequency blocking that clears in two or three seconds is invisible to it while still costing the workload. Log a blocking-aware snapshot to a table on a short interval — `sp_WhoIsActive` with `@find_block_leaders = 1` and a destination table is the standard pattern — and keep it running only while the problem is being chased, because continuous logging nobody reads is pure overhead. Sample often enough to catch the stall, and record the chain, not just the counts.
+
+---
+
+## Structural and Engine-Level Causes (BL43–BL48)
+
+### BL43 — Benign Head Blocker with a Blocking Request Queued Behind It
+- **Trigger:** The head blocker is an ordinary reader or short statement, its direct waiter requests an incompatible table-level mode (typically `Sch-M`, or `X`/`S` on an `OBJECT`), and sessions behind that waiter are queued on a mode the head blocker itself would not conflict with
+- **Severity:** Critical
+- **Fix:** Lock requests queue: once an incompatible request is waiting, later arrivals queue behind it even when they are compatible with what is currently granted. A long `SELECT` holding `Sch-S` therefore stalls an index rebuild's `Sch-M`, and every query arriving after that rebuild — which the `SELECT` alone would never have blocked — stops too. Read the chain one level down before recommending anything: killing the apparent head blocker only lets the queued `Sch-M` proceed, which is often the more disruptive operation. The durable fixes belong to the queued request, not the head: run DDL and index maintenance with `ONLINE = ON` and `WAIT_AT_LOW_PRIORITY` so it yields instead of queueing, set the equivalent parameters in the maintenance solution that schedules it, and move the work to a quiet window (BL15, BL18).
+
+### BL44 — Statistics Update Blocking on Schema Locks
+- **Trigger:** A session running `UPDATE STATISTICS`, an automatic statistics update, or a statistics-metadata operation holds or waits for `Sch-M`, with query compilations waiting on `Sch-S` behind it
+- **Severity:** Warning; Critical when compilations across the instance are queued behind it
+- **Fix:** Creating or updating statistics takes a schema modification lock on the statistics metadata object, and every compiling query needs schema stability on the same object, so a statistics update and a compile-heavy workload block each other. Synchronous automatic updates (the default) also make the triggering query wait for the update to finish, which shows up as intermittent timeouts on an otherwise fast query. Options, in order: enable `ASYNC_STATS_UPDATE_WAIT_AT_LOW_PRIORITY` (SQL Server 2022 and later, Azure SQL) so the background update queues at low priority instead of blocking compiles; consider `AUTO_UPDATE_STATISTICS_ASYNC` where client timeouts are aggressive, accepting that the triggering query compiles on stale statistics; update statistics manually before planned index maintenance so an automatic update does not fire mid-window; and on readable secondaries, where temporary statistics take the same `Sch-M` and can stall redo, evaluate the `READABLE_SECONDARY_TEMPORARY_STATS_AUTO_CREATE` and `READABLE_SECONDARY_TEMPORARY_STATS_AUTO_UPDATE` database-scoped configurations.
+
+### BL45 — Lock Partitioning Amplifies Table-Level Lock Acquisition
+- **Trigger:** The instance has at least the Thresholds Reference count of logical CPUs (lock partitioning is enabled automatically on instances with a larger number of logical CPUs, and logged in the ERRORLOG at startup), `sys.dm_tran_locks` shows non-zero `resource_lock_partition` values, and a session is stuck acquiring a table-level `S`, `X`, or `Sch-M` lock
+- **Severity:** Warning
+- **Fix:** With lock partitioning, `NL`, `Sch-S`, `IS`, `IU` and `IX` are taken on one partition, but `S`, `X`, `Sch-M` and other full modes are taken on every partition in ID order. A table-wide request therefore acquires partitions 0..n one at a time and stops at the first partition where an intent lock is held — so it can be half-granted, blocking new arrivals on the partitions it already holds while itself waiting on one session. This is why a single long reader can stall an index rebuild for an unexpectedly long time on a large machine, and why deadlock frequency can rise. Do not disable lock partitioning; remove the need for table-wide locks instead (online and low-priority DDL per BL43, no `TABLOCK`/`TABLOCKX` hints per BL28, batching per BL16).
+
+### BL46 — Unindexed Foreign Key Child Table
+- **Trigger:** The blocking statement updates or deletes parent rows, the waiters or the lock evidence point at a child table, and the child's foreign key column has no supporting index
+- **Severity:** Warning; Critical when the child table is large and the parent operation is routine
+- **Fix:** Enforcing a foreign key on delete or on a key update makes the engine look for referencing rows in the child; without an index on the foreign key column that becomes a scan, which takes locks across the child table, extends the parent transaction, and can cross the escalation threshold. Create a nonclustered index leading with the foreign key column (add covering columns only if a query needs them). This is the cheapest high-yield fix in the whole blocking catalogue, because it usually removes a deadlock class as well — route the plan to `/sqlindex-advisor` for the exact definition.
+
+### BL47 — Trigger or Cascading Constraint Extends the Transaction
+- **Trigger:** The head blocker's statement is a simple DML statement, but its lock footprint in `sys.dm_tran_locks` includes tables the statement does not name — audit tables, history tables, or children of a cascading foreign key
+- **Severity:** Warning
+- **Fix:** Triggers and `ON DELETE`/`ON UPDATE CASCADE` actions run inside the caller's transaction, so their locks are held until the caller commits and their duration is added to the caller's. An audit trigger writing to a single hot log table serialises every writer on the base table (see BL19). Options: move the secondary work out of the transaction (queue it, or use Change Data Capture / change tracking / a temporal table instead of a hand-written audit trigger), index the child tables the cascade touches (BL46), and keep trigger bodies free of lookups that scan. Confirm the trigger's own statements before blaming the caller — `sys.dm_exec_sql_text` shows the outer batch, not the trigger body.
+
+### BL48 — Write Statement Locks Every Row It Reads
+- **Trigger:** An `UPDATE` or `DELETE` at the head of the chain has a predicate that cannot seek (a function or conversion on the column, a leading wildcard, a mismatched type), and its lock count far exceeds the rows it actually modifies
+- **Severity:** Warning; Critical when the lock count reaches the escalation threshold
+- **Fix:** A write statement takes update locks on the rows it *examines*, not only the rows that qualify, so a non-SARGable `UPDATE` scanning a million rows to change ten locks its way through the whole index. The fix is the predicate, not the locking: move functions and conversions off the column side, match parameter types to column types so no implicit conversion appears in the plan, and index the predicate so a seek replaces the scan. Where the statement legitimately touches many rows, batch it (BL16) so no single transaction crosses the escalation threshold.
+
+---
+
+## Client, Tooling, and Platform Patterns (BL49–BL54)
+
+### BL49 — ORM or Driver Transaction Defaults
+- **Trigger:** The blocking session's `program_name` or `client_interface_name` identifies an ORM or managed driver, and its behaviour matches a framework default — an elevated isolation level with no `SET` in the statement text (BL26), an open transaction with no `BEGIN TRAN` (BL27), or several sessions from one host interleaving work (BL13)
+- **Severity:** Warning; Critical when it produces a sleeping session holding locks
+- **Fix:** Framework defaults, not application intent, are behind a large share of production blocking. Common ones worth checking by name: a .NET `TransactionScope` created without options defaults to `Serializable`, which brings key-range locks with it (BL20) — construct it with `ReadCommitted` explicitly; JDBC and several Python drivers open implicit transactions unless autocommit is set, producing the sleeping-with-open-transaction shape (BL27); and multiple active result sets on one connection change how statements interleave. Fix these in the connection or context configuration rather than in T-SQL, since the setting arrives with every new pooled connection.
+
+### BL50 — No Client Timeout or Retry Policy
+- **Trigger:** Victims' waits exceed any sane client timeout with no evidence of cancellation, or the application reports hung requests rather than errors, or orphaned transactions (BL10) recur after timeouts
+- **Severity:** Warning
+- **Fix:** A blocked request that never gives up converts one stuck session into a pile of stuck sessions, and pushes the instance toward worker exhaustion (BL6). Give the client a command timeout, and for work that can safely fail fast, set `SET LOCK_TIMEOUT` so the statement returns error 1222 instead of waiting — but only alongside a handler that rolls back, because a timeout without a rollback is exactly how BL9 and BL10 are created. Add bounded retry with backoff for the operations that can be retried safely, and set `DEADLOCK_PRIORITY` deliberately on batch work so interactive sessions win. This check is about the policy existing, not about masking the blocking.
+
+### BL51 — Azure SQL Platform Differences Not Accounted For
+- **Trigger:** The artifact comes from Azure SQL Database, Azure SQL Managed Instance, or Fabric SQL database, and the analysis or the recommendation assumes on-premises behaviour
+- **Severity:** Info; Warning when a recommendation would not apply on the platform
+- **Fix:** Adjust the reading rather than the checks. New databases in Azure SQL Database have read committed snapshot and snapshot isolation enabled by default, so reader-versus-writer blocking (BL29) should already be gone and remaining blocking is writer-versus-writer, an elevated isolation level set by the client, or RCSI having been turned off. Optimized locking is always on there, so expect `XACT` resources and `LCK_M_S_XACT*` waits (BL36). The blocked process threshold is not user-configurable (BL31/BL32 do not apply); wait statistics are database-scoped through `sys.dm_db_wait_stats`; Profiler is not supported, so capture is Extended Events only; and the scale-out answer for long readers is a read-only replica rather than a reporting server. Transient-fault retry is a platform expectation, which reinforces BL50.
+
+### BL52 — Readable Secondary Redo Blocked by Report Queries
+- **Trigger:** The artifact comes from a readable secondary replica and shows redo progress stalled behind reader locks — `Sch-S` held by report queries against a `Sch-M` request from redo or from temporary statistics creation, or AG redo waits accumulating with active long readers
+- **Severity:** Critical
+- **Fix:** Redo on a readable secondary applies schema changes from the primary and needs schema modification locks to do it; a long-running report holding schema stability blocks redo, which stops the secondary from staying current and grows the redo queue, extending both failover time and the data-loss window. Automatic temporary statistics created for read workloads take the same lock. Keep report queries short, run them with a lock timeout, and consider the `READABLE_SECONDARY_TEMPORARY_STATS_AUTO_CREATE` and `READABLE_SECONDARY_TEMPORARY_STATS_AUTO_UPDATE` database-scoped configurations. Quantify the exposure with `/sqlhadr-review` before changing the reporting schedule.
+
+### BL53 — Head Blocker Waiting on Commit Acknowledgement
+- **Trigger:** The head blocker's `wait_type` is `HADR_SYNC_COMMIT`, a distributed-transaction wait (`DTC`, `PREEMPTIVE_TRANSIMPORT`, `DTC_STATE`), or another commit-path wait, while it holds locks
+- **Severity:** Critical
+- **Fix:** This is BL14 in its highest-impact form: the transaction has finished its work and is waiting for someone else to acknowledge the commit, with every lock still held. For synchronous-commit availability groups, the ack is the secondary hardening the log, so secondary log-write latency or network latency is now the blocking cause — route to `/sqlhadr-review` and `/sqldiskio-review`, and consider whether that replica needs to be synchronous. For distributed transactions, the coordinator's round trip does the same thing, which is another reason to keep remote work outside the transaction (BL5, BL24). No amount of lock tuning helps until the commit path is fixed.
+
+### BL54 — No Alerting or Escalation Path for Blocking
+- **Trigger:** Blocking is recurring (BL7) and there is no alert on blocked processes or on the blocked process report event, or no documented decision on who may issue `KILL` and under what conditions
+- **Severity:** Warning
+- **Fix:** Detection without a response path means every incident waits for a human to notice. Wire an Agent alert or monitoring rule to the blocked process report event or to a sustained *Processes blocked* value (BL41), and have it start the capture in BL42 automatically so the evidence exists before anyone logs in. Write down the escalation rule while nobody is under pressure: which head-blocker states justify an immediate `KILL` (BL9 and BL10 do; BL11 never does, because the rollback still has to finish), who is authorised, and what gets recorded afterwards so BL7 can be evaluated across incidents.
+
+---
+
 ## Output Format
 
 Present findings in this order:
@@ -426,6 +590,10 @@ session 71 (head)  UPDATE dbo.Orders ...  sleeping, open_tran 1, idle 6m
 ### Lock Evidence
 | Session | Role | Resource | Mode | Status | Count | Object |
 
+### Historical Evidence   (when the live chain is gone, or alongside it)
+| Source | Object / query | Metric | Reading |
+| index operational stats | dbo.Orders (CIX) | 412 s total lock wait, 38 escalation attempts | hot spot, escalation pressure (BL38, BL39) |
+
 ### Remediation Priority
 | # | Action | Addresses | Effect | Risk | Rollback |
 
@@ -439,7 +607,7 @@ Separate immediate relief from durable fixes in the Remediation Priority table: 
 
 When the input does not cover a check, list it under a short "Not evaluated" note with the capture query that would cover it, rather than reporting it as passed.
 
-> Analyzed by: `sqlblocking-review` (BL1–BL36)
+> Analyzed by: `sqlblocking-review` (BL1–BL54)
 
 ---
 *Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
@@ -456,6 +624,7 @@ When the input does not cover a check, list it under a short "Not evaluated" not
 - `/sqldbconfig-review` — database-level concurrency settings behind BL29/BL30/BL36 (RCSI, snapshot isolation, ADR) are audited there
 - `/sqlmemory-review` — lock memory pressure is an escalation trigger (BL23) and `RESOURCE_SEMAPHORE` at the head blocker (BL14) is a memory problem
 - `/sqldiskio-review` — `PAGEIOLATCH_*`/`WRITELOG` at the head blocker (BL14) means slow storage is lengthening the lock hold
+- `/sqlhadr-review` — BL52 (redo blocked by readers on a readable secondary) and BL53 (`HADR_SYNC_COMMIT` at the head blocker) are AG problems wearing a locking costume; size the redo queue and commit latency there
 - `/tsql-review` — catches the source-level causes before deployment: missing `SET XACT_ABORT ON`, transactions around round-trips, stray isolation-level and lock hints
 
 ---
@@ -502,3 +671,21 @@ See [skills/VERSION_COMPATIBILITY.md](../VERSION_COMPATIBILITY.md) for the full 
 | BL34 Escalation overrides | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Partial |
 | BL35 Scan-driven footprint | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | BL36 ADR / optimized locking | — | — | — | — | — | ADR | ADR | ✓ |
+| BL37 Lock waits, no chain | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL38 Lock hot spots by index | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL39 Escalation attempts per index | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL40 Query Store lock waits | — | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| BL41 Blocking counters | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Partial |
+| BL42 No sampled blocking log | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL43 Queued Sch-M behind reader | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL44 Statistics update blocking | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL45 Lock partitioning | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Partial |
+| BL46 Unindexed foreign key | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL47 Trigger / cascade | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL48 Write locks rows it reads | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL49 ORM / driver defaults | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL50 Timeout / retry policy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| BL51 Azure platform differences | N/A | N/A | N/A | N/A | N/A | N/A | N/A | ✓ |
+| BL52 Readable secondary redo | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Partial |
+| BL53 Commit acknowledgement wait | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Partial |
+| BL54 No alerting path | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
