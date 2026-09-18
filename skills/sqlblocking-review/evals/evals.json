@@ -1,0 +1,23 @@
+{
+  "skill_name": "sqlblocking-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "sys.dm_exec_requests shows session 84 blocked by 71 with wait_type LCK_M_U and wait_time 42117, and session 92 blocked by 84 with LCK_M_S wait_time 38004. Session 71 has status sleeping, wait_type NULL, open_transaction_count 1, last_request_end_time 6 minutes ago, program_name OrderEntry.exe, input buffer 'UPDATE dbo.Orders SET Status = 0x48 WHERE OrderId = 4711'. blocked process threshold (s) is 0.",
+      "expected_output": "BL1 head blocker is session 71. BL9 Critical (sleeping session with open transaction — will not self-resolve). BL10 Critical (6 minutes idle — orphaned transaction after a client timeout or cancel). BL2 Critical (42 s lock wait). BL3 Warning (2-level chain). BL31 Warning (blocked process threshold off, so the next occurrence is not captured). Immediate relief: KILL 71, stating the rollback cost. Durable fix: roll back in the client error handler (IF @@TRANCOUNT > 0 ROLLBACK TRAN) or SET XACT_ABORT ON; set blocked process threshold and create a blocked_process_report XE session. Do not kill sessions 84 or 92 — they are victims.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Fourteen sessions are waiting on LCK_M_IS against dbo.Orders. sys.dm_tran_locks shows session 71 holding a single OBJECT lock with request_mode X and request_status GRANT on that table, and no KEY or PAGE locks for that session. The blocker is running 'DELETE FROM dbo.LogMessages WHERE LogDate < 20250102' under a single transaction. Trace flag 1211 is not enabled and the database has is_read_committed_snapshot_on = 0.",
+      "expected_output": "BL16 Critical (lock escalation — OBJECT lock in X mode with row and page locks gone; an intent-mode OBJECT lock would not be escalation). BL4 Critical (fan-out of 14). BL23 Critical (footprint crossed the 5,000-lock escalation threshold). BL29 Warning (read-only victims would not block under RCSI). Fixes ranked: batch the DELETE with DELETE TOP (1000) in a loop, tune indexes to reduce the lock footprint, consider per-table LOCK_ESCALATION = DISABLE only as a temporary measure, and note that trace flags 1211/1224 risk error 1204 by removing the lock-memory cap.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Blocked process report XML shows a blocking-process with status sleeping, trancount 1, and inputbuf 'SELECT TOP 100 * FROM dbo.Inventory', client interface 'Microsoft JDBC Driver'. The blocked-process shows waittime 61000 and lockMode U on a KEY resource. Same pattern appears in three reports over two days.",
+      "expected_output": "BL27 Critical (implicit transactions — an open transaction with no BEGIN TRAN in the input buffer, from a driver that sets IMPLICIT_TRANSACTIONS ON). BL9 Critical (sleeping session holding locks). BL2 Critical (61 s wait). BL7 Critical (same head blocker across three captures — a design defect, not an incident). Fix: turn off implicit transactions at the driver/connection or commit explicitly after each unit of work; kill the session for immediate relief. Note that the last statement shown is not necessarily the one holding the locks — capture sql_batch_completed to see the earlier statements in the transaction.",
+      "files": []
+    }
+  ]
+}

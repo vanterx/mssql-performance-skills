@@ -777,6 +777,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 ## Companion Skills
 
+- `/sqlblocking-review` — when a plan's scans and lookups are what make a transaction long and its lock footprint large (BL35, BL8), the blocking chain capture shows what that costs other sessions
 - **tsql-review** — Analyze the T-SQL source code of this query before capturing a plan. Catches static anti-patterns (SQL injection, non-sargable predicates, cursor usage, deprecated syntax) that are detectable without execution.
 - **sqlstats-review** — Parse and analyze `SET STATISTICS IO, TIME ON` output for the same query. Provides per-table IO counts and timing that cross-reference operator behavior visible in this plan.
 - **sqlplan-compare** — Diff two execution plans (baseline vs regression) to identify what changed in join strategies, memory grants, and operator topology.

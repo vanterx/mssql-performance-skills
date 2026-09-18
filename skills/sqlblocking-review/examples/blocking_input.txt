@@ -1,0 +1,102 @@
+capture_time                server_name
+--------------------------  ------------
+2026-09-18 09:07:14.2130    SQLPROD01
+
+--- 1. Blocking chain ---
+(94 active user requests at capture time; 7 of them blocked; no THREADPOOL waiters)
+level  head  session_id  blocked_by  wait_type          wait_time  wait_resource                                request_status  session_status  command   open_tran  sess_open_tran  iso_level  host_name    program_name            login_name        last_request_start    last_request_end      pct_complete
+-----  ----  ----------  ----------  -----------------  ---------  -------------------------------------------  --------------  --------------  --------  ---------  --------------  ---------  -----------  ----------------------  ----------------  --------------------  --------------------  ------------
+0      71    71          0           NULL               0          NULL                                         NULL            sleeping        NULL      0          1               2          WKS-FIN-14   OrderEntry.exe          CORP\svc_orders   2026-09-18 09:01:09   2026-09-18 09:01:12   NULL
+1      71    84          71          LCK_M_U            354117     KEY: 7:72057594045267968 (8194443284a0)      suspended       running         UPDATE    1          1               2      APP-NODE-03  OrderEntry.exe          CORP\svc_orders   2026-09-18 09:01:20   2026-09-18 09:01:20   NULL
+2      71    92          84          LCK_M_S            349004     KEY: 7:72057594045267968 (8194443284a0)      suspended       running         SELECT    0          0               2          APP-NODE-03  OrderEntry.exe          CORP\svc_orders   2026-09-18 09:01:25   2026-09-18 09:01:25   NULL
+3      71    97          92          LCK_M_S            344220     KEY: 7:72057594045267968 (8194443284a0)      suspended       running         SELECT    0          0               2          APP-NODE-07  OrderPortal.dll         CORP\svc_web      2026-09-18 09:01:30   2026-09-18 09:01:30   NULL
+1      71    101         71          LCK_M_IS           322870     OBJECT: 7:1893581784                         suspended       running         SELECT    0          0               2          RPT-SRV-02   ReportingServices.exe   CORP\svc_report   2026-09-18 09:01:51   2026-09-18 09:01:51   NULL
+1      71    105         71          LCK_M_IS           318112     OBJECT: 7:1893581784                         suspended       running         SELECT    0          0               2          RPT-SRV-02   ReportingServices.exe   CORP\svc_report   2026-09-18 09:01:56   2026-09-18 09:01:56   NULL
+1      71    110         71          LCK_M_IS           301455     OBJECT: 7:1893581784                         suspended       running         SELECT    0          0               2          RPT-SRV-02   ReportingServices.exe   CORP\svc_report   2026-09-18 09:02:12   2026-09-18 09:02:12   NULL
+0      54    54          0           PAGEIOLATCH_SH     18422      2:1:2385104                                  suspended       running         SELECT    1          1               3          BI-ETL-01    SSIS-NightlyExtract     CORP\svc_etl      2026-09-18 09:04:02   2026-09-18 09:04:02   NULL
+1      54    118         54          LCK_M_X            96330      KEY: 7:72057594047823872 (a01f9c3b7712)      suspended       running         UPDATE    1          1               2          APP-NODE-05  InventorySync.exe       CORP\svc_inv      2026-09-18 09:05:38   2026-09-18 09:05:38   NULL
+
+blocker_or_last_query / input_buffer
+------------------------------------
+71  (input buffer)  BEGIN TRANSACTION; UPDATE dbo.Orders SET Status = 'H' WHERE OrderId = 4711;
+84  (sql text)      UPDATE dbo.Orders SET ShipDate = @p1 WHERE OrderId = @p2;
+92  (sql text)      SELECT OrderId, Status, ShipDate FROM dbo.Orders WHERE OrderId = @p1;
+97  (sql text)      SELECT OrderId, Status FROM dbo.Orders WHERE OrderId = @p1;
+101 (sql text)      SELECT o.OrderId, o.Status, c.Name FROM dbo.Orders AS o JOIN dbo.Customers AS c ON c.CustomerId = o.CustomerId WHERE o.OrderDate >= @p1;
+105 (sql text)      SELECT SUM(Total) FROM dbo.Orders WHERE OrderDate >= @p1;
+110 (sql text)      SELECT TOP 500 * FROM dbo.Orders WHERE Status = @p1 ORDER BY OrderDate DESC;
+54  (sql text)      SELECT * FROM dbo.Inventory WITH (HOLDLOCK) WHERE WarehouseId = @p1;
+118 (sql text)      UPDATE dbo.Inventory SET OnHand = OnHand - @p1 WHERE SkuId = @p2;
+
+--- 2. Open transactions ---
+session_id  database_name  transaction_begin_time    duration_s  transaction_type  transaction_state  sess_open_tran  session_status  idle_seconds  host_name    program_name          iso_level
+----------  -------------  ------------------------  ----------  ----------------  -----------------  --------------  --------------  ------------  -----------  --------------------  ---------
+71          Sales          2026-09-18 09:01:09       365         Read/write        2                  1               sleeping        362           WKS-FIN-14   OrderEntry.exe        2
+84          Sales          2026-09-18 09:01:20       354         Read/write        2                  1               running         0             APP-NODE-03  OrderEntry.exe        2
+54          Sales          2026-09-18 09:04:02       192         Read/write        2                  1               running         0             BI-ETL-01    SSIS-NightlyExtract   3
+118         Sales          2026-09-18 09:05:38       96          Read/write        2                  1               running         0             APP-NODE-05  InventorySync.exe     2
+
+--- 3. Waiting tasks and their locks ---
+session_id  wait_duration_ms  wait_type   blocking_session_id  resource_description                      resource_type  resource_subtype  request_mode  request_status  resource_associated_entity_id  database_name
+----------  ----------------  ----------  -------------------  ----------------------------------------  -------------  ----------------  ------------  --------------  -----------------------------  -------------
+84          354117            LCK_M_U     71                   (8194443284a0)                            KEY                              U             WAIT            72057594045267968              Sales
+92          349004            LCK_M_S     84                   (8194443284a0)                            KEY                              S             WAIT            72057594045267968              Sales
+97          344220            LCK_M_S     92                   (8194443284a0)                            KEY                              S             WAIT            72057594045267968              Sales
+101         322870            LCK_M_IS    71                   1893581784                                OBJECT                           IS            WAIT            1893581784                     Sales
+105         318112            LCK_M_IS    71                   1893581784                                OBJECT                           IS            WAIT            1893581784                     Sales
+110         301455            LCK_M_IS    71                   1893581784                                OBJECT                           IS            WAIT            1893581784                     Sales
+118         96330             LCK_M_X     54                   (a01f9c3b7712)                            KEY                              X             WAIT            72057594047823872              Sales
+
+--- 4. Lock footprint ---
+request_session_id  database_name  resource_type  resource_subtype  request_mode  request_status  lock_count  sample_resource         sample_entity
+------------------  -------------  -------------  ----------------  ------------  --------------  ----------  ----------------------  --------------------
+71                  Sales          OBJECT                           X             GRANT           1           1893581784              1893581784
+71                  Sales          DATABASE                         S             GRANT           1                                  0
+54                  Sales          KEY                              RangeS_S      GRANT           4863        (a01f9c3b7712)          72057594047823872
+54                  Sales          PAGE                             IS            GRANT           142         1:2385104               72057594047823872
+54                  Sales          OBJECT                           IS            GRANT           1           1893588392              1893588392
+84                  Sales          KEY                              U             WAIT            1           (8194443284a0)          72057594045267968
+118                 Sales          KEY                              X             WAIT            1           (a01f9c3b7712)          72057594047823872
+
+Object resolution (run in Sales):
+  hobt_id 72057594045267968 -> dbo.Orders, index_id 1
+  hobt_id 72057594047823872 -> dbo.Inventory, index_id 1
+  object_id 1893581784      -> dbo.Orders
+  object_id 1893588392      -> dbo.Inventory
+
+--- 5a. Blocked process threshold ---
+name                            value_in_use
+------------------------------  ------------
+blocked process threshold (s)   0
+
+--- 5b. Database concurrency options ---
+name       snapshot_isolation_state_desc  is_read_committed_snapshot_on  is_accelerated_database_recovery_on  recovery_model_desc
+---------  -----------------------------  -----------------------------  -----------------------------------  -------------------
+Sales      OFF                            0                              0                                    FULL
+Reporting  OFF                            0                              0                                    SIMPLE
+
+--- 5c. Extended Events sessions capturing blocking ---
+session_name    startup_state  event_name
+--------------  -------------  --------------------
+system_health   1              xml_deadlock_report
+
+--- 5d. Lock escalation overrides ---
+DBCC TRACESTATUS(1211, 1224, -1):
+TraceFlag  Status  Global  Session
+---------  ------  ------  -------
+1211       1       1       0
+
+Per-table escalation setting (Sales):
+table_name     lock_escalation_desc
+-------------  --------------------
+dbo.Inventory  DISABLE
+
+--- Second capture, 60 seconds later (09:08:14) ---
+level  head  session_id  blocked_by  wait_type  wait_time  wait_resource                             session_status
+-----  ----  ----------  ----------  ---------  ---------  ----------------------------------------  --------------
+0      71    71          0           NULL       0          NULL                                      sleeping
+1      71    84          71          LCK_M_U    414230     KEY: 7:72057594045267968 (8194443284a0)   running
+2      71    92          84          LCK_M_S    409118     KEY: 7:72057594045267968 (8194443284a0)   running
+
+Note: session 54 and 118 no longer appear — that chain cleared on its own.
+Note: sessions 101, 105, 110 no longer appear — the reporting client timed out at 300 s.

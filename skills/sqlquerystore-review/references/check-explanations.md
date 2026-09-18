@@ -564,7 +564,7 @@ Query Store tracks three execution types (the `execution_type` column in `sys.qu
 ```
 **Fix options:**
 1. Identify the dominant wait category from Query B output
-2. LOCK dominant: investigate blocking → `/blocking-review` (future) or `sys.dm_exec_requests`
+2. LOCK dominant: investigate blocking → `/sqlblocking-review` on a blocking chain capture (`sys.dm_exec_requests` + `sys.dm_tran_locks`)
 3. BUFFER_IO dominant: reduce logical reads via indexing → `/sqlindex-advisor`
 4. MEMORY dominant: increase server memory or reduce memory grant → Q17
 5. NETWORK_IO dominant: check client-side processing → Q22

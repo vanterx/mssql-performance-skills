@@ -20,7 +20,7 @@ echo "==================================================="
 # ---------------------------------------------------------------------------
 echo ""
 echo "[ 1 ] Total check count"
-actual=$(grep -h "^### [A-Z][0-9]" skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+actual=$(grep -hE "^### [A-Z]{1,2}[0-9]" skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
 total_checks="$actual"
 expected=$(grep "Total:.*checks across all skills" PERFORMANCE_TUNING_GUIDE.md 2>/dev/null \
            | grep -o '[0-9]*' | head -1)
@@ -133,8 +133,8 @@ echo "[ 7 ] Check prefix uniqueness"
 # then look for any LETTER that appears with more than one skill name.
 prefix_map=$(for skill_file in skills/*/SKILL.md; do
     name=$(basename "$(dirname "$skill_file")")
-    grep "^### [A-Z][0-9]" "$skill_file" 2>/dev/null \
-        | grep -o "^### [A-Z]" | grep -o "[A-Z]" | sort -u \
+    grep -E "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null \
+        | grep -oE "^### [A-Z]{1,2}" | grep -oE "[A-Z]{1,2}$" | sort -u \
         | while read -r letter; do echo "$letter $name"; done
 done)
 
@@ -200,8 +200,8 @@ echo "[11 ] SKILL.md vs references/check-explanations.md check count per skill"
 check11_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    skill_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
-    expl_count=$(grep -c "^### [A-Z][0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
+    skill_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    expl_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
     # sqlplan-batch: aggregates sqlplan-review checks, no checks of its own
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor: check-explanations.md explains the merge/ranking pipeline,
@@ -241,7 +241,7 @@ for skill_file in skills/*/SKILL.md; do
     described=$(grep "^description:" "$skill_file" 2>/dev/null \
                 | grep -o '[0-9]* checks' | grep -o '^[0-9]*')
     [ -z "$described" ] && continue   # skill doesn't state a count — skip
-    actual=$(grep -c "^### [A-Z][0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
     if [ "$described" != "$actual" ]; then
         warn "$name: frontmatter description says '$described checks' but SKILL.md has $actual — update the description"
         check14_ok=0
@@ -287,7 +287,7 @@ echo "[17 ] README Skill Details check counts match SKILL.md"
 check17_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    actual=$(grep -c "^### [A-Z][0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
     # Extract first "N checks" mention in the README's ## skill-name section
     readme_count=$(awk "/^## $name\$/{found=1; next} found && /^## /{exit} \
         found && /[0-9]+ checks/{print; exit}" README.md 2>/dev/null \
@@ -309,7 +309,7 @@ echo ""
 echo "[18 ] README Recommended Workflow counts match actual skill counts"
 check18_ok=1
 # Collect the set of actual per-skill check counts
-skill_counts=$(for f in skills/*/SKILL.md; do grep -c "^### [A-Z][0-9]" "$f" 2>/dev/null; done | sort -u)
+skill_counts=$(for f in skills/*/SKILL.md; do grep -cE "^### [A-Z]{1,2}[0-9]" "$f" 2>/dev/null; done | sort -u)
 # Extract all "N checks" values from the Recommended Workflow section
 wf_counts=$(awk '/^## Recommended Workflow/{f=1;next} f && /^---/{exit} f{print}' \
     README.md 2>/dev/null | grep -o '[0-9]* checks' | grep -o '^[0-9]*')
@@ -480,7 +480,7 @@ echo "[26 ] Per-skill count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance ma
 check26_ok=1
 while IFS= read -r skill_file; do
     name=$(basename "$(dirname "$skill_file")")
-    actual=$(grep -c "^### [A-Z][0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
     # sqlplan-batch has no original checks (aggregator) — skip
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers — skip
@@ -624,7 +624,7 @@ for skill_file in skills/*/SKILL.md; do
     name=$(basename "$(dirname "$skill_file")")
 
     # Extract unique check prefixes used in this skill (e.g., V, T, S, N)
-    prefixes=$(grep -oE '^### [A-Z][0-9]+' "$skill_file" | grep -oE '[A-Z]' | sort -u)
+    prefixes=$(grep -oE '^### [A-Z]{1,2}[0-9]+' "$skill_file" | grep -oE '^### [A-Z]{1,2}' | grep -oE '[A-Z]{1,2}$' | sort -u)
     [ -z "$prefixes" ] && continue  # dispatcher skill — skip
 
     while IFS= read -r prefix; do
@@ -635,8 +635,8 @@ for skill_file in skills/*/SKILL.md; do
 
         # Max upper bound in guide reference table for this prefix.
         # Looks at rows like: | `V1–V18` | or | `V37–V40` |
-        guide_max=$(grep "^\| \`${prefix}" PERFORMANCE_TUNING_GUIDE.md \
-                    | grep -oE "${prefix}[0-9]+" \
+        guide_max=$(grep -E "^\| \`${prefix}[0-9]" PERFORMANCE_TUNING_GUIDE.md \
+                    | grep -oE "(^|[^A-Z])${prefix}[0-9]+" \
                     | grep -oE '[0-9]+$' \
                     | sort -n | tail -1)
 
@@ -671,11 +671,12 @@ declare -A P2S=(
     [A]="sqlencryption-review" [B]="sqldbconfig-review"
     [U]="sqlbootstraplog-review"
     [G]="ssrstracelog-review"
+    [BL]="sqlblocking-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
-    [[ "$id" =~ ^[A-Z][0-9]+$ ]] || continue
-    prefix="${id:0:1}"
+    [[ "$id" =~ ^[A-Z]{1,2}[0-9]+$ ]] || continue
+    prefix=$(echo "$id" | grep -oE '^[A-Z]{1,2}')
     skill="${P2S[$prefix]}"
     if [ -z "$skill" ]; then
         warn "34: Unknown prefix '$prefix' (check $id)"
@@ -699,7 +700,7 @@ check35_ok=1
 for skill_file in skills/*/SKILL.md; do
     current_id=""
     while IFS= read -r line; do
-        if [[ "$line" =~ ^###\ ([A-Z][0-9]+)\ — ]]; then
+        if [[ "$line" =~ ^###\ ([A-Z]{1,2}[0-9]+)\ — ]]; then
             current_id="${BASH_REMATCH[1]}"
         elif [ -n "$current_id" ] && [[ "$line" =~ \*\*Trigger:\*\* ]]; then
             # Only flag if the Trigger line itself carries a version gate suffix
@@ -854,7 +855,7 @@ for skill_dir in skills/*/; do
     [ "$name" = "mssql-performance-review" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers
     [ "$name" = "sqlindex-advisor" ] && continue
-    actual=$(grep -c "^### [A-Z][0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
     claude_count=$(grep "skills/$name/SKILL.md\]" CLAUDE.md 2>/dev/null \
         | grep -o '[0-9]* checks' | head -1 | grep -o '^[0-9]*')
     [ -z "$claude_count" ] && continue   # row has no stated count — skip
@@ -906,7 +907,7 @@ while IFS='|' read -r _ range count skill _; do
     range=$(echo "$range" | tr -d ' ')
     count=$(echo "$count" | tr -d ' ')
     skill=$(echo "$skill" | tr -d ' ')
-    prefix=$(echo "$range" | grep -oE '^[A-Z]')
+    prefix=$(echo "$range" | grep -oE '^[A-Z]{1,2}')
     [ -z "$prefix" ] && continue
     row_max=$(echo "$range" | grep -oE '[0-9]+$')
     skill_file="skills/$skill/SKILL.md"
@@ -925,7 +926,7 @@ while IFS='|' read -r _ range count skill _; do
         fail "README.md Check Reference row '$range' says $count checks but $skill/SKILL.md defines $actual_count ${prefix}-checks"
         check47_ok=0
     fi
-done < <(awk '/^## Check Reference/{f=1;next} f && /^## /{exit} f && /^\| [A-Z][0-9]+[–-][A-Z][0-9]+ \|/{print}' README.md)
+done < <(awk '/^## Check Reference/{f=1;next} f && /^## /{exit} f && /^\| [A-Z]{1,2}[0-9]+[–-][A-Z]{1,2}[0-9]+ \|/{print}' README.md)
 [ "$check47_ok" -eq 1 ] && pass "README.md Check Reference rows match SKILL.md ranges and counts"
 
 # ---------------------------------------------------------------------------

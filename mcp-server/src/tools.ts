@@ -9,6 +9,7 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   plancompare: ["sqlplan-compare"],
   planbatch:   ["sqlplan-batch"],
   deadlock:    ["sqldeadlock-review"],
+  blocking:    ["sqlblocking-review"],
   waits:       ["sqlwait-review"],
   trace:       ["sqltrace-review"],
   stats:       ["sqlstats-review"],

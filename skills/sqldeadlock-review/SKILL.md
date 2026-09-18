@@ -335,6 +335,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 
 ## Companion Skills
 
+- `/sqlblocking-review` — a deadlock is blocking that closed into a cycle. When the symptom is sessions waiting rather than error 1205, run that skill on a blocking chain capture; it shares this skill's lock evidence (modes, resources, hints, isolation levels) and adds head-blocker state classification.
 - **sqlplan-review** — Analyze the execution plans of the deadlocked queries to identify missing indexes that extend lock hold time.
 - **sqlindex-advisor** — Generate index DDL to eliminate the missing index patterns (P4, P5) that cause page-level lock escalation and bookmark lookup deadlocks.
 - **tsql-review** — Review the T-SQL source of the deadlocked procedures for lock-order inconsistencies and missing TRY/CATCH (T19, T20).

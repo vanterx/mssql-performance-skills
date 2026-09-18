@@ -371,6 +371,7 @@ ORDER BY sp.name;
 
 ## Companion Skills
 
+- `/sqlblocking-review` — B12 (RCSI) and the recovery/ADR settings audited here are the durable fixes behind BL29, BL30, and BL36; run it when sessions are actively blocked
 | Skill | Relationship |
 |-------|-------------|
 | `sqlmemory-review` (O) | B6 Max Server Memory and B8 LPIM are root causes for O20 and O19 findings — run `/sqlmemory-review` to see the downstream memory pressure |
