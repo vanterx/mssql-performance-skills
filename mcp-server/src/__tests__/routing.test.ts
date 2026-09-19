@@ -5,6 +5,7 @@ import type { SkillMeta } from "../skill-loader.js";
 const ALL_SKILL_NAMES = [
   "mssql-performance-review",
   "sqlag-review",
+  "sqlblocking-review",
   "sqlbootstraplog-review",
   "sqlclusterlog-review",
   "sqldbconfig-review",
@@ -88,6 +89,10 @@ describe("ARTIFACT_SKILL_MAP", () => {
 
   it("routes deadlock to sqldeadlock-review", () => {
     expect(ARTIFACT_SKILL_MAP["deadlock"]).toEqual(["sqldeadlock-review"]);
+  });
+
+  it("routes blocking to sqlblocking-review", () => {
+    expect(ARTIFACT_SKILL_MAP["blocking"]).toEqual(["sqlblocking-review"]);
   });
 
   it("has no artifact type that maps to an empty array", () => {

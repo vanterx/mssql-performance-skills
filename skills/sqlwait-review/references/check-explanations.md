@@ -111,9 +111,9 @@ UPDATE dbo.Orders SET Status = 'Processing' WHERE CustomerId = 42;
 1. **Add indexes on filter columns** — a full table scan (`WHERE Status = 'Processing'` with no index on Status) holds shared locks on every scanned row/page. An index seek holds locks only on matching rows — dramatically reducing lock scope and duration.
 2. **Enable READ_COMMITTED_SNAPSHOT (RCSI)** — eliminates reader/writer conflicts. Readers take no shared locks; they read from the version store instead. `ALTER DATABASE YourDb SET READ_COMMITTED_SNAPSHOT ON` — requires brief exclusive access.
 3. **Shorten transactions** — COMMIT faster, do less work per transaction. Don't hold transactions open during network calls or user interaction.
-4. **Use `/sqlblock-review`** — paste `sys.dm_exec_requests` to identify the head blocker (session with no `blocking_session_id`) and its running query.
+4. **Use `/sqlblocking-review`** — paste `sys.dm_exec_requests` to identify the head blocker (session with no `blocking_session_id`) and its running query.
 
-**Related checks:** `/sqldeadlock-review` (if LCK includes deadlock patterns), `/sqlblock-review`
+**Related checks:** `/sqldeadlock-review` (if LCK includes deadlock patterns), `/sqlblocking-review`
 
 ---
 

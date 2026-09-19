@@ -1,6 +1,6 @@
 ---
 name: mssql-performance-review
-description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlhadr-review, sqlag-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch, sqlmemory-review, sqldiskio-review, sqlencryption-review, sqldbconfig-review, sqlbootstraplog-review, ssrstracelog-review), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats, memory clerks, file I/O stats, encryption audit, sp_configure output, setup bootstrap logs, SSRS report server trace logs, AG catalog view output) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "AG failed over", "this query is slow", "SSRS reports timing out", "AG backup failing on secondary") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
+description: Agentic offline orchestrator for end-to-end SQL Server performance reviews. Forms hypotheses from artifacts or symptoms, dispatches the specialised review skills (tsql-review, sqlplan-review, sqlwait-review, sqlstats-review, sqltrace-review, sqlquerystore-review, sqlprocstats-review, sqldeadlock-review, sqlblocking-review, sqlhadr-review, sqlag-review, sqlclusterlog-review, sqlerrorlog-review, sqlspn-review, sqlplan-compare, sqlindex-advisor, sqlplan-batch, sqlmemory-review, sqldiskio-review, sqlencryption-review, sqldbconfig-review, sqlbootstraplog-review, ssrstracelog-review), runs an adversarial check on the primary root cause, and produces a consolidated fix priority with explicit evidence chain, risk, and rollback for each recommendation. Use this skill whenever a user has mixed SQL Server artifacts (.sqlplan, .sql, statistics output, trace data, wait stats, blocking chain output, deadlock XML, AG / cluster / ERRORLOG, setspn output, Query Store, procstats, memory clerks, file I/O stats, encryption audit, sp_configure output, setup bootstrap logs, SSRS report server trace logs, AG catalog view output) and is not sure which specialised skill to run, or when the user describes a symptom ("CPU is high", "sessions are blocked", "AG failed over", "this query is slow", "SSRS reports timing out", "AG backup failing on secondary") and needs the analysis routed for them. Trigger on /mssql-performance-review, /mssql-perf-review, /mssql-full-review, /sql-triage, full SQL Server performance review, end-to-end SQL Server review, root cause analysis with mixed artifacts. Strictly offline — never opens a connection to SQL Server.
 triggers:
   - /mssql-performance-review
   - /mssql-perf-review
@@ -61,6 +61,7 @@ Content-based, not extension-reliant:
 | `EventClass`, `Duration`, `CPU`, `TextData` tabular headers, `.trc` / `.xel` files | sqltrace-review |
 | `wait_type`, `wait_time_ms`, `waiting_tasks_count` columns | sqlwait-review |
 | `<deadlock>` root + `<victim-list>` | sqldeadlock-review |
+| `blocking_session_id` / `blocked_by` columns, `<blocked-process-report>` XML, `sp_who2` `BlkBy` column, `sp_WhoIsActive` `blocked_session_count` output, `sys.dm_tran_locks` request_mode/request_status output, `row_lock_wait_in_ms` / `index_lock_promotion_attempt_count` from `sys.dm_db_index_operational_stats` | sqlblocking-review |
 | `query_store_*` table refs, plan_id / runtime_stats columns | sqlquerystore-review |
 | `total_worker_time`, `database_id` from `sys.dm_exec_procedure_stats` | sqlprocstats-review |
 | `replica_id`, `synchronization_state` columns | sqlhadr-review |
@@ -88,6 +89,7 @@ Example hypotheses:
 | Missing index | Key Lookup or large scan visible in plan; high logical reads on one table | sqlplan-review → sqlindex-advisor → sqlplan-batch (if folder) |
 | Server-wide I/O bottleneck | PAGEIOLATCH_SH dominant in wait stats | sqlwait-review → sqlstats-review → sqlplan-review on top reader |
 | Deadlock loop | error 1205 reported, deadlock XML present | sqldeadlock-review → sqlplan-review on victim |
+| Persistent blocking | LCK_M_* dominant in wait stats, sessions report timeouts, blocking chain or blocked process report present | sqlblocking-review → sqlplan-review/sqlindex-advisor on the head blocker's statement → sqldbconfig-review (RCSI) |
 | AG failover root cause | ERRORLOG shows lease expiry, CLUSTER.LOG present | sqlerrorlog-review → sqlclusterlog-review → sqlhadr-review |
 | AG configuration review | sys.availability_groups / sys.availability_replicas / sys.database_mirroring_endpoints output present, or user asks about AG setup, backup failures on secondary, listener routing, endpoint certificate | sqlag-review |
 | Kerberos auth fail | NTLM fallback, login burst, setspn output present | sqlspn-review → sqlerrorlog-review (login burst correlation) |
@@ -125,7 +127,7 @@ Each phase runs on the model best suited to the reasoning it requires. The full 
 Default model assignments (the common case):
 
 - Classification, hypothesis generation, recommendation rendering, follow-up Q&A: **Haiku 4.5**
-- Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlindex-advisor, sqldeadlock-review, sqlclusterlog-review)
+- Triage subagents (specialised skill dispatch): **Haiku 4.5** unless the sub-skill defaults to Sonnet (sqlplan-review, sqlplan-batch, sqlplan-compare, sqlindex-advisor, sqldeadlock-review, sqlblocking-review, sqlclusterlog-review)
 - Synthesis, conflict detection, deep-dive analysis: **Sonnet 5**
 - Adversarial root-cause pass: **Opus 5** (claude-opus-5; quality-critical, never downgraded)
 
@@ -368,6 +370,7 @@ Each conflict explicit with both sides cited. Empty section if no conflicts dete
 | Skill | Reason |
 |-------|--------|
 | sqldeadlock-review | No deadlock XML in input |
+| sqlblocking-review | No blocking chain or blocked process report in input |
 | sqlclusterlog-review | No CLUSTER.LOG in input |
 | ... | ... |
 
@@ -461,6 +464,7 @@ Create directories as needed. When `--verbose` is not present, write nothing to 
 - `/sqlplan-compare` — Two-plan diff for regression cases. Routed when two plans for the same query are provided.
 - `/sqlindex-advisor` — Index DDL recommendations. Runs after sqlplan-review to consolidate suggestions.
 - `/sqldeadlock-review` — Deadlock graph analysis. Routed on `.xdl` / system_health XE output.
+- `/sqlblocking-review` — Live and historical blocking analysis. Routed when blocking chain DMV output, a blocked process report, `sp_WhoIsActive`/`sp_BlitzWho` output, or `sp_who2` output is present; when `LCK_M_*` waits dominate and the user asks who is blocking whom; or when the incident is over and only per-index lock waits, Query Store lock waits, or blocking counters survive.
 - `/sqlplan-batch` — Folder-of-plans dashboard. Routed when more than ~10 `.sqlplan` files are present, instead of per-plan sqlplan-review.
 - `/sqlquerystore-review` — Query Store DMV analysis. Routed when Query Store output is present; informs regression hypotheses.
 - `/sqlprocstats-review` — Procedure / trigger / function runtime stats. Routed when `sys.dm_exec_procedure_stats` output is present.

@@ -49,6 +49,7 @@ triggers:
 | `skills/sqlplan-compare/` | `/sqlplan-compare` | C |
 | `skills/sqlindex-advisor/` | `/sqlindex-advisor` | D |
 | `skills/sqldeadlock-review/` | `/sqldeadlock-review` | P |
+| `skills/sqlblocking-review/` | `/sqlblocking-review` | BL |
 | `skills/sqlplan-batch/` | `/sqlplan-batch` | (dispatcher — aggregates S/N) |
 | `skills/tsql-review/` | `/tsql-review` | T |
 | `skills/sqlstats-review/` | `/sqlstats-review` | I, W |
@@ -101,6 +102,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `C` | `sqlplan-compare` | Regression comparison checks | C1–C20 |
 | `D` | `sqlindex-advisor` | Derived index rules (operator patterns) | D1–D10 |
 | `P` | `sqldeadlock-review` | Deadlock patterns | P1–P16 |
+| `BL` | `sqlblocking-review` | Live blocking chains: head blocker, lock evidence, transaction/isolation design | BL1–BL36 |
 | `T` | `tsql-review` | T-SQL static analysis checks | T1–T85 |
 | `I` | `sqlstats-review` | IO metrics checks | I1–I18 |
 | `W` | `sqlstats-review` | Time/wait metrics checks | W1–W9 |
@@ -125,7 +127,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | (none) | `sqlplan-batch` | Dispatcher — aggregates S/N from sqlplan-review | n/a |
 | (none) | `mssql-performance-review` | Dispatcher — delegates to the 22 performance specialised skills (not the 3 migration skills — see `sqlmigration-review`'s Notes) | n/a |
 
-**Available prefixes for new skills:** see `CLAUDE.md`'s "Check ID prefixes — currently taken" table for the canonical, up-to-date list — choose any unused single uppercase letter not in that table.
+**Available prefixes for new skills:** see `CLAUDE.md`'s "Check ID prefixes — currently taken" table for the canonical, up-to-date list. All 26 single letters are now taken, so new skills use a **two-letter prefix** — `sqlblocking-review` (`BL1–BL36`) is the first. Two-letter prefixes are first-class: `scripts/verify-docs.sh` matches check headings with `^### [A-Z]{1,2}[0-9]` throughout, so counts, range bounds, and README/guide cross-checks apply to them unchanged. When adding one, pick a pair no existing prefix collides with and add it to the `P2S` map in Check 34.
 
 ---
 
