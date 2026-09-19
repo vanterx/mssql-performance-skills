@@ -13,8 +13,8 @@ analyzes, in one batch.
 | 2 | Open transactions with age, isolation level, and idle time | BL9, BL10, BL24–BL27 |
 | 3 | Waiting tasks joined to the lock each waits for | BL2, BL18–BL22 |
 | 4 | Lock footprint grouped per session, resource type, and mode | BL16, BL17, BL22, BL23 |
-| 5 | Blocked process threshold, database concurrency options, blocking XE sessions, escalation trace flags | BL29–BL34, BL36 |
-| 6 | Historical evidence that survives the incident: per-index lock wait hot spots and escalation attempts, Query Store lock wait history, blocking performance counters, instance-wide lock wait share | BL37–BL42 |
+| 5 | Blocked process threshold, database concurrency options (RCSI, snapshot, ADR, optimized locking), blocking XE sessions, escalation trace flags | BL29–BL34, BL36 |
+| 6 | Historical evidence that survives the incident: per-index lock wait hot spots and escalation attempts, Query Store capture mode and lock wait history, blocking performance counters, instance-wide `LCK_M_*` share with idle waits excluded | BL37–BL42 |
 
 **How to run**
 

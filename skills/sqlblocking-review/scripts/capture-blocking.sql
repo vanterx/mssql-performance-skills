@@ -146,6 +146,7 @@ SELECT  request_session_id,
         sample_resource = MIN(resource_description),
         sample_entity   = MIN(resource_associated_entity_id)
 FROM sys.dm_tran_locks
+WHERE request_session_id <> @@SPID   -- exclude this capture session
 GROUP BY request_session_id, resource_database_id, resource_type, resource_subtype,
          request_mode, request_status
 HAVING COUNT(*) > 0
@@ -172,15 +173,11 @@ SELECT  name,
         snapshot_isolation_state_desc,
         is_read_committed_snapshot_on,
         is_accelerated_database_recovery_on,
+        -- NULL where optimized locking is not available (before SQL Server 2025)
+        is_optimized_locking_on = DATABASEPROPERTYEX(name, 'IsOptimizedLockingOn'),
         recovery_model_desc
 FROM sys.databases
 WHERE database_id > 4;
-
-/* On SQL Server 2025, Azure SQL Database, and Azure SQL Managed Instance,
-   sys.databases also exposes is_optimized_locking_on:
-
-   SELECT name, is_optimized_locking_on FROM sys.databases WHERE database_id > 4;
-*/
 
 PRINT '--- 5c. Extended Events sessions capturing blocking ---';
 SELECT  session_name = s.name, s.startup_state, event_name = e.name
@@ -221,23 +218,55 @@ FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS os
 JOIN sys.indexes AS i
   ON i.object_id = os.object_id AND i.index_id = os.index_id
 WHERE os.row_lock_wait_in_ms + os.page_lock_wait_in_ms > 0
-ORDER BY total_lock_wait_ms DESC;
+   OR os.index_lock_promotion_attempt_count > 0   -- escalations block at OBJECT level, not row/page
+ORDER BY total_lock_wait_ms DESC, os.index_lock_promotion_attempt_count DESC;
 
 /* Counters are cumulative since the index's metadata entered the cache and
    reset when it is evicted or the object is rebuilt. Only row and page lock
-   waits are counted — OBJECT, METADATA and APPLICATION lock waits are not. */
+   waits are counted — OBJECT, METADATA and APPLICATION lock waits are not,
+   so a table that escalated appears through its promotion counts (BL39)
+   even when its wait columns are zero. A wait is recorded when it ends:
+   during a live incident the blocked waits are not yet in these columns. */
 
 PRINT '--- 6b. Query Store lock wait history (SQL Server 2017+, Azure SQL) ---';
+/* Capture mode first: under AUTO (the default from SQL Server 2019) a query
+   is stored only after 30 executions, 1 s of compile CPU, or 100 ms of
+   execution CPU. A blocked query waits without using CPU, so occasional
+   blocking victims are often never captured — an empty result below is not
+   proof that no lock waits happened. */
+SELECT  query_capture_mode_desc, wait_stats_capture_mode_desc, actual_state_desc
+FROM sys.database_query_store_options;
+
+/* Both views can hold several rows per plan, interval, and execution type
+   (flushed plus in-memory), so aggregate each on that key before joining. */
+WITH lock_waits AS (
+    SELECT  plan_id, runtime_stats_interval_id, execution_type,
+            lock_wait_ms = SUM(total_query_wait_time_ms)
+    FROM sys.query_store_wait_stats
+    WHERE wait_category_desc = 'Lock'
+    GROUP BY plan_id, runtime_stats_interval_id, execution_type
+),
+runs AS (
+    SELECT  plan_id, runtime_stats_interval_id, execution_type,
+            executions = SUM(count_executions)
+    FROM sys.query_store_runtime_stats
+    GROUP BY plan_id, runtime_stats_interval_id, execution_type
+)
 SELECT TOP (25)
         qsq.query_id,
         qsp.plan_id,
-        total_lock_wait_ms = SUM(ws.total_query_wait_time_ms),
+        total_lock_wait_ms = SUM(lw.lock_wait_ms),
+        executions         = SUM(r.executions),
+        avg_lock_wait_ms   = SUM(lw.lock_wait_ms) * 1.0 / NULLIF(SUM(r.executions), 0),
         query_sql_text     = MIN(qst.query_sql_text)
-FROM sys.query_store_wait_stats AS ws
-JOIN sys.query_store_plan       AS qsp ON qsp.plan_id      = ws.plan_id
-JOIN sys.query_store_query      AS qsq ON qsq.query_id     = qsp.query_id
+FROM lock_waits AS lw
+LEFT JOIN runs AS r
+       ON r.plan_id                   = lw.plan_id
+      AND r.runtime_stats_interval_id = lw.runtime_stats_interval_id
+      AND r.execution_type            = lw.execution_type
+JOIN sys.query_store_plan       AS qsp ON qsp.plan_id       = lw.plan_id
+JOIN sys.query_store_query      AS qsq ON qsq.query_id      = qsp.query_id
 JOIN sys.query_store_query_text AS qst ON qst.query_text_id = qsq.query_text_id
-WHERE ws.wait_category_desc = 'Lock'
 GROUP BY qsq.query_id, qsp.plan_id
 ORDER BY total_lock_wait_ms DESC;
 
@@ -253,18 +282,52 @@ WHERE (object_name LIKE '%General Statistics%' AND counter_name = 'Processes blo
          'Number of Deadlocks/sec', 'Average Wait Time (ms)'));
 
 PRINT '--- 6d. Instance-wide lock wait share (BL37) ---';
+/* The share is only meaningful once idle and background waits are removed:
+   left in, waits such as SOS_WORK_DISPATCHER and LOGMGR_QUEUE dominate the
+   denominator and push a real lock problem down into the Info band. The
+   list below matches /sqlwait-review's capture script.
+   PWAIT_EXTENSIBILITY_CLEANUP_TASK is not documented on Microsoft Learn; it
+   is excluded because it accrues with uptime on an idle instance (observed
+   on SQL Server 2025, where it reached over 90% of non-idle wait time). */
 SELECT TOP (15)
         wait_type,
         wait_time_ms,
         waiting_tasks_count,
         pct_of_total = CONVERT(decimal(5,2),
-            100.0 * wait_time_ms / NULLIF(SUM(wait_time_ms) OVER (), 0))
+            100.0 * wait_time_ms / NULLIF(SUM(wait_time_ms) OVER (), 0)),
+        lck_m_share_pct = CONVERT(decimal(5,2),
+            100.0 * SUM(CASE WHEN wait_type LIKE 'LCK[_]M[_]%' THEN wait_time_ms ELSE 0 END) OVER ()
+                  / NULLIF(SUM(wait_time_ms) OVER (), 0))   -- BL37 compares this column
 FROM sys.dm_os_wait_stats
 WHERE wait_time_ms > 0
-  AND wait_type NOT IN ('CLR_SEMAPHORE','LAZYWRITER_SLEEP','RESOURCE_QUEUE',
-      'SLEEP_TASK','SLEEP_SYSTEMTASK','SQLTRACE_BUFFER_FLUSH','WAITFOR',
-      'BROKER_TASK_STOP','CHECKPOINT_QUEUE','REQUEST_FOR_DEADLOCK_SEARCH',
-      'XE_TIMER_EVENT','XE_DISPATCHER_JOIN','XE_DISPATCHER_WAIT','FT_IFTS_SCHEDULER_IDLE_WAIT',
-      'DIRTY_PAGE_POLL','SP_SERVER_DIAGNOSTICS_SLEEP','HADR_FILESTREAM_IOMGR_IOCOMPLETION',
-      'DISPATCHER_QUEUE_SEMAPHORE','BROKER_TO_FLUSH','BROKER_EVENTHANDLER')
+  AND wait_type NOT IN (
+    'BROKER_EVENTHANDLER','BROKER_RECEIVE_WAITFOR','BROKER_TASK_STOP',
+    'BROKER_TO_FLUSH','BROKER_TRANSMITTER',
+    'CHECKPOINT_QUEUE','CHKPT','CLR_AUTO_EVENT','CLR_MANUAL_EVENT','CLR_SEMAPHORE',
+    'DBMIRROR_DBM_EVENT','DBMIRROR_DBM_MUTEX','DBMIRROR_EVENTS_QUEUE',
+    'DBMIRROR_WORKER_QUEUE','DBMIRRORING_CMD',
+    'DIRTY_PAGE_POLL','DISPATCHER_QUEUE_SEMAPHORE','EXECSYNC','FSAGENT',
+    'FT_IFTS_SCHEDULER_IDLE_WAIT','FT_IFTSHC_MUTEX',
+    'HADR_CLUSAPI_CALL','HADR_FILESTREAM_IOMGR_IOCOMPLETION',
+    'HADR_LOGCAPTURE_WAIT','HADR_NOTIFICATION_DEQUEUE','HADR_TIMER_TASK',
+    'HADR_WORK_QUEUE','KSOURCE_WAKEUP','LAZYWRITER_SLEEP','LOGMGR_QUEUE',
+    'MEMORY_ALLOCATION_EXT','ONDEMAND_TASK_QUEUE',
+    'PARALLEL_REDO_DRAIN_WORKER','PARALLEL_REDO_LOG_CACHE',
+    'PARALLEL_REDO_TRAN_LIST','PARALLEL_REDO_WORKER_SYNC',
+    'PARALLEL_REDO_WORKER_WAIT_WORK',
+    'PREEMPTIVE_OS_FLUSHFILEBUFFERS','PREEMPTIVE_SP_SERVER_DIAGNOSTICS',
+    'PREEMPTIVE_XE_GETTARGETSTATE','PVS_PREALLOCATE',
+    'PWAIT_ALL_COMPONENTS_INITIALIZED','PWAIT_DIRECTLOGCONSUMER_GETNEXT',
+    'PWAIT_EXTENSIBILITY_CLEANUP_TASK',
+    'QDS_ASYNC_QUEUE','QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+    'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP','QDS_SHUTDOWN_QUEUE',
+    'REDO_THREAD_PENDING_WORK','REQUEST_FOR_DEADLOCK_SEARCH','RESOURCE_QUEUE',
+    'SERVER_IDLE_CHECK','SLEEP_BPOOL_FLUSH','SLEEP_DBSTARTUP','SLEEP_DBTASK',
+    'SLEEP_DCOMSTARTUP','SLEEP_MASTERDBREADY','SLEEP_MASTERMDREADY',
+    'SLEEP_MASTERUPGRADED','SLEEP_MSDBSTARTUP','SLEEP_SYSTEMTASK','SLEEP_TASK',
+    'SLEEP_TEMPDBSTARTUP','SNI_HTTP_ACCEPT','SOS_WORK_DISPATCHER',
+    'SP_SERVER_DIAGNOSTICS_SLEEP','SQLTRACE_BUFFER_FLUSH',
+    'SQLTRACE_INCREMENTAL_FLUSH_SLEEP','SQLTRACE_WAIT_ENTRIES',
+    'WAITFOR','WAITFOR_PF_FLUSH_COMPLETE','WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+    'XE_DISPATCHER_JOIN','XE_DISPATCHER_WAIT','XE_TIMER_EVENT')
 ORDER BY wait_time_ms DESC;

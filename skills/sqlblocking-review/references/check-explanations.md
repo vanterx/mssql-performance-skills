@@ -92,7 +92,7 @@ level  session_id  blocked_by  wait_type   wait_time
 
 **What it means:** Fan-out is how many sessions one blocker stops directly. Wide and shallow is the signature of a coarse lock — a table or page lock against many small, unrelated statements.
 
-**How to spot it:** Count distinct `session_id` values sharing one `blocking_session_id`.
+**How to spot it:** Count distinct `session_id` values sharing one `blocking_session_id`, then add the sessions waiting on a resource the head blocker holds. Lock requests queue in arrival order, so when two sessions wait for the same row, the second one reports the *first waiter* as its blocker. It still depends on the head blocker, one level down in the chain. Match `wait_resource` against the head blocker's granted locks to count it.
 
 ```
 blocking_session_id  blocked_count  common_resource
@@ -1109,7 +1109,7 @@ ALTER DATABASE Sales SET OPTIMIZED_LOCKING = ON;
 
 **What it means:** Wait statistics tell you blocking happened and how much it cost. They can never tell you who caused it, because a session that *takes* a lock records no wait — only the session that *waits* for one does. This is the single most common analytical dead end in blocking work: a top-waits report full of `LCK_M_*` looks like an answer and is only a measurement.
 
-**How to spot it:** `LCK_M_*` entries high in `sys.dm_os_wait_stats` (or in `sp_BlitzFirst @SinceStartup = 1`) with no chain capture in the input.
+**How to spot it:** `LCK_M_*` entries high in `sys.dm_os_wait_stats` (or in `sp_BlitzFirst @SinceStartup = 1`) with no chain capture in the input. Take the share only after idle and background waits are removed — section 6d of the capture script reports it as `lck_m_share_pct`. Measured against raw totals, background waits such as `SOS_WORK_DISPATCHER` dominate: on one test instance the same lock waits came to 0.8% of the raw total and 29% once idle waits were excluded.
 
 ```
 wait_type       wait_time_ms   pct_total   waiting_tasks_count
@@ -1163,8 +1163,11 @@ SELECT  table_name = OBJECT_SCHEMA_NAME(i.object_id) + '.' + OBJECT_NAME(i.objec
 FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS os
 JOIN sys.indexes AS i ON i.object_id = os.object_id AND i.index_id = os.index_id
 WHERE os.row_lock_wait_in_ms + os.page_lock_wait_in_ms > 0
-ORDER BY total_lock_wait_ms DESC;
+   OR os.index_lock_promotion_attempt_count > 0   -- keep escalated tables (BL39)
+ORDER BY total_lock_wait_ms DESC, os.index_lock_promotion_attempt_count DESC;
 ```
+
+A wait is added to these counters when it ends, so during a live incident the current victims are not in them yet — run this after the chain clears.
 
 **Fix options (ranked by impact):**
 1. **Treat the top object as the target** for the transaction-length and index work in BL24, BL35, and BL46.
@@ -1203,6 +1206,8 @@ END;
 2. **Reduce locks per row** with a covering index or a SARGable predicate (BL35, BL48).
 3. **Do not reach for trace flags 1211/1224** (BL34); attempts recorded here are a reason to fix the statement, not to remove the memory cap.
 
+**Zero lock wait does not clear the table:** once an escalation succeeds (`index_lock_promotion_count` > 0), the resulting table lock blocks other sessions at `OBJECT` level. Those waits are not counted in the row and page wait columns BL38 ranks. An escalated table can therefore show zero lock wait while being the cause of the incident. The capture script keeps rows with escalation attempts for this reason.
+
 **Related checks:** BL16, BL23, BL34, BL38
 
 ---
@@ -1231,8 +1236,9 @@ ORDER BY total_lock_wait_ms DESC;
 
 **Fix options:**
 1. **Turn Query Store on** where it is off; it is the cheapest historical record of blocking victims.
-2. **Read it as victims, not culprits** — pair with BL38 (object) and the blocked process report (blocker) before drawing conclusions.
-3. **Check for a regression** — a query that only recently started accumulating lock waits often changed plan (route to `/sqlquerystore-review`), or its blocker did.
+2. **Check the capture mode before trusting an empty result** — under `QUERY_CAPTURE_MODE = AUTO` (the default from SQL Server 2019) a query is stored only after 30 executions, 1 second of compile CPU, or 100 ms of execution CPU. A blocked query spends its time waiting rather than on CPU, so occasional victims are often never captured. For an investigation window, use `CUSTOM` with lower thresholds or `ALL`.
+3. **Read it as victims, not culprits** — pair with BL38 (object) and the blocked process report (blocker) before drawing conclusions.
+4. **Check for a regression** — a query that only recently started accumulating lock waits often changed plan (route to `/sqlquerystore-review`), or its blocker did.
 
 **Related checks:** BL7, BL37, BL38
 

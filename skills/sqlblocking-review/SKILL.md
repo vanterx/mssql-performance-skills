@@ -144,6 +144,7 @@ SELECT  request_session_id,
         sample_resource = MIN(resource_description),
         sample_entity   = MIN(resource_associated_entity_id)
 FROM sys.dm_tran_locks
+WHERE request_session_id <> @@SPID   -- exclude this capture session
 GROUP BY request_session_id, resource_database_id, resource_type, resource_subtype,
          request_mode, request_status
 ORDER BY lock_count DESC;
@@ -157,6 +158,8 @@ SELECT  name,
         snapshot_isolation_state_desc,
         is_read_committed_snapshot_on,
         is_accelerated_database_recovery_on,
+        -- NULL where optimized locking is not available (before SQL Server 2025)
+        is_optimized_locking_on = DATABASEPROPERTYEX(name, 'IsOptimizedLockingOn'),
         recovery_model_desc
 FROM sys.databases
 WHERE database_id > 4;
@@ -173,6 +176,9 @@ WHERE e.name IN ('blocked_process_report', 'lock_escalation', 'xml_deadlock_repo
 -- 6a. Lock wait hot spots per index (run in the affected database).
 --     Counters reset when the index's metadata cache object is evicted,
 --     so treat them as "since roughly the last restart", not as exact history.
+--     A wait is recorded when it ends, so run this after the chain clears.
+--     Escalated tables block at OBJECT level, which these wait columns do not
+--     count, so rows with escalation attempts are kept even at zero wait (BL39).
 SELECT  table_name = OBJECT_SCHEMA_NAME(i.object_id) + '.' + OBJECT_NAME(i.object_id),
         index_name = ISNULL(i.name, '(heap)'),
         i.index_id,
@@ -189,21 +195,44 @@ FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS os
 JOIN sys.indexes AS i
   ON i.object_id = os.object_id AND i.index_id = os.index_id
 WHERE os.row_lock_wait_in_ms + os.page_lock_wait_in_ms > 0
-ORDER BY total_lock_wait_ms DESC;
+   OR os.index_lock_promotion_attempt_count > 0
+ORDER BY total_lock_wait_ms DESC, os.index_lock_promotion_attempt_count DESC;
 
--- 6b. Query Store lock wait history (SQL Server 2017 and later, Azure SQL)
+-- 6b. Query Store lock wait history (SQL Server 2017 and later, Azure SQL).
+--     Check the capture mode first: under AUTO a blocked query that uses
+--     little CPU may never be stored (BL40), so an empty result proves nothing.
+SELECT  query_capture_mode_desc, wait_stats_capture_mode_desc, actual_state_desc
+FROM sys.database_query_store_options;
+
+--     Both views hold several rows per plan, interval, and execution type;
+--     aggregate each on that key before joining.
+WITH lock_waits AS (
+    SELECT  plan_id, runtime_stats_interval_id, execution_type,
+            lock_wait_ms = SUM(total_query_wait_time_ms)
+    FROM sys.query_store_wait_stats
+    WHERE wait_category_desc = 'Lock'
+    GROUP BY plan_id, runtime_stats_interval_id, execution_type
+),
+runs AS (
+    SELECT  plan_id, runtime_stats_interval_id, execution_type,
+            executions = SUM(count_executions)
+    FROM sys.query_store_runtime_stats
+    GROUP BY plan_id, runtime_stats_interval_id, execution_type
+)
 SELECT TOP (25)
         qsq.query_id, qsp.plan_id,
-        total_lock_wait_ms = SUM(ws.total_query_wait_time_ms),
-        avg_lock_wait_ms   = SUM(ws.avg_query_wait_time_ms),
-        executions         = SUM(ws.total_query_wait_time_ms)
-                             / NULLIF(SUM(ws.avg_query_wait_time_ms), 0),
+        total_lock_wait_ms = SUM(lw.lock_wait_ms),
+        executions         = SUM(r.executions),
+        avg_lock_wait_ms   = SUM(lw.lock_wait_ms) * 1.0 / NULLIF(SUM(r.executions), 0),
         query_sql_text     = MIN(qst.query_sql_text)
-FROM sys.query_store_wait_stats AS ws
-JOIN sys.query_store_plan       AS qsp ON qsp.plan_id  = ws.plan_id
+FROM lock_waits AS lw
+LEFT JOIN runs AS r
+       ON r.plan_id = lw.plan_id
+      AND r.runtime_stats_interval_id = lw.runtime_stats_interval_id
+      AND r.execution_type = lw.execution_type
+JOIN sys.query_store_plan       AS qsp ON qsp.plan_id  = lw.plan_id
 JOIN sys.query_store_query      AS qsq ON qsq.query_id = qsp.query_id
 JOIN sys.query_store_query_text AS qst ON qst.query_text_id = qsq.query_text_id
-WHERE ws.wait_category_desc = 'Lock'
 GROUP BY qsq.query_id, qsp.plan_id
 ORDER BY total_lock_wait_ms DESC;
 
@@ -215,9 +244,14 @@ WHERE (object_name LIKE '%General Statistics%' AND counter_name = 'Processes blo
    OR (object_name LIKE '%Locks%' AND counter_name IN
         ('Lock Waits/sec', 'Lock Wait Time (ms)', 'Lock Timeouts/sec',
          'Number of Deadlocks/sec', 'Average Wait Time (ms)'));
+
+-- 6d. Instance-wide LCK_M_* share for BL37: use section 6d of
+--     scripts/capture-blocking.sql, which removes the full list of idle and
+--     background waits. Without that list the denominator is dominated by
+--     waits such as SOS_WORK_DISPATCHER and the share is badly understated.
 ```
 
-> Optimized-locking instances also expose `is_optimized_locking_on` in `sys.databases` and `XACT` lock resources in `sys.dm_tran_locks`. See BL36.
+> Optimized-locking instances also show `XACT` lock resources in `sys.dm_tran_locks`; section 5 reports `is_optimized_locking_on` (NULL before SQL Server 2025). See BL36.
 >
 > Live capture beats every historical source: sections 1–4 name the blocker, sections 6a–6c only narrow down where and when. Lock waits are recorded by the *blocked* session, never by the blocker, so no wait-based artifact can name the head blocker on its own — see BL37.
 
@@ -279,7 +313,7 @@ Report the head blocker's *identity, statement, and state* before any recommenda
 ### BL4 — Wide Blocking Fan-Out
 - **Trigger:** One head blocker directly blocks sessions at or above the Warning fan-out count
 - **Severity:** Warning at 3–9 sessions; Critical at 10 or more
-- **Fix:** Wide fan-out with a shallow chain is the signature of one coarse lock (table or page) against many short readers/writers — check BL16 (escalation), BL17 (object-level X), and BL18 (Sch-M). Quantify the impact as blocked sessions multiplied by the longest wait so the business cost is explicit in the report.
+- **Fix:** Wide fan-out with a shallow chain is the signature of one coarse lock (table or page) against many short readers/writers — check BL16 (escalation), BL17 (object-level X), and BL18 (Sch-M). Quantify the impact as blocked sessions multiplied by the longest wait so the business cost is explicit in the report. Count fan-out by resource, not only by `blocking_session_id`: lock requests queue in arrival order, so a session waiting on a row the head blocker holds is reported as blocked by the *earlier waiter* queued ahead of it on that row. Sessions whose `wait_resource` matches a lock the head blocker holds belong to its fan-out even when they appear one level down.
 
 ### BL5 — Blocking Chain Spans Multiple Databases
 - **Trigger:** Sessions in one chain hold or wait for locks whose `resource_database_id` resolves to more than one database, or the head blocker's `database_name` differs from a victim's
@@ -468,7 +502,7 @@ Most blocking is reported after it ends. These checks work the artifacts that su
 ### BL37 — Lock Waits Dominate but No Chain Was Captured
 - **Trigger:** `LCK_M_*` waits reach the Warning share of instance-wide wait time in `sys.dm_os_wait_stats` (or `sp_BlitzFirst @SinceStartup = 1`), and the input contains no blocking chain, blocked process report, or sampled capture
 - **Severity:** Warning; Critical at the Critical share
-- **Fix:** Lock waits are accumulated by the *blocked* session, never by the blocker, so wait statistics prove blocking happened and can never name who caused it. Treat this input as sizing, not diagnosis: report the share and the dominant lock modes (`LCK_M_S`/`LCK_M_IS` means readers waiting on writers and points at BL29; `LCK_M_X`/`LCK_M_U` means writer-on-writer; `LCK_M_SCH_S` means something holds `Sch-M`, see BL18 and BL43), then name the capture that closes the gap — the blocked process report (BL31–BL33) for blocks over five seconds, a sampled `sp_WhoIsActive` log (BL42) for shorter ones, and the per-index evidence in BL38 for where.
+- **Fix:** Lock waits are accumulated by the *blocked* session, never by the blocker, so wait statistics prove blocking happened and can never name who caused it. Treat this input as sizing, not diagnosis: report the share and the dominant lock modes (`LCK_M_S`/`LCK_M_IS` means readers waiting on writers and points at BL29; `LCK_M_X`/`LCK_M_U` means writer-on-writer; `LCK_M_SCH_S` means something holds `Sch-M`, see BL18 and BL43), then name the capture that closes the gap — the blocked process report (BL31–BL33) for blocks over five seconds, a sampled `sp_WhoIsActive` log (BL42) for shorter ones, and the per-index evidence in BL38 for where. Compute the share only after removing idle and background waits (the `lck_m_share_pct` column of the capture script's section 6d does this); against raw totals, waits such as `SOS_WORK_DISPATCHER` or `LOGMGR_QUEUE` swamp the denominator and a Critical lock share can read as Info.
 
 ### BL38 — Lock Wait Hot Spots by Index
 - **Trigger:** `sys.dm_db_index_operational_stats` shows an index whose average lock wait, total lock wait, or escalation attempts reach the Warning bands in the Thresholds Reference
@@ -478,12 +512,12 @@ Most blocking is reported after it ends. These checks work the artifacts that su
 ### BL39 — Lock Escalation Attempts Recorded Against an Index
 - **Trigger:** `index_lock_promotion_attempt_count` exceeds the Warning threshold, especially when it substantially exceeds `index_lock_promotion_count`
 - **Severity:** Warning; Critical when attempts exceed the threshold on a table that also appears in a live chain
-- **Fix:** Attempts far above completions mean the engine repeatedly tried to escalate and was refused because another session held an incompatible table lock; it then kept acquiring fine-grained locks and retried at every 1,250 further locks. That pattern is both a large lock footprint (BL23) and a warning that a table lock is one scheduling accident away. Fix the statement that accumulates the locks — batch it, or index it so it touches fewer rows (BL16, BL35) — rather than reaching for the escalation overrides in BL34.
+- **Fix:** Attempts far above completions mean the engine repeatedly tried to escalate and was refused because another session held an incompatible table lock; it then kept acquiring fine-grained locks and retried at every 1,250 further locks. That pattern is both a large lock footprint (BL23) and a warning that a table lock is one scheduling accident away. Fix the statement that accumulates the locks — batch it, or index it so it touches fewer rows (BL16, BL35) — rather than reaching for the escalation overrides in BL34. A non-zero `index_lock_promotion_count` means an escalation succeeded: the table lock that results blocks others at `OBJECT` level, which the row and page wait columns do not record, so an escalated table can show zero lock wait in BL38 while having caused the incident. Do not dismiss it for that reason.
 
 ### BL40 — Query Store Lock Wait History Unused or Concentrated
 - **Trigger:** SQL Server 2017 and later (or Azure SQL): Query Store is off, or `sys.query_store_wait_stats` shows queries with `wait_category_desc = 'Lock'` accumulating significant wait time
 - **Severity:** Info when Query Store is off; Warning when a small set of queries carries most lock waits
-- **Fix:** Query Store attributes lock waits to individual queries and keeps them after the incident, which plain wait statistics cannot do. Turn it on where it is off, then rank queries by lock wait category to identify the repeat victims. Remember the direction of the evidence: these are the queries that *waited*, not the ones that blocked, so pair the result with BL38 (which object) and the blocked process report (which blocker) before concluding anything about root cause.
+- **Fix:** Query Store attributes lock waits to individual queries and keeps them after the incident, which plain wait statistics cannot do. Turn it on where it is off, then rank queries by lock wait category to identify the repeat victims. Remember the direction of the evidence: these are the queries that *waited*, not the ones that blocked, so pair the result with BL38 (which object) and the blocked process report (which blocker) before concluding anything about root cause. Check `query_capture_mode_desc` before reading an empty result as good news: under `AUTO` (the default from SQL Server 2019) a query is stored only after 30 executions, 1 second of compile CPU, or 100 ms of execution CPU, and a blocked query spends its time waiting, not on CPU — so infrequent blocking victims are often never captured. Where lock-wait history per query matters, use `CUSTOM` capture with a lower threshold or `ALL` for the investigation window.
 
 ### BL41 — Blocking Performance Counters Not Baselined
 - **Trigger:** *Processes blocked* (`General Statistics` object) is non-zero across repeated samples, or *Lock Waits/sec* and *Lock Wait Time (ms)* are elevated with no baseline recorded
