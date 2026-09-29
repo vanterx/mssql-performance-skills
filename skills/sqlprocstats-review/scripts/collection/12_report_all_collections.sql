@@ -172,16 +172,70 @@ SELECT TOP 30
 FROM collect.collection_log
 ORDER BY log_id DESC;
 
-/* Summary: are all collectors succeeding? */
-SELECT
-    collector_name,
-    last_run       = MAX(collection_time),
-    success_count  = SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END),
-    error_count    = SUM(CASE WHEN status = 'ERROR'   THEN 1 ELSE 0 END),
-    avg_duration_ms = AVG(duration_ms),
-    last_status    = MAX(status)
-FROM collect.collection_log
-WHERE collection_time >= DATEADD(HOUR, -24, SYSDATETIME())
-GROUP BY collector_name
-ORDER BY collector_name;
+/* Summary: are all collectors succeeding, and is each one still running?
+
+   Health is graded relative to the configured cadence rather than against a
+   fixed clock, so a 5-minute collector and an hourly one are judged on the
+   same terms:
+       STALE   — no run for the greater of 4 hours or 1.5 intervals
+       FAILING — no run for the greater of 24 hours or 2 intervals
+   A collector that has stopped entirely is the failure this section exists to
+   catch: its rows simply stop arriving, and every report above it silently
+   narrows to the last collection it managed. Note that last_run is taken from
+   the whole log, not the 24-hour window, so a collector dead for days is still
+   listed rather than vanishing from the output. */
+DECLARE @interval_min int =
+    ISNULL((SELECT TRY_CAST(setting_value AS int)
+            FROM collect.config
+            WHERE setting_name = 'collection_interval_minutes'), 5);
+
+DECLARE @stale_min   int = CASE WHEN @interval_min * 3 / 2 > 240  THEN @interval_min * 3 / 2 ELSE 240  END,
+        @failing_min int = CASE WHEN @interval_min * 2     > 1440 THEN @interval_min * 2     ELSE 1440 END;
+
+WITH latest AS
+(
+    SELECT  collector_name, collection_time, status,
+            rn = ROW_NUMBER() OVER (PARTITION BY collector_name ORDER BY log_id DESC)
+    FROM collect.collection_log
+),
+window_24h AS
+(
+    SELECT  collector_name,
+            success_count   = SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END),
+            error_count     = SUM(CASE WHEN status = 'ERROR'   THEN 1 ELSE 0 END),
+            avg_duration_ms = AVG(duration_ms)
+    FROM collect.collection_log
+    WHERE collection_time >= DATEADD(HOUR, -24, SYSDATETIME())
+    GROUP BY collector_name
+)
+SELECT  l.collector_name,
+        last_run               = l.collection_time,
+        /* The most recent status, not MAX() over the window: alphabetically
+           'SUCCESS' outranks 'ERROR', so MAX(status) reports a collector as
+           succeeding for as long as it has ever succeeded once. */
+        last_status            = l.status,
+        minutes_since_last_run = DATEDIFF(MINUTE, l.collection_time, SYSDATETIME()),
+        success_count_24h      = ISNULL(w.success_count, 0),
+        error_count_24h        = ISNULL(w.error_count, 0),
+        avg_duration_ms_24h    = w.avg_duration_ms,
+        health =
+            CASE
+                WHEN DATEDIFF(MINUTE, l.collection_time, SYSDATETIME()) >= @failing_min THEN 'FAILING'
+                WHEN DATEDIFF(MINUTE, l.collection_time, SYSDATETIME()) >= @stale_min   THEN 'STALE'
+                WHEN l.status = 'ERROR'       THEN 'ERROR'
+                WHEN l.status = 'PERMISSIONS' THEN 'PERMISSIONS'
+                WHEN ISNULL(w.error_count, 0) > 0 THEN 'RECOVERED'
+                ELSE 'HEALTHY'
+            END
+FROM latest AS l
+LEFT JOIN window_24h AS w
+       ON w.collector_name = l.collector_name
+WHERE l.rn = 1
+ORDER BY CASE
+             WHEN DATEDIFF(MINUTE, l.collection_time, SYSDATETIME()) >= @failing_min THEN 0
+             WHEN DATEDIFF(MINUTE, l.collection_time, SYSDATETIME()) >= @stale_min   THEN 1
+             WHEN l.status IN ('ERROR', 'PERMISSIONS') THEN 2
+             ELSE 3
+         END,
+         l.collector_name;
 GO

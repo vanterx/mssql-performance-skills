@@ -46,6 +46,17 @@ This ratio across all wait types is a **CPU pressure indicator**. If > 25%, thre
 
 Many wait types are normal background activity and should be excluded before analysis: `SLEEP_TASK`, `WAITFOR`, `LAZYWRITER_SLEEP`, `CHECKPOINT_QUEUE`, `XE_DISPATCHER_WAIT`, etc. The capture query in `SKILL.md` excludes them. If the input includes them, skip them during analysis.
 
+**Why the list matters more than it looks.** Every share and percentage in this skill is computed against the *remaining* wait time, so an idle wait left in the list silently shrinks everything else. A real case: on an otherwise idle SQL Server 2025 instance, lock waits measured 0.8% of total wait time with a short exclusion list and 29% once idle waits were removed — the difference between an Info finding and a Critical one, from the same data. When a share looks implausibly low, check the denominator before believing it.
+
+**Provenance and scope.** Microsoft Learn documents many of these wait types only as "Internal use only", so the justification for excluding them is behavioural rather than documentary: they accumulate on an instance doing nothing, which you can verify on any quiet server by sampling twice. Two wait types that are commonly excluded elsewhere are deliberately **kept in scope** here:
+
+| Kept in analysis | Why |
+|---|---|
+| `RESOURCE_SEMAPHORE_MUTEX` | Adjacent to the memory-grant pressure V4 exists to find; ignoring it can mask a compile-gate problem |
+| `WAIT_FOR_RESULTS` | Can be a real client-side stall — a session waiting on a caller that never fetched |
+
+A monitoring tool can ignore both because it alerts on the same conditions from other signals. A skill reading one pasted capture has no second signal, so it keeps them visible.
+
 ### Point-in-time vs cumulative
 
 `sys.dm_os_wait_stats` is **cumulative since last restart or CLEAR**. A high `WRITELOG` value might reflect a bulk import that ran once two weeks ago, not a current problem. `sys.dm_exec_requests` shows **current active waits only** — a point-in-time snapshot. Both have value; interpret them accordingly.

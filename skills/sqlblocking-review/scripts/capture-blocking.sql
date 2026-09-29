@@ -77,7 +77,13 @@ cteChain AS (
     INNER JOIN cteChain AS c
             ON c.session_id = b.blocking_session_id
            AND c.session_id <> b.session_id   -- avoid infinite recursion on latch-type blocking
-    WHERE c.wait_type COLLATE Latin1_General_BIN NOT IN ('EXCHANGE', 'CXPACKET') OR c.wait_type IS NULL
+    WHERE (c.wait_type COLLATE Latin1_General_BIN NOT IN ('EXCHANGE', 'CXPACKET')
+           OR c.wait_type IS NULL)
+      /* Depth cap: a self-pair guard alone does not stop a longer cycle
+         (A blocks B blocks A), which would otherwise hit the 100-level
+         recursion limit and fail the whole batch with error 530. No real
+         chain is 32 deep; if output reaches level 31, suspect a cycle. */
+      AND c.[level] < 32
 )
 SELECT  c.[level], c.head_blocker_session_id, c.session_id, c.blocking_session_id,
         c.wait_type, c.wait_time, c.wait_resource,
@@ -151,6 +157,53 @@ GROUP BY request_session_id, resource_database_id, resource_type, resource_subty
          request_mode, request_status
 HAVING COUNT(*) > 0
 ORDER BY lock_count DESC;
+
+/* ------------------------------------------------------------------
+   4b. How much of the current lock wait RCSI would remove (BL29)
+   ------------------------------------------------------------------ */
+PRINT '--- 4b. RCSI-addressable share of current lock waits ---';
+/* RCSI removes reader-blocked-by-writer contention and nothing else, so the
+   decision needs the reader share of lock wait, not just "readers are
+   blocked". Writer-on-writer waits survive RCSI (BL24 shortens them
+   instead); schema, bulk-update and mixed intent modes belong to neither
+   side and are excluded from the ratio rather than counted against it.
+   Mode classification follows /sqlblocking-review BL29. */
+WITH waiting_locks AS (
+    SELECT  wt.session_id,
+            wt.wait_duration_ms,
+            tm.request_mode,
+            lock_class =
+                CASE
+                    WHEN tm.request_mode IN ('Sch-S', 'Sch-M', 'BU', 'IU', 'SIU', 'SIX')
+                        THEN 'EXCLUDED'
+                    WHEN tm.request_mode IN ('S', 'IS')
+                      OR tm.request_mode LIKE 'RangeS%'
+                        THEN 'READER'
+                    WHEN tm.request_mode IN ('X', 'IX', 'U', 'UIX')
+                      OR tm.request_mode LIKE 'RangeX%'
+                      OR tm.request_mode LIKE 'RangeI%'
+                        THEN 'WRITER'
+                    ELSE 'EXCLUDED'
+                END
+    FROM sys.dm_tran_locks       AS tm
+    JOIN sys.dm_os_waiting_tasks AS wt
+      ON tm.lock_owner_address = wt.resource_address
+    WHERE tm.request_status = 'WAIT'
+)
+SELECT  lock_class,
+        request_mode,
+        waiters = COUNT(*),
+        wait_ms = SUM(wait_duration_ms),
+        /* Same value on every row: the share of reader+writer lock wait that
+           row versioning would remove. EXCLUDED modes are in neither term. */
+        rcsi_addressable_pct = CONVERT(decimal(5,2),
+            100.0 * SUM(SUM(CASE WHEN lock_class = 'READER'
+                                 THEN wait_duration_ms ELSE 0 END)) OVER ()
+            / NULLIF(SUM(SUM(CASE WHEN lock_class IN ('READER', 'WRITER')
+                                  THEN wait_duration_ms ELSE 0 END)) OVER (), 0))
+FROM waiting_locks
+GROUP BY lock_class, request_mode
+ORDER BY wait_ms DESC;
 
 /* Object names for the top lock resources — run in the affected database.
    Replace the hobt id with a resource_associated_entity_id from section 3 or 4.
@@ -285,10 +338,14 @@ PRINT '--- 6d. Instance-wide lock wait share (BL37) ---';
 /* The share is only meaningful once idle and background waits are removed:
    left in, waits such as SOS_WORK_DISPATCHER and LOGMGR_QUEUE dominate the
    denominator and push a real lock problem down into the Info band. The
-   list below matches /sqlwait-review's capture script.
-   PWAIT_EXTENSIBILITY_CLEANUP_TASK is not documented on Microsoft Learn; it
-   is excluded because it accrues with uptime on an idle instance (observed
-   on SQL Server 2025, where it reached over 90% of non-idle wait time). */
+   list below matches /sqlwait-review's capture script. Microsoft Learn
+   documents many of these only as "Internal use only" —
+   PWAIT_EXTENSIBILITY_CLEANUP_TASK is not documented at all, and is excluded
+   because it accrues with uptime on an idle instance (observed on SQL Server
+   2025, where it reached over 90% of non-idle wait time).
+   RESOURCE_SEMAPHORE_MUTEX and WAIT_FOR_RESULTS are commonly excluded
+   elsewhere and are deliberately kept in scope: the first sits next to
+   memory-grant pressure, the second can be a real client-side stall. */
 SELECT TOP (15)
         wait_type,
         wait_time_ms,
@@ -301,33 +358,57 @@ SELECT TOP (15)
 FROM sys.dm_os_wait_stats
 WHERE wait_time_ms > 0
   AND wait_type NOT IN (
+    'AZURE_IMDS_VERSIONS','BMPALLOCATION','BMPBUILD','BMPREPARTITION',
     'BROKER_EVENTHANDLER','BROKER_RECEIVE_WAITFOR','BROKER_TASK_STOP',
-    'BROKER_TO_FLUSH','BROKER_TRANSMITTER',
+    'BROKER_TO_FLUSH','BROKER_TRANSMITTER','BUFFERPOOL_SCAN',
     'CHECKPOINT_QUEUE','CHKPT','CLR_AUTO_EVENT','CLR_MANUAL_EVENT','CLR_SEMAPHORE',
+    'COLUMNSTORE_BUILD_THROTTLE','DAC_INIT',
     'DBMIRROR_DBM_EVENT','DBMIRROR_DBM_MUTEX','DBMIRROR_EVENTS_QUEUE',
-    'DBMIRROR_WORKER_QUEUE','DBMIRRORING_CMD',
-    'DIRTY_PAGE_POLL','DISPATCHER_QUEUE_SEMAPHORE','EXECSYNC','FSAGENT',
-    'FT_IFTS_SCHEDULER_IDLE_WAIT','FT_IFTSHC_MUTEX',
-    'HADR_CLUSAPI_CALL','HADR_FILESTREAM_IOMGR_IOCOMPLETION',
+    'DBMIRROR_SEND','DBMIRROR_WORKER_QUEUE','DBMIRRORING_CMD',
+    'DIRTY_PAGE_POLL','DIRTY_PAGE_TABLE_LOCK','DISPATCHER_QUEUE_SEMAPHORE',
+    'EXECSYNC','FSAGENT','FT_IFTS_SCHEDULER_IDLE_WAIT','FT_IFTSHC_MUTEX',
+    'HADR_CLUSAPI_CALL','HADR_FABRIC_CALLBACK',
+    'HADR_FILESTREAM_IOMGR_IOCOMPLETION',
     'HADR_LOGCAPTURE_WAIT','HADR_NOTIFICATION_DEQUEUE','HADR_TIMER_TASK',
     'HADR_WORK_QUEUE','KSOURCE_WAKEUP','LAZYWRITER_SLEEP','LOGMGR_QUEUE',
     'MEMORY_ALLOCATION_EXT','ONDEMAND_TASK_QUEUE',
-    'PARALLEL_REDO_DRAIN_WORKER','PARALLEL_REDO_LOG_CACHE',
-    'PARALLEL_REDO_TRAN_LIST','PARALLEL_REDO_WORKER_SYNC',
-    'PARALLEL_REDO_WORKER_WAIT_WORK',
+    'PARALLEL_REDO_DRAIN_WORKER','PARALLEL_REDO_FLOW_CONTROL',
+    'PARALLEL_REDO_LOG_CACHE','PARALLEL_REDO_TRAN_LIST',
+    'PARALLEL_REDO_TRAN_TURN','PARALLEL_REDO_WORKER_SYNC',
+    'PARALLEL_REDO_WORKER_WAIT_WORK','PERFORMANCE_COUNTERS_RWLOCK',
     'PREEMPTIVE_OS_FLUSHFILEBUFFERS','PREEMPTIVE_SP_SERVER_DIAGNOSTICS',
-    'PREEMPTIVE_XE_GETTARGETSTATE','PVS_PREALLOCATE',
-    'PWAIT_ALL_COMPONENTS_INITIALIZED','PWAIT_DIRECTLOGCONSUMER_GETNEXT',
-    'PWAIT_EXTENSIBILITY_CLEANUP_TASK',
+    'PREEMPTIVE_XE_CALLBACKEXECUTE','PREEMPTIVE_XE_DISPATCHER',
+    'PREEMPTIVE_XE_GETTARGETSTATE','PREEMPTIVE_XE_SESSIONCOMMIT',
+    'PREEMPTIVE_XE_TARGETFINALIZE','PREEMPTIVE_XE_TARGETINIT',
+    'PRINT_ROLLBACK_PROGRESS','PURVIEW_POLICY_SDK_PREEMPTIVE_SCHEDULING',
+    'PVS_PREALLOCATE','PWAIT_ALL_COMPONENTS_INITIALIZED',
+    'PWAIT_DIRECTLOGCONSUMER_GETNEXT','PWAIT_EXTENSIBILITY_CLEANUP_TASK',
+    'PWAIT_HADRSIM','PWAIT_HADR_ACTION_COMPLETED',
+    'PWAIT_HADR_CHANGE_NOTIFIER_TERMINATION_SYNC',
+    'PWAIT_HADR_CLUSTER_INTEGRATION','PWAIT_HADR_FAILOVER_COMPLETED',
+    'PWAIT_HADR_JOIN','PWAIT_HADR_OFFLINE_COMPLETED',
+    'PWAIT_HADR_ONLINE_COMPLETED','PWAIT_HADR_POST_ONLINE_COMPLETED',
+    'PWAIT_HADR_SERVER_READY_CONNECTIONS','PWAIT_HADR_WORKITEM_COMPLETED',
+    'PWAIT_MASTERDBREADY',
     'QDS_ASYNC_QUEUE','QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
     'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP','QDS_SHUTDOWN_QUEUE',
+    'QUERY_EXECUTION_INDEX_SORT_EVENT_OPEN','QUERY_TASK_ENQUEUE_MUTEX',
     'REDO_THREAD_PENDING_WORK','REQUEST_FOR_DEADLOCK_SEARCH','RESOURCE_QUEUE',
-    'SERVER_IDLE_CHECK','SLEEP_BPOOL_FLUSH','SLEEP_DBSTARTUP','SLEEP_DBTASK',
+    'SECURITY_CNG_PROVIDER_MUTEX','SERVER_IDLE_CHECK','SLEEP_BPOOL_FLUSH',
+    'SLEEP_BUFFERPOOL_HELPLW','SLEEP_DBSTARTUP','SLEEP_DBTASK',
     'SLEEP_DCOMSTARTUP','SLEEP_MASTERDBREADY','SLEEP_MASTERMDREADY',
-    'SLEEP_MASTERUPGRADED','SLEEP_MSDBSTARTUP','SLEEP_SYSTEMTASK','SLEEP_TASK',
-    'SLEEP_TEMPDBSTARTUP','SNI_HTTP_ACCEPT','SOS_WORK_DISPATCHER',
-    'SP_SERVER_DIAGNOSTICS_SLEEP','SQLTRACE_BUFFER_FLUSH',
+    'SLEEP_MASTERUPGRADED','SLEEP_MSDBSTARTUP','SLEEP_PHYSMASTERDBREADY',
+    'SLEEP_SYSTEMTASK','SLEEP_TASK','SLEEP_TEMPDBSTARTUP',
+    'SNI_CRITICAL_SECTION','SNI_HTTP_ACCEPT','SOS_PROCESS_AFFINITY_MUTEX',
+    'SOS_WORK_DISPATCHER','SP_SERVER_DIAGNOSTICS_SLEEP',
+    'SQLTRACE_BUFFER_FLUSH','SQLTRACE_FILE_BUFFER',
+    'SQLTRACE_FILE_READ_IO_COMPLETION','SQLTRACE_FILE_WRITE_IO_COMPLETION',
     'SQLTRACE_INCREMENTAL_FLUSH_SLEEP','SQLTRACE_WAIT_ENTRIES',
-    'WAITFOR','WAITFOR_PF_FLUSH_COMPLETE','WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
-    'XE_DISPATCHER_JOIN','XE_DISPATCHER_WAIT','XE_TIMER_EVENT')
+    'UCS_SESSION_REGISTRATION','VDI_CLIENT_OTHER',
+    'WAITFOR','WAITFOR_PF_FLUSH_COMPLETE','WAITFOR_TASKSHUTDOWN',
+    'WAIT_XTP_CKPT_CLOSE','WAIT_XTP_HOST_WAIT',
+    'WAIT_XTP_OFFLINE_CKPT_NEW_LOG','WAIT_XTP_RECOVERY',
+    'WINDOW_AGGREGATES_MULTIPASS','XE_BUFFERMGR_ALLPROCESSED_EVENT',
+    'XE_DISPATCHER_JOIN','XE_DISPATCHER_WAIT','XE_FILE_TARGET_TVF',
+    'XE_LIVE_TARGET_TVF','XE_TIMER_EVENT')
 ORDER BY wait_time_ms DESC;

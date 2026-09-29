@@ -1,4 +1,4 @@
-# sqlblocking-review — Checks Explained (BL1–BL54)
+# sqlblocking-review — Checks Explained (BL1–BL55)
 
 ## Contents
 - [Blocking Chain Topology Checks (BL1–BL7)](#blocking-chain-topology-checks-bl1bl7)
@@ -889,12 +889,31 @@ FROM sys.databases WHERE database_id > 4;
 ALTER DATABASE Sales SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
 ```
 
+**Measure the share, don't just name the direction.** RCSI removes reader-blocked-by-writer contention and nothing else, so the question is what fraction of the lock wait that actually is. Classify each waiting request by its `request_mode`:
+
+| Class | Modes | Meaning for RCSI |
+|---|---|---|
+| Reader | `S`, `IS`, `RangeS-*` | Removed by RCSI — this is the numerator |
+| Writer | `X`, `IX`, `U`, `UIX`, `RangeX-*`, `RangeI-*` | Survives RCSI; belongs to BL24 or BL16 |
+| Excluded | `Sch-S`, `Sch-M`, `BU`, `IU`, `SIU`, `SIX` | Neither side — excluded from the ratio, not counted against it |
+
+Section 4b of the capture script returns this as `rcsi_addressable_pct` over reader + writer wait. A high number makes RCSI the fix and lets you say so with a figure attached; a low one means enabling RCSI buys little, and reporting it as the fix would be wrong.
+
+```
+lock_class  request_mode  waiters  wait_ms   rcsi_addressable_pct
+READER      S             6        184,220   71.40
+WRITER      X             2         73,730   71.40
+EXCLUDED    Sch-S         1          2,010   71.40
+```
+
+Schema modes are excluded deliberately: a `Sch-M` problem (BL18, BL44) is unaffected by row versioning, so leaving it in the denominator would understate RCSI's benefit for the blocking it does fix.
+
 **Fix options (ranked by impact):**
 1. **Enable RCSI** — no query changes needed, and it removes the whole reader-blocked-by-writer class.
 2. **Budget the costs first** — TempDB version store space and I/O, 14 bytes added per row as rows are updated, and different semantics for read-then-write logic, which may need `UPDLOCK` to remain correct.
 3. **Where RCSI is not acceptable**, shorten the writer's transaction (BL24) or move the readers to a readable secondary.
 
-**Related checks:** BL24, BL26, BL30, BL36
+**Related checks:** BL16, BL18, BL24, BL26, BL30, BL36
 
 ---
 
@@ -1674,6 +1693,53 @@ EXEC msdb.dbo.sp_add_alert
 
 ---
 
+## Workload Co-Occurrence Patterns (BL55)
+
+### BL55 — Same-Statement Pileup Behind an I/O-Bound Plan
+
+**What it means:** Several sessions are running the same statement in the same database, all of them slow, and none of them is blocking any of the others. They are independently slow, at the same moment, because they share one cached plan and that plan has turned into an I/O-heavy shape. Every caller inherits it at once, so the incident arrives looking like a blocking storm and contains no blocking at all.
+
+**How to spot it:** Group the active requests by statement and database. The pattern is three or more sessions on the identical text, every one past ten seconds elapsed, at least one `suspended` on an I/O-class wait, and `blocking_session_id` of 0 or NULL across the group.
+
+```
+session_id  database   elapsed_s  status     wait_type        blocking_session_id  statement
+64          Sales      41         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+71          Sales      38         runnable   NULL             0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+77          Sales      33         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+82          Sales      29         runnable   SOS_SCHEDULER_Y  0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+```
+
+Four sessions, one statement, no blocker anywhere, two waiting on page I/O. The previous capture had the same statement finishing in 40 ms.
+
+**Example (problem + fix):** A parameterized `SELECT` recompiled on an atypical parameter and picked a scan over a seek. The plan cached, and every subsequent caller — one per tenant — ran the scan. Sessions accumulated because arrival rate now exceeded completion rate, which is what makes it look like a pileup behind a blocker.
+
+```sql
+-- Confirm: is the cached plan's shape what you expect for this statement?
+SELECT  cp.objtype, cp.usecounts, qs.creation_time, qs.execution_count,
+        avg_reads = qs.total_logical_reads / NULLIF(qs.execution_count, 0),
+        qp.query_plan
+FROM sys.dm_exec_cached_plans AS cp
+CROSS APPLY sys.dm_exec_sql_text(cp.plan_handle) AS st
+CROSS APPLY sys.dm_exec_query_plan(cp.plan_handle) AS qp
+JOIN sys.dm_exec_query_stats AS qs ON qs.plan_handle = cp.plan_handle
+WHERE st.text LIKE N'%FROM dbo.Orders WHERE CustomerId%';
+
+-- Mitigate: evict that one plan, never the whole cache on production
+EXEC sys.sp_recompile N'dbo.usp_GetOrdersByCustomer';
+```
+
+**Fix options (in order):**
+1. **Evict the plan** — `sp_recompile` on the object, or `DBCC FREEPROCCACHE (<plan_handle>)` for ad-hoc text. Callers then compile against current parameters.
+2. **Find out why it flipped** — parameter sensitivity is the usual answer; route to `/sqlquerystore-review` for the plan history and `/sqlplan-compare` for the two shapes side by side.
+3. **Remove the possibility** — the index or predicate change that makes the I/O-heavy shape unattractive (BL35, BL48), or forcing the good plan once identified.
+4. **Do not `KILL` the sessions.** They are not victims of a blocker; killing them loses the work and the next caller reproduces it immediately with the same plan.
+
+**Why three sessions and one I/O waiter:** two slow callers of a popular statement is ordinary variance, so two never reports. Page-I/O waits are millisecond-scale and sessions move in and out of them constantly, so requiring two *simultaneously* suspended would make the check depend on sampling luck rather than on the workload.
+
+**Related checks:** BL1 (rules blocking in or out first), BL8, BL35, BL48
+
+---
+
 ## Background: how blocking works
 
 **Locks and lock modes.** A lock is held on a resource (row, key, page, object, database) in a mode (`S`, `U`, `X`, `IS`, `IU`, `IX`, `Sch-S`, `Sch-M`, range modes). Two requests conflict when their modes are incompatible on the same resource. Intent modes (`IS`, `IU`, `IX`) mark an intention further down the hierarchy and conflict with far less than the full modes do — which is why an `IX` lock on a table is not a blocking problem while an `X` lock on the same table is.
@@ -1755,3 +1821,4 @@ Resolve a `hobt_id` with `sys.partitions`, and a page with `sys.dm_db_page_info`
 | BL52 | Readable secondary redo blocked | Critical | Redo `Sch-M` behind report `Sch-S` |
 | BL53 | Commit acknowledgement wait | Critical | `HADR_SYNC_COMMIT` or DTC wait at the head |
 | BL54 | No alerting or escalation path | Warning | Recurring blocking, no alert, no `KILL` rule |
+| BL55 | Same-statement pileup | Warning | ≥ 3 sessions, one statement, one DB, an I/O waiter |

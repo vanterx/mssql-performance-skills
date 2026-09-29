@@ -1,6 +1,6 @@
 ---
 name: sqlblocking-review
-description: Analyze SQL Server lock blocking from sys.dm_exec_requests, sys.dm_exec_sessions, sys.dm_os_waiting_tasks, sys.dm_tran_locks, open-transaction DMVs, blocked process reports, index operational stats, Query Store lock waits, and community tool output such as sp_WhoIsActive, sp_BlitzWho and sp_HumanEvents. Applies 54 checks (BL1–BL54) covering blocking chain topology and head-blocker identification, head-blocker state classification against the six documented blocking scenarios, lock-level evidence such as escalation and Sch-M and key-range locks, transaction and isolation-level design faults, historical and aggregate blocking evidence when nobody was watching, structural engine-level causes such as statistics updates and lock partitioning, and client, tooling and platform patterns. Use this skill whenever sessions are blocked, applications report lock timeouts, LCK_M waits dominate, or a DBA pastes blocking chain output and asks who is blocking whom. Trigger when blocked_session_id, blocking_session_id, blocked process report XML, sp_WhoIsActive or sp_who2 BlkBy output is present.
+description: Analyze SQL Server lock blocking from sys.dm_exec_requests, sys.dm_exec_sessions, sys.dm_os_waiting_tasks, sys.dm_tran_locks, open-transaction DMVs, blocked process reports, index operational stats, Query Store lock waits, and community tool output such as sp_WhoIsActive, sp_BlitzWho and sp_HumanEvents. Applies 55 checks (BL1–BL55) covering blocking chain topology and head-blocker identification, head-blocker state classification against the six documented blocking scenarios, lock-level evidence such as escalation and Sch-M and key-range locks, transaction and isolation-level design faults, historical and aggregate blocking evidence when nobody was watching, structural engine-level causes such as statistics updates and lock partitioning, client, tooling and platform patterns, and workload co-occurrence patterns such as a same-statement pileup that resembles blocking but is not. Use this skill whenever sessions are blocked, applications report lock timeouts, LCK_M waits dominate, or a DBA pastes blocking chain output and asks who is blocking whom. Trigger when blocked_session_id, blocking_session_id, blocked process report XML, sp_WhoIsActive or sp_who2 BlkBy output is present.
 triggers:
   - /sqlblocking-review
   - /blocking-review
@@ -12,13 +12,17 @@ triggers:
 
 ## Purpose
 
-Identify the head of a blocking chain, explain why it holds its locks, and give a ranked remediation path. Applies 54 checks (BL1–BL54) across eight categories:
+Identify the head of a blocking chain, explain why it holds its locks, and give a ranked remediation path. Applies 55 checks (BL1–BL55) across nine categories:
 
 - **BL1–BL7** — Blocking chain topology: head blocker identification, block duration, chain depth, fan-out, cross-database chains, concurrency exhaustion, and chronic recurrence across captures
 - **BL8–BL15** — Head-blocker state classification: maps the head blocker to the documented blocking scenarios (long-running query, sleeping session with an open transaction, orphaned transaction, rollback, client not fetching results, client/server distributed deadlock), plus non-lock waits and maintenance work at the head
 - **BL16–BL23** — Lock-level evidence: lock escalation to table locks, schema modification locks, hot resource contention, key-range locks, lock conversion waits, application locks, and lock footprint size
 - **BL24–BL30** — Transaction and isolation design: long-running open transactions, elevated isolation levels, implicit transactions, transactions held across client round-trips, blocking lock hints, reader-writer blocking curable by row versioning, and row-versioning side effects
 - **BL31–BL36** — Observability and platform configuration: blocked process threshold, blocked process report capture, lock escalation overrides, scan-driven lock footprints, accelerated database recovery, and optimized locking
+- **BL37–BL42** — Historical and aggregate evidence for blocking that has already ended: instance-wide lock wait share, per-index lock hot spots and escalation attempts, Query Store lock wait history, blocking performance counters, and sampled blocking logs
+- **BL43–BL48** — Structural and engine-level causes: a benign head blocker with an incompatible request queued behind it, statistics updates, lock partitioning, unindexed foreign keys, triggers and cascades, and writes that lock the rows they read
+- **BL49–BL54** — Client, tooling and platform patterns: ORM and driver defaults, timeout and retry policy, Azure platform differences, readable secondary redo, commit acknowledgement waits, and the alerting and escalation path
+- **BL55** — Workload co-occurrence patterns: many sessions independently slow on one statement, which looks like blocking and is not
 
 This skill analyzes captured artifacts only — it never opens a connection to SQL Server. The user runs the capture queries below and pastes the output.
 
@@ -148,6 +152,40 @@ WHERE request_session_id <> @@SPID   -- exclude this capture session
 GROUP BY request_session_id, resource_database_id, resource_type, resource_subtype,
          request_mode, request_status
 ORDER BY lock_count DESC;
+
+-- 4b. How much of the current lock wait RCSI would actually remove (BL29).
+--     Reader waits are what row versioning eliminates; writer waits survive it;
+--     schema, bulk-update and mixed intent modes belong to neither and are left
+--     out of the ratio rather than counted against it.
+WITH waiting_locks AS (
+    SELECT  wt.wait_duration_ms,
+            tm.request_mode,
+            lock_class =
+                CASE
+                    WHEN tm.request_mode IN ('Sch-S', 'Sch-M', 'BU', 'IU', 'SIU', 'SIX')
+                        THEN 'EXCLUDED'
+                    WHEN tm.request_mode IN ('S', 'IS') OR tm.request_mode LIKE 'RangeS%'
+                        THEN 'READER'
+                    WHEN tm.request_mode IN ('X', 'IX', 'U', 'UIX')
+                      OR tm.request_mode LIKE 'RangeX%' OR tm.request_mode LIKE 'RangeI%'
+                        THEN 'WRITER'
+                    ELSE 'EXCLUDED'
+                END
+    FROM sys.dm_tran_locks       AS tm
+    JOIN sys.dm_os_waiting_tasks AS wt ON tm.lock_owner_address = wt.resource_address
+    WHERE tm.request_status = 'WAIT'
+)
+SELECT  lock_class, request_mode,
+        waiters = COUNT(*),
+        wait_ms = SUM(wait_duration_ms),
+        rcsi_addressable_pct = CONVERT(decimal(5,2),
+            100.0 * SUM(SUM(CASE WHEN lock_class = 'READER'
+                                 THEN wait_duration_ms ELSE 0 END)) OVER ()
+            / NULLIF(SUM(SUM(CASE WHEN lock_class IN ('READER', 'WRITER')
+                                  THEN wait_duration_ms ELSE 0 END)) OVER (), 0))
+FROM waiting_locks
+GROUP BY lock_class, request_mode
+ORDER BY wait_ms DESC;
 
 -- 5. Blocking observability and database-level concurrency settings
 SELECT  name, value_in_use
@@ -288,6 +326,10 @@ Report the head blocker's *identity, statement, and state* before any recommenda
 | `index_lock_promotion_attempt_count` per index | 0 | 1–10 | > 10 |
 | *Processes blocked* performance counter, sustained across samples | 0 | 1–4 | ≥ 5 |
 | Logical CPUs at which lock partitioning changes table-lock behaviour | < 16 | — | ≥ 16 |
+| Concurrent sessions on one statement in one database (BL55) | 1–2 | ≥ 3 | ≥ 5 |
+| Elapsed time floor each pileup session must pass (BL55) | < 10 s | ≥ 10 s | ≥ 30 s |
+| Pileup magnitude: sessions × slowest elapsed seconds (BL55) | < 30 | 30–59 | ≥ 60 |
+| Baseline that makes a pileup a regression (BL55) | — | same statement seen sub-second within the last hour | — |
 
 > **Threshold provenance:** The 5,000-lock escalation threshold (per single reference to a table, re-checked every 1,250 new locks) and the `blocked process threshold (s)` range (5 to 86,400, with a 5-second lock-monitor wake interval) are Microsoft-documented values, as is lock partitioning being enabled automatically on instances with a larger number of logical CPUs. The per-index cutoffs (1 s average lock wait, 5 minutes total, 10 escalation attempts) follow the First Responder Kit's `sp_BlitzIndex` "aggressive indexes" rule. The wait-duration, chain-depth, fan-out, transaction-age, recurrence, and counter cutoffs are operational heuristics for prioritisation — compare them against the workload's own baseline before calling a number a problem.
 
@@ -453,6 +495,7 @@ These map the head blocker to the documented blocking scenarios. `status`, `wait
 - **Trigger:** Victims wait in `LCK_M_S` or `LCK_M_IS` behind a writer holding `X` or `IX` locks, the victims' statements are read-only, and the database has `is_read_committed_snapshot_on` = 0
 - **Severity:** Warning; Critical when read-only reporting sessions are the majority of the victims
 - **Fix:** Under read committed snapshot isolation, readers take a row version instead of a shared lock, which removes this entire class of blocking without changing query text. Enable it with `ALTER DATABASE <db> SET READ_COMMITTED_SNAPSHOT ON` — while the statement runs, the connection issuing it has to be the only open connection to the database (single-user mode is not required), so run it in a maintenance window, with `WITH ROLLBACK IMMEDIATE` if disconnecting the other sessions is acceptable. Budget for the costs before enabling: version store space and I/O in TempDB, 14 bytes added per row as rows are updated, and different semantics for read-then-write patterns, which may need `UPDLOCK` to stay correct. Writers still block writers.
+- **Quantify it before recommending it:** RCSI removes reader-blocked-by-writer contention and nothing else, so report the share rather than the direction. Classify each waiting request by mode — `S`, `IS` and `RangeS*` are reader waits RCSI removes; `X`, `IX`, `U`, `UIX`, `RangeX*` and `RangeI*` are writer waits it does not; `Sch-S`, `Sch-M`, `BU`, `IU`, `SIU` and `SIX` belong to neither and are excluded from the ratio rather than counted against it. Section 4b of the capture script returns this as `rcsi_addressable_pct`. A number near 100% makes RCSI the fix; a low one means the chain is writer-on-writer and belongs to BL24 (shorten the transaction) or BL16 (escalation), where RCSI changes nothing.
 
 ### BL30 — Row-Versioning Side Effects
 - **Trigger:** The database has RCSI or snapshot isolation enabled and the capture shows long-running transactions, a growing version store (TempDB, or the in-database persistent version store when ADR is on), or update-conflict errors (3960) in the application logs
@@ -599,6 +642,18 @@ Most blocking is reported after it ends. These checks work the artifacts that su
 
 ---
 
+## Workload Co-Occurrence Patterns (BL55)
+
+Patterns that only exist across several sessions at once, where no single session looks wrong on its own.
+
+### BL55 — Same-Statement Pileup Behind an I/O-Bound Plan
+- **Trigger:** Three or more concurrent sessions in the *same database* are running the identical statement, every one of them past the Warning elapsed floor in the Thresholds Reference, at least one is `suspended` on an I/O-class wait (`PAGEIOLATCH_*`, `IO_COMPLETION`, `ASYNC_IO_COMPLETION`, `WRITELOG`, `WRITE_COMPLETION`), and a recent capture or baseline shows that same statement completing sub-second
+- **Severity:** Warning; Critical when sessions multiplied by the slowest elapsed time reaches the Critical band
+- **Fix:** This is not lock blocking, and reading it as blocking sends the investigation the wrong way: no session holds a lock the others want, they are all independently slow at the same moment. The signature — one statement, one database, many callers, sub-second until now, at least one waiting on I/O — points at a shared cached plan that flipped to an I/O-heavy shape, so every caller inherits the bad plan at once. Confirm by fetching the current plan for that statement and comparing it against the previous shape (`/sqlplan-compare`); parameter sensitivity (`/sqlquerystore-review`) is the usual reason it flipped. The immediate mitigation is to evict the plan — `sp_recompile` on the object, or `DBCC FREEPROCCACHE` with that specific plan handle, never the whole cache on a production instance — after which callers recompile against current parameters. The durable fix belongs to the statement: the index or predicate that makes the I/O-heavy shape possible (BL35), or plan forcing once the good plan is identified. Two sessions are not a pileup; require three before reporting, because two slow callers of a common statement is ordinary variance.
+- **Why one I/O waiter is enough:** page-I/O waits are millisecond-scale, so sessions enter and leave them constantly. Requiring two simultaneously suspended makes the test a coin flip on sampling luck rather than a statement about the workload.
+
+---
+
 ## Output Format
 
 Present findings in this order:
@@ -641,7 +696,7 @@ Separate immediate relief from durable fixes in the Remediation Priority table: 
 
 When the input does not cover a check, list it under a short "Not evaluated" note with the capture query that would cover it, rather than reporting it as passed.
 
-> Analyzed by: `sqlblocking-review` (BL1–BL54)
+> Analyzed by: `sqlblocking-review` (BL1–BL55)
 
 ---
 *Analyzed by: [state the AI model and version you are running as, e.g. "Claude Sonnet 4.6", "DeepSeek R1", "GPT-4o"] · [current date and time in the user's local timezone, or UTC if timezone is unknown, e.g. "2026-05-16 20:15 NZST"]*
