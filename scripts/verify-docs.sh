@@ -200,8 +200,12 @@ echo "[11 ] SKILL.md vs references/check-explanations.md check count per skill"
 check11_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    skill_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
-    expl_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
+    # grep -c prints 0 AND exits 1 on no match, so a trailing "|| echo 0"
+    # appends a second zero and the value becomes two lines, failing every
+    # numeric comparison against it. Close the substitution first, then
+    # guard grep's own exit status with || true.
+    skill_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
+    expl_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null) || true
     # sqlplan-batch: aggregates sqlplan-review checks, no checks of its own
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor: check-explanations.md explains the merge/ranking pipeline,
@@ -241,7 +245,7 @@ for skill_file in skills/*/SKILL.md; do
     described=$(grep "^description:" "$skill_file" 2>/dev/null \
                 | grep -o '[0-9]* checks' | grep -o '^[0-9]*')
     [ -z "$described" ] && continue   # skill doesn't state a count — skip
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null) || true
     if [ "$described" != "$actual" ]; then
         warn "$name: frontmatter description says '$described checks' but SKILL.md has $actual — update the description"
         check14_ok=0
@@ -287,7 +291,7 @@ echo "[17 ] README Skill Details check counts match SKILL.md"
 check17_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
     # Extract first "N checks" mention in the README's ## skill-name section
     readme_count=$(awk "/^## $name\$/{found=1; next} found && /^## /{exit} \
         found && /[0-9]+ checks/{print; exit}" README.md 2>/dev/null \
@@ -480,7 +484,7 @@ echo "[26 ] Per-skill count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance ma
 check26_ok=1
 while IFS= read -r skill_file; do
     name=$(basename "$(dirname "$skill_file")")
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null) || true
     # sqlplan-batch has no original checks (aggregator) — skip
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers — skip
@@ -786,7 +790,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "[40 ] AGENTS.md delegates to CLAUDE.md"
-claude_refs=$(grep -c "CLAUDE.md" AGENTS.md 2>/dev/null || echo 0)
+claude_refs=$(grep -c "CLAUDE.md" AGENTS.md 2>/dev/null) || true
 if [ "$claude_refs" -lt 2 ]; then
     warn "AGENTS.md references CLAUDE.md only $claude_refs time(s) — add at least 2 pointers so agents know where detail lives"
 else
@@ -855,7 +859,7 @@ for skill_dir in skills/*/; do
     [ "$name" = "mssql-performance-review" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers
     [ "$name" = "sqlindex-advisor" ] && continue
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
     claude_count=$(grep "skills/$name/SKILL.md\]" CLAUDE.md 2>/dev/null \
         | grep -o '[0-9]* checks' | head -1 | grep -o '^[0-9]*')
     [ -z "$claude_count" ] && continue   # row has no stated count — skip
