@@ -1950,15 +1950,20 @@ SELECT * FROM OPENQUERY(LinkedServer,
 
 ---
 
-### N24 — High Cost Operator
+### N24 — High Estimated Cost Operator
 
 **What it means**  
-A single operator accounts for ≥ 50% of the plan's total estimated cost. This is your primary optimization target — fixing this operator will have the largest impact on query performance.
+A single operator accounts for ≥ 50% of the plan's total **estimated** cost, where `costPercent` is the operator's self cost (its `EstimatedTotalSubtreeCost` minus its direct children's) as a share of `StatementSubTreeCost`. Ranking by the raw subtree attribute instead always crowns the root node, because subtree cost is cumulative.
 
-This is informational: it tells you *where* to focus, not necessarily *what* is wrong.
+This says what the optimizer *expected* to dominate. It is not a measurement. Cost is derived from estimated cardinality plus a fixed hardware model, and nothing recomputes it after execution, so it is an estimate in every plan — actual plans included. Microsoft documents the optimizer as choosing "query plans that have the lowest estimated processing cost," with cardinality as the cost model's input ([Cardinality Estimation](https://learn.microsoft.com/sql/relational-databases/performance/cardinality-estimation-sql-server)); an actual plan adds runtime counters alongside the costs rather than replacing them.
+
+**Why this is not the bottleneck**  
+A high-cost operator is frequently not the slow one, and an operator costed at essentially zero can consume the entire runtime — a pre-2019 scalar UDF is the standard case, invisible as an operator and costed at nothing while running once per row (S37, N25).
+
+So on an **actual** plan, N62 (self elapsed time) decides where the time went and supersedes this check; treat N24 as context for the plan's shape. On an **estimated** plan nothing ran, so N24 is the best available signal — but it remains a statement about the optimizer's model, not about duration, and no claim about what "was slow" is supportable from it.
 
 **How to use this information**  
-Look at what type of operator has the high cost:
+Once self elapsed time has confirmed the operator actually matters, look at its type:
 - `Table Scan` or `Index Scan` → add an index (N4)
 - `Key Lookup` → add INCLUDE columns to the index (N5)
 - `Sort` → add a pre-sorting index (N22)
