@@ -247,6 +247,17 @@ Every recommended fix carries the following fields. The full rubric is in `refer
 
 Recommendations without explicit rollback are rejected — "just do this" is not acceptable output.
 
+## Finding Severity — Confirm Before Escalating
+
+Risk grades the fix; this grades the finding. A specialised skill reads one artifact and must report what that artifact shows. The orchestrator holds several at once and is the only place a symptom can be confirmed against an independent source, so it owns the final severity.
+
+1. **Start from the owning skill's severity.** Do not re-derive it from raw numbers.
+2. **Raise one step when a peer in a different artifact points at the same mechanism** — `CXPACKET` confirmed by `SOS_SCHEDULER_YIELD` or a runnable-task queue; `RESOURCE_SEMAPHORE` confirmed by spills or oversized grants; a lock wait share confirmed by an actual chain or blocked process report; a plan regression confirmed by a CPU or I/O rise in the same window; configuration drift confirmed by the runtime symptom that setting predicts.
+3. **Cap tuning-class findings at Warning when no peer fired.** These are always present to some degree and are the usual source of false urgency: parallelism waits, anomaly or baseline-deviation findings, high-DOP query counts, single-use plan cache percentage below the size gate, and configuration drift with no matching symptom. State the missing peer when capping — "capped at Warning: no scheduler pressure in the wait capture" — so the reader knows what to capture next.
+4. **Never cap** THREADPOOL, poison waits, corruption, dumps, data-loss risk, or security and availability findings. They stand alone at full severity.
+
+Full tables, including the co-firing peer list, are in `references/risk-rubric.md`.
+
 ## Adversarial Root Cause Check
 
 After the primary hypothesis is identified, run a deliberate pass that **tries to disprove it**. Load `references/adversarial-prompts.md` and apply the relevant template for the hypothesis class. Examples:

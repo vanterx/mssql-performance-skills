@@ -13,7 +13,7 @@
 ---
 
 
-Plain-English explanations of all 33 checks (E1–E33) with examples, fix recipes, and a Quick Reference table.
+Plain-English explanations of all 34 checks (E1–E34) with examples, fix recipes, and a Quick Reference table.
 
 ---
 
@@ -1225,6 +1225,39 @@ Arc SQL extension disconnected. Last heartbeat: <timestamp>. Unable to reach Azu
 
 ---
 
+## Category 7 — Engine Diagnostics (E34)
+
+### E34 — Stack or Memory Dump Generated
+
+**What it means:** SQL Server instruments certain conditions as serious enough to photograph its own process: access violations, assertions, index corruption, non-yielding schedulers, latch timeouts, deadlocked schedulers, and unresolved deadlocks. When one fires, the engine calls SQLDumper and writes the result to the instance's `MSSQL\LOG` folder, alongside a block of lines in the ERRORLOG.
+
+**How to spot it:**
+
+```
+2026-09-27 03:14:22.11 spid52   * *******************************************************************************
+2026-09-27 03:14:22.11 spid52   * BEGIN STACK DUMP:
+2026-09-27 03:14:22.11 spid52   *   09/27/26 03:14:22 spid 52
+2026-09-27 03:14:22.11 spid52   * Exception Address = 00007FFA414ED763 Module(sqlmin+000000000000D763)
+2026-09-27 03:14:22.11 spid52   * Exception Code = c0000005 EXCEPTION_ACCESS_VIOLATION
+2026-09-27 03:14:22.13 spid52   External dump process return code 0x20000001.
+```
+
+The important lines are usually the ones *before* `BEGIN STACK DUMP` — they name the trigger. A non-yielding scheduler, for example, logs its own message first, and that is the condition to chase.
+
+**Why it matters beyond the crash:** generating the dump freezes the process while it writes. On a large instance that pause is long enough to look like an outage on its own, and on a failover cluster instance it can be long enough to lose the health check and fail over — which is why a dump sometimes appears in the ERRORLOG immediately before an unexplained failover (`/sqlclusterlog-review`).
+
+**Counting dumps understates the problem.** From SQL Server 2019, repeated dumps with the same stack signature are suppressed so they do not fill the disk. A single `SQLDump0001` file can therefore represent a fault that has recurred thousands of times. Compare stack signatures across restarts rather than counting files.
+
+**Fix options:**
+1. **Read the trigger, not the dump.** Non-yielding scheduler and latch timeout point at CPU or I/O starvation — route to `/sqlwait-review` and `/sqldiskio-review`. Index corruption points at `DBCC CHECKDB` and the storage path.
+2. **Check what runs inside the engine's address space.** Unsafe CLR assemblies, `sp_OA*` OLE automation, extended stored procedures, and linked-server providers with "Allow inprocess" enabled can all corrupt engine memory and produce access violations that are not SQL Server's own defect.
+3. **Patch before investigating deeply.** Access violations and assertions on an out-of-date or unsupported build are often already-fixed defects; check the build against current cumulative updates first.
+4. **Keep the files.** Support cases need `SQLDump<nnnn>.txt` and `.mdmp` from `MSSQL\LOG`; they are also the only record once the log rolls over.
+
+**Related checks:** E12 (non-yielding scheduler), E15 (slow I/O), E16 (corruption warnings), E20 (abnormal termination)
+
+---
+
 ## Quick Reference
 
 | ID | Name | Category | Severity |
@@ -1262,3 +1295,4 @@ Arc SQL extension disconnected. Last heartbeat: <timestamp>. Unable to reach Azu
 | E31 | Ledger Verification Failure | Modern (SQL 2022+) | Critical |
 | E32 | CE Feedback Model Version Change | Modern (SQL 2022+) | Info |
 | E33 | Azure Arc Agent Disconnect | Modern (Arc-enabled) | Warning |
+| E34 | Stack or Memory Dump Generated | Engine diagnostics | Critical / Warning |

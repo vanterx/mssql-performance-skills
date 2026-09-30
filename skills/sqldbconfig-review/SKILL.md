@@ -1,6 +1,6 @@
 ---
 name: sqldbconfig-review
-description: Analyze SQL Server instance and database configuration drift against proven DBA best practices. Applies 29 checks (B1–B29) across five categories: parallelism tuning (MAXDOP, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads), memory configuration (Max Server Memory, Lock Pages in Memory), database-level settings (auto-shrink, auto-close, compatibility level, RCSI, page verification, statistics, Trustworthy, cross-DB chaining), file and storage configuration (VLF count, percent auto-growth, Instant File Initialization, TempDB file count), and surface area exposure (CLR, OLE Automation, Ad Hoc Distributed Queries, service-SID sysadmin membership). Use this skill when the server behaves erratically after changes, a new instance needs a configuration audit, or silent misconfiguration is suspected as a root cause of performance or stability problems. Trigger when pasting output from sp_configure, sys.databases, sys.master_files, sys.dm_os_sys_info, sys.dm_db_log_info, or sys.server_principals.
+description: Analyze SQL Server instance and database configuration drift against proven DBA best practices. Applies 32 checks (B1–B32) across six categories: parallelism tuning (MAXDOP, Cost Threshold for Parallelism, Optimize for Ad Hoc Workloads), memory configuration (Max Server Memory, Lock Pages in Memory), database-level settings (auto-shrink, auto-close, compatibility level, RCSI, page verification, statistics, Trustworthy, cross-DB chaining), file and storage configuration (VLF count, percent auto-growth, Instant File Initialization, TempDB file count), and surface area exposure (CLR, OLE Automation, Ad Hoc Distributed Queries, service-SID sysadmin membership). Use this skill when the server behaves erratically after changes, a new instance needs a configuration audit, or silent misconfiguration is suspected as a root cause of performance or stability problems. Trigger when pasting output from sp_configure, sys.databases, sys.master_files, sys.dm_os_sys_info, sys.dm_db_log_info, or sys.server_principals.
 triggers:
   - /sqldbconfig-review
   - /dbconfig-review
@@ -11,13 +11,14 @@ triggers:
 
 ## Purpose
 
-Detect instance and database configuration drift that degrades performance, causes instability, or creates security exposure. Applies 29 checks (B1–B29) across five categories:
+Detect instance and database configuration drift that degrades performance, causes instability, or creates security exposure. Applies 32 checks (B1–B32) across six categories:
 
 - **B1–B5** — Parallelism: MAXDOP alignment to NUMA topology, Cost Threshold for Parallelism at default, Optimize for Ad Hoc Workloads, query governor
 - **B6–B9** — Memory: Max Server Memory unconfigured, Min Server Memory, Lock Pages in Memory model, AWE (legacy 32-bit setting)
 - **B10–B18** — Database settings: auto-shrink, auto-close, compatibility level, RCSI, page verification, auto-statistics, Trustworthy, cross-DB chaining
 - **B19–B23** — File and storage: excessive VLF count, percent auto-growth on log and data files, Instant File Initialization, TempDB file count vs. scheduler count
 - **B24–B29** — Surface area: CLR, OLE Automation Procedures, Ad Hoc Distributed Queries, instance-level cross-DB chaining, remote admin connections, service-SID sysadmin membership (broken hardening)
+- **B30–B32** — Scheduler and process settings that Microsoft advises against: priority boost, lightweight pooling (fiber mode), and a memory floor pinned against the ceiling
 
 ## Input
 
@@ -151,6 +152,9 @@ ORDER BY sp.name;
 | B19 — VLF count | > 1000 per database | > 5000 per database |
 | B20/B21 — Percent auto-growth | any percent growth on log or data | — |
 | B23 — TempDB file count | < MIN(scheduler_count, 8) | — |
+| B30 — Priority boost | — | value_in_use = 1 |
+| B31 — Lightweight pooling | — | value_in_use = 1 |
+| B32 — Min server memory pinned to max | min > 0 AND min ≥ max × 0.90 | — |
 
 ---
 
@@ -329,6 +333,24 @@ ORDER BY sp.name;
 - **Trigger:** A per-service-SID login that SQL Server Setup provisions is absent from `sys.server_principals`, OR present with `IS_SRVROLEMEMBER('sysadmin', name) = 0`. Required set — default instance: `NT SERVICE\MSSQLSERVER`, `NT SERVICE\SQLSERVERAGENT`, `NT SERVICE\SQLWriter`, `NT SERVICE\Winmgmt`; named instance `X`: `NT SERVICE\MSSQL$X`, `NT SERVICE\SQLAgent$X` (note `SQLAgent$`, not `SQLSERVERAGENT`), plus the instance-unaware `NT SERVICE\SQLWriter` and `NT SERVICE\Winmgmt`. Applies SQL Server 2012+ (per-service-SID era), Windows only; N/A for Azure SQL Database / Managed Instance.
 - **Severity:** Critical
 - **Fix:** Inverse polarity from the other surface-area checks — this is a *broken hardening*, not excess exposure. These service SIDs are how the Database Engine and SQL Agent services connect to the instance itself; dropping the login or removing it from `sysadmin` breaks service startup, SQL Agent connectivity, and future Setup/patching. Do **not** "fix" a flagged row by removing the login — restore it. Recreate if missing and re-add to the role: `CREATE LOGIN [NT SERVICE\MSSQLSERVER] FROM WINDOWS;` then `ALTER SERVER ROLE sysadmin ADD MEMBER [NT SERVICE\MSSQLSERVER];` (repeat for `SQLSERVERAGENT`/`SQLWriter`/`Winmgmt`, or `MSSQL$X`/`SQLAgent$X` on a named instance). These logins are created and set to `sysadmin` by Setup regardless of whether the service runs under a virtual account, domain account, or gMSA — the assigned startup account governs *external* resource access; the service SID governs the *internal* self-connection. Always change the startup account via SQL Server Configuration Manager (not the Windows Services applet), which maintains the service-SID ACLs and local-group membership. Since SQL Server 2016, a gMSA is a supported FCI startup account (virtual accounts are not, because their SID differs per node).
+
+### B30 — Priority Boost Enabled
+
+- **Trigger:** `sys.configurations` shows `priority boost` with `value_in_use = 1`
+- **Severity:** Critical
+- **Fix:** Microsoft's own page says the feature "will be removed in a future version of SQL Server" and that raising priority "might drain resources from essential operating system and network functions, resulting in problems shutting down SQL Server or using other operating system tasks on the server". The documented position is stronger than a preference: "You don't need to use `priority boost` for performance tuning", and it should be used "only under exceptional circumstances", such as at the direction of Microsoft support. It is explicitly unsupported on a failover cluster instance, where starving the cluster service of CPU invites a false failover. Turn it off — `EXEC sys.sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sys.sp_configure 'priority boost', 0; RECONFIGURE;` — and note that the change needs a service restart to take effect. Windows only; N/A for Azure SQL Database and Managed Instance.
+
+### B31 — Lightweight Pooling (Fiber Mode) Enabled
+
+- **Trigger:** `sys.configurations` shows `lightweight pooling` with `value_in_use = 1`
+- **Severity:** Critical
+- **Fix:** Fiber mode is deprecated as of SQL Server 2025, and Microsoft's guidance reaches back across supported versions: "Because of known stability and compatibility issues, Microsoft recommends that you avoid using this feature in any version of SQL Server." It breaks real functionality rather than merely underperforming — CLR execution is not supported under it, which takes out the `hierarchyid` type, the `FORMAT` function, replication and Policy-Based Management, and components that rely on thread-local storage or thread-owned objects "can't function correctly in fiber mode". In-Memory OLTP is incompatible: with fiber mode active you cannot create or attach databases with memory-optimized filegroups, and existing ones fail recovery after the restart that enables it. Fiber mode only ever helped a large multi-CPU instance running near capacity with a proven context-switching bottleneck, and improved Windows context switching has narrowed that further. Turn it off with `EXEC sys.sp_configure 'lightweight pooling', 0; RECONFIGURE;` (advanced option, requires a restart). Default is 0; unsupported on Express, and not applicable to Azure SQL Managed Instance.
+
+### B32 — Min Server Memory Pinned At or Near Max Server Memory
+
+- **Trigger:** `min server memory (MB)` is greater than 0 and within 10% of `max server memory (MB)`, or equal to it
+- **Severity:** Warning
+- **Fix:** Microsoft states plainly that "It isn't recommended to set `max server memory (MB)` and `min server memory (MB)` to be the same value, or near the same values." The two settings exist to bound a range the engine moves within; collapsing the range removes the engine's ability to give memory back under OS pressure, because once usage has reached `min server memory` SQL Server cannot free memory below it unless the setting is lowered. On a host shared with other instances or services, that turns a memory-pressure event into paging or allocation failures elsewhere. Distinguish this from B7, which flags a non-zero minimum on its own: a deliberate floor is legitimate, and in a virtualized guest it is recommended so the balloon driver cannot deflate the buffer pool. What this check targets is a floor set so close to the ceiling that dynamic management is disabled. Set the floor to what the instance genuinely needs to stay responsive and leave headroom beneath the ceiling.
 
 ---
 

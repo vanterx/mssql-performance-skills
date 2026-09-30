@@ -99,7 +99,8 @@ FROM sys.dm_os_sys_memory;
 | PLE (single NUMA node) | ≥ scaled floor `(GB/4)×300` | < scaled floor | < 25% of floor (or < 60 s) |
 | PLE (multi-NUMA, per node) | ≥ scaled floor `(GB/4)×300` | < scaled floor | < 25% of floor (or < 60 s) |
 | PLE decline rate (trend) | < 10 s/min | ≥ 10 s/min | ≥ 60 s/min |
-| Single-use plan cache as % of total plan cache | < 30% | ≥ 30% | ≥ 60% |
+| Single-use plan cache as % of total plan cache (only when cache ≥ 100 MB) | < 30% | ≥ 30% | ≥ 60% |
+| Plan cache size below which the percentage above is not reported | < 100 MB | — | — |
 | RESOURCE_SEMAPHORE wait (from sqlwait-review) | 0 sessions | 1–5 queued | > 5 queued |
 | Memory grant timeout | 0 | Any | — |
 | Stolen memory (non-buffer) as % of target | < 15% | ≥ 15% | ≥ 30% |
@@ -145,8 +146,9 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 ## Plan Cache Checks (O6–O10)
 
 ### O6 — Single-Use Plan Cache Bloat
-- **Trigger:** Single-use plans represent ≥ 30% of total plan cache size OR total single-use plan count > 10,000
+- **Trigger:** Total plan cache is at least 100 MB **and** single-use plans represent ≥ 30% of total plan cache size, OR total single-use plan count > 10,000
 - **Severity:** Warning if 30–59%; Critical if ≥ 60%
+- **Size gate first:** a percentage of a small cache is noise. On an instance whose whole plan cache is 40 MB, single-use plans at 70% are 28 MB — not a memory problem, and reporting it as one wastes the reader's attention on the largest-looking number in the output. Apply the percentage only once the cache is ≥ 100 MB; below that, mention it as context or not at all. The absolute count arm of the trigger stands on its own, because 10,000 plans indicates an unparameterized workload regardless of how much memory it currently occupies.
 - **Fix:** Ad-hoc queries that run once generate plans that consume memory and are never reused. Enable `optimize for ad hoc workloads` (`sp_configure 'optimize for ad hoc workloads', 1`) to store only a stub on first execution, saving the full plan allocation until the query runs a second time. Longer term, parameterize application queries or use `sp_executesql` with parameters.
 
 ### O7 — High Plan Cache Compilation Rate

@@ -1950,15 +1950,20 @@ SELECT * FROM OPENQUERY(LinkedServer,
 
 ---
 
-### N24 — High Cost Operator
+### N24 — High Estimated Cost Operator
 
 **What it means**  
-A single operator accounts for ≥ 50% of the plan's total estimated cost. This is your primary optimization target — fixing this operator will have the largest impact on query performance.
+A single operator accounts for ≥ 50% of the plan's total **estimated** cost, where `costPercent` is the operator's self cost (its `EstimatedTotalSubtreeCost` minus its direct children's) as a share of `StatementSubTreeCost`. Ranking by the raw subtree attribute instead always crowns the root node, because subtree cost is cumulative.
 
-This is informational: it tells you *where* to focus, not necessarily *what* is wrong.
+This says what the optimizer *expected* to dominate. It is not a measurement. Cost is derived from estimated cardinality plus a fixed hardware model, and nothing recomputes it after execution, so it is an estimate in every plan — actual plans included. Microsoft documents the optimizer as choosing "query plans that have the lowest estimated processing cost," with cardinality as the cost model's input ([Cardinality Estimation](https://learn.microsoft.com/sql/relational-databases/performance/cardinality-estimation-sql-server)); an actual plan adds runtime counters alongside the costs rather than replacing them.
+
+**Why this is not the bottleneck**  
+A high-cost operator is frequently not the slow one, and an operator costed at essentially zero can consume the entire runtime — a pre-2019 scalar UDF is the standard case, invisible as an operator and costed at nothing while running once per row (S37, N25).
+
+So on an **actual** plan, N62 (self elapsed time) decides where the time went and supersedes this check; treat N24 as context for the plan's shape. On an **estimated** plan nothing ran, so N24 is the best available signal — but it remains a statement about the optimizer's model, not about duration, and no claim about what "was slow" is supportable from it.
 
 **How to use this information**  
-Look at what type of operator has the high cost:
+Once self elapsed time has confirmed the operator actually matters, look at its type:
 - `Table Scan` or `Index Scan` → add an index (N4)
 - `Key Lookup` → add INCLUDE columns to the index (N5)
 - `Sort` → add a pre-sorting index (N22)
@@ -3354,16 +3359,31 @@ Identify which columns are wide (VARCHAR(MAX), NVARCHAR(MAX), XML, VARBINARY(MAX
 ### N62 — Actual Elapsed Time Hotspot
 
 **What it means**  
-`ActualElapsedms` in `RunTimeCountersPerThread` records how long (in milliseconds) a specific thread actually spent in a specific operator — including time waiting for I/O, locks, memory, and CPU scheduling. Summing across threads gives the operator's total wall-clock contribution. When one operator dominates actual elapsed time, it is the true bottleneck regardless of its estimated cost percentage (N24).
+`ActualElapsedms` in `RunTimeCountersPerThread` records how long (in milliseconds) a thread spent in an operator — including time waiting for I/O, locks, memory, and CPU scheduling. When one operator dominates *self* elapsed time, it is the true bottleneck regardless of its estimated cost percentage (N24).
 
 **How to spot it**  
-`RunTimeCountersPerThread/@ActualElapsedms` on any `<RelOp>` in an actual execution plan.
+`RunTimeCountersPerThread/@ActualElapsedms` on any `<RelOp>` in an actual execution plan — aggregated by `MAX` across worker threads, then with children subtracted.
 
 ```xml
+<RunTimeCountersPerThread Thread="0" ActualRows="0"       ActualElapsedms="61800" />
 <RunTimeCountersPerThread Thread="1" ActualRows="9999999" ActualElapsedms="28450" />
 <RunTimeCountersPerThread Thread="2" ActualRows="8120344" ActualElapsedms="31200" />
 ```
-Sum = 59,650 ms actual elapsed. If statement total was 62,000 ms, this operator consumed 96% of wall-clock time.
+
+This operator's elapsed is **31,200 ms** — the max over threads 1 and 2. Three ways to get it wrong from the same XML:
+
+- **Summing the workers** gives 59,650 ms. Threads 1 and 2 ran *concurrently*, so their wall clock does not add; this inflates the operator by roughly DOP. If the statement took 32,000 ms, the sum alone claims 186% of the query.
+- **Including thread 0** gives 61,800 ms. Thread 0 is the coordinator — note `ActualRows="0"` — and its elapsed is the whole parallel branch's wall clock, so every operator in the branch would report the branch's full duration.
+- **Stopping there** still leaves a cumulative figure in row mode. Subtract the children (within each thread, then take the slowest) to reach self elapsed.
+
+If the statement total from `QueryTimeStats/@ElapsedTime` were 32,000 ms and this operator's children accounted for 4,000 ms of thread 2's time, self elapsed is 27,200 ms — 85% of the query, and a genuine N62.
+
+> **Unverified against Microsoft Learn.** Microsoft documents neither the row-mode cumulative behaviour of these counters nor the aggregation rule (`MAX` for elapsed, `SUM` for CPU). Both are observed, reproduced on SQL Server 2019 and 2022. The reason `MAX` is right does not depend on documentation — concurrent wall clock does not add — but say so if a conclusion rests on it.
+
+**Two ways a correct N62 still misleads**
+
+- **Self elapsed far above self CPU means blocked, not busy.** The operator burned wall clock waiting — on a spilling child, an exchange, a memory grant. Reporting it as "the hot operator" sends the reader after the wrong thing; name what it waited on.
+- **In a parallel plan, self times legitimately exceed total elapsed.** Each is a max across threads and separate branches overlap, so two operators showing 69.6 s and 25.5 s in a 71.1 s query is not double-counting. Do not talk yourself out of a correct answer because the arithmetic looks off.
 
 **Why estimated cost can mislead**  
 N24 uses the optimizer's cost model percentage — which does not account for I/O stalls, lock waits, or memory spills. A hash match with low estimated cost can have very high actual elapsed time if it spills to TempDb or waits for memory. Actual elapsed time cuts through this noise.

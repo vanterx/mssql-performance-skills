@@ -1,6 +1,6 @@
 ---
 name: sqlerrorlog-review
-description: Analyzes SQL Server ERRORLOG files for operational issues, availability group failures, memory pressure, I/O subsystem warnings, and security events. Use this skill whenever a SQL Server instance has experienced unexpected behavior, an AG failover, memory warnings, I/O latency alerts, or abnormal shutdown, and you need a structured timeline of what SQL Server recorded. Applies 33 checks (E1–E33) covering AG health, memory/resource pressure, I/O and storage, startup/shutdown, connectivity, configuration signals, and SQL 2019/2022 modern feature events.
+description: Analyzes SQL Server ERRORLOG files for operational issues, availability group failures, memory pressure, I/O subsystem warnings, and security events. Use this skill whenever a SQL Server instance has experienced unexpected behavior, an AG failover, memory warnings, I/O latency alerts, or abnormal shutdown, and you need a structured timeline of what SQL Server recorded. Applies 34 checks (E1–E34) covering AG health, memory/resource pressure, I/O and storage, startup/shutdown, connectivity, configuration signals, SQL 2019/2022 modern feature events, and stack or memory dumps.
 triggers:
   - /sqlerrorlog-review
 ---
@@ -10,8 +10,8 @@ triggers:
 ## Purpose
 
 Parse and analyze SQL Server ERRORLOG content to surface operational warnings, high-availability
-failures, resource pressure signals, security events, and configuration anomalies. Applies 33
-checks (E1–E33) across six categories:
+failures, resource pressure signals, security events, and configuration anomalies. Applies 34
+checks (E1–E34) across seven categories:
 
 - **E1–E8** — AG / High Availability: failovers, lease expiry, replica state changes, synchronization errors
 - **E9–E14** — Memory and resource pressure: page allocation failures, OS paging, worker exhaustion, non-yielding schedulers
@@ -19,6 +19,7 @@ checks (E1–E33) across six categories:
 - **E20–E24** — Startup, shutdown, and connectivity: abnormal termination, restart cycling, login failure bursts, linked server errors
 - **E25–E28** — Configuration and informational: trace flags, unconfigured max memory, log rotation gaps, version end-of-support
 - **E29–E33** — SQL 2019/2022 modern features: ADR PVS cleanup stall, IQP DOP feedback, Ledger verification failure, CE feedback model change, Azure Arc agent disconnect
+- **E34** — Engine diagnostics: stack and memory dumps, and the trigger recorded immediately before them
 
 ## Input
 
@@ -366,7 +367,7 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
   upgrade. If not on the latest CU, evaluate whether open bugs fixed in later CUs are relevant
   to the observed issues. Report the version string verbatim in the Output Summary.
 
-## SQL 2019/2022 Modern Feature Checks (E29–E33)
+## SQL 2019/2022 Modern Feature Checks (E29–E33) and Engine Diagnostics (E34)
 
 ### E29 — ADR PVS Cleanup Stall
 - **Trigger:** Log contains `Persistent Version Store cleanup` with `stall` or `unable to advance` — SQL 2019+; skip if compat level < 150
@@ -392,6 +393,11 @@ EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, NULL, N'desc';
 - **Trigger:** Log contains `Arc SQL extension` with `disconnected` or `heartbeat` failure message — any SQL Server version with Azure Arc agent installed
 - **Severity:** Warning — The Arc SQL extension agent has lost contact with the Azure control plane; Arc-based features (Microsoft Defender, automated backups, best practice assessments) are not functioning
 - **Fix:** Check Arc agent health: `Get-Service -Name 'himds'` and the SQL extension `Get-Service -DisplayName 'Microsoft SQL Server Extension Service'` (Windows; the service runs as `NT SERVICE\SqlServerExtension` — on Linux the service is named `SqlServerExtension`). There is no `ArcSqlInstanceExtension` service. Verify outbound connectivity to `*.arc.azure.com` and `*.<region>.arcdataservices.com` on port 443. Restart the extension service if it is stopped. Review Arc agent logs at `%ProgramData%\GuestConfig\arc_policy_logs\` for detailed error messages.
+
+### E34 — Stack or Memory Dump Generated
+- **Trigger:** Log contains `BEGIN STACK DUMP`, `SqlDumpExceptionHandler`, `Stack Signature for the dump is`, or `External dump process return code` — any version
+- **Severity:** Critical when accompanied by `EXCEPTION_ACCESS_VIOLATION` or repeated across restarts; Warning for a single dump with a known benign trigger
+- **Fix:** A dump means the engine hit a condition it instruments as serious: an access violation, an assertion, index corruption, a non-yielding scheduler, a latch timeout, a deadlocked scheduler, or an unresolved deadlock. Read the lines *above* the dump header — they name the trigger, and that is what to act on, not the dump itself. The dump files land in the instance's `MSSQL\LOG` directory by default; `SQLDump<nnnn>.txt` gives the stack and `SQLDump<nnnn>.mdmp` the memory image. Dump generation freezes the process while it writes, so a dump on a large instance can itself look like an outage, and on an FCI it can trigger a failover (see `/sqlclusterlog-review`). From SQL Server 2019 repeated dumps for the same stack signature are suppressed, so a *count* of dumps understates a recurring problem — compare signatures, not file counts. Route non-yielding scheduler and latch timeout dumps to `/sqlwait-review` and `/sqldiskio-review`; treat access violations and assertions as a support case, and check whether anything runs in-process that can corrupt engine memory (unsafe CLR assemblies, `sp_OA*` OLE automation, extended stored procedures, linked-server providers with "Allow inprocess" set). Persistent dumps on an unsupported build are a reason to patch first, since the underlying defect may already be fixed.
 
 ---
 
