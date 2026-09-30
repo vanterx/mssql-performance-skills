@@ -1376,6 +1376,8 @@ Flag when the minimum is above zero and at least 90% of the maximum.
 
 **Not the same as B7.** B7 flags any non-zero minimum as worth explaining. A deliberate floor is legitimate and sometimes recommended — in a virtualized guest it stops the balloon driver deflating the buffer pool. B32 only fires when the floor is so close to the ceiling that the range is gone.
 
+**One school of thought will trip this.** Some vendor guidance for dedicated hosts — BizTalk's is the best-known — recommends setting min equal to max precisely to stop the engine releasing memory. On a genuinely dedicated instance that reasoning holds, and Microsoft's general recommendation still points the other way. Report it as a Warning with the context rather than as a defect: ask whether the host is dedicated, whether anything else (SSIS, a monitoring agent, antivirus, another instance) needs memory, and whether the vendor guidance is current. If the host is dedicated and the floor is deliberate, record it as accepted rather than re-flagging it at every review.
+
 **Fix options:**
 1. **Lower the floor** to what the instance needs to stay responsive, leaving headroom below the ceiling.
 2. **Verify the ceiling is right** for the host (B6) — subtract the OS allowance and thread stack memory before setting it.

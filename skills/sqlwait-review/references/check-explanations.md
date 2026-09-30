@@ -54,8 +54,11 @@ Many wait types are normal background activity and should be excluded before ana
 |---|---|
 | `RESOURCE_SEMAPHORE_MUTEX` | Adjacent to the memory-grant pressure V4 exists to find; ignoring it can mask a compile-gate problem |
 | `WAIT_FOR_RESULTS` | Can be a real client-side stall — a session waiting on a caller that never fetched |
+| `DBMIRROR_SEND` | Fails the idle test: it only accrues when a mirroring or AG session exists, and sustained values are the primary signal of a slow partner or network. Route it to `/sqlhadr-review` rather than excluding it |
 
-A monitoring tool can ignore both because it alerts on the same conditions from other signals. A skill reading one pasted capture has no second signal, so it keeps them visible.
+A monitoring tool can ignore all three because it alerts on the same conditions from other signals. A skill reading one pasted capture has no second signal, so it keeps them visible.
+
+Note the reasoning that separates these from the rest: the exclusion list is justified by waits accruing on an instance doing nothing. A wait that only appears when a specific feature is configured, and whose magnitude then means something, does not qualify however "background" it looks.
 
 ### Point-in-time vs cumulative
 

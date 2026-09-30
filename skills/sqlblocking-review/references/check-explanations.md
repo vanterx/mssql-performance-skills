@@ -908,6 +908,8 @@ EXCLUDED    Sch-S         1          2,010   71.40
 
 Schema modes are excluded deliberately: a `Sch-M` problem (BL18, BL44) is unaffected by row versioning, so leaving it in the denominator would understate RCSI's benefit for the blocking it does fix.
 
+One precision limit worth stating when you quote the number: the query counts requests with `request_status = 'WAIT'`, which leaves out conversion waits (`CONVERT`, typically `U` being upgraded to `X`). Those are writer-side, so their absence makes `rcsi_addressable_pct` read slightly high on a workload doing read-then-update in one transaction. Treat the figure as a good estimate rather than an exact split, and if conversion waits appear in section 3 (BL21), say so alongside it.
+
 **Fix options (ranked by impact):**
 1. **Enable RCSI** — no query changes needed, and it removes the whole reader-blocked-by-writer class.
 2. **Budget the costs first** — TempDB version store space and I/O, 14 bytes added per row as rows are updated, and different semantics for read-then-write logic, which may need `UPDLOCK` to remain correct.
@@ -1706,7 +1708,7 @@ session_id  database   elapsed_s  status     wait_type        blocking_session_i
 64          Sales      41         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
 71          Sales      38         runnable   NULL             0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
 77          Sales      33         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
-82          Sales      29         runnable   SOS_SCHEDULER_Y  0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+82          Sales      29         runnable   SOS_SCHEDULER_YIELD0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
 ```
 
 Four sessions, one statement, no blocker anywhere, two waiting on page I/O. The previous capture had the same statement finishing in 40 ms.

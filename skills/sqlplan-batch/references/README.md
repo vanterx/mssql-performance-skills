@@ -24,6 +24,7 @@ Load a reference file when:
 fix options, or code examples. Also when the user asks "explain check XX"
 or "what does this finding mean?"
 
-**What it covers:** The full five-part explanation (What it means / How to
-spot it / Example / Fix options / Related checks) for all 0 checks plus the
-Quick Reference table.
+**What it covers:** How to read each dashboard section, the prioritisation
+guide, and the next-step workflow. `sqlplan-batch` is a dispatcher: it
+aggregates `sqlplan-review`'s S/N findings across many plans and defines no
+checks of its own, so there is no per-check reference here.

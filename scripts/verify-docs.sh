@@ -929,6 +929,95 @@ while IFS='|' read -r _ range count skill _; do
 done < <(awk '/^## Check Reference/{f=1;next} f && /^## /{exit} f && /^\| [A-Z]{1,2}[0-9]+[–-][A-Z]{1,2}[0-9]+ \|/{print}' README.md)
 [ "$check47_ok" -eq 1 ] && pass "README.md Check Reference rows match SKILL.md ranges and counts"
 
+
+# ---------------------------------------------------------------------------
+# Check 48: references/README.md stated check count matches SKILL.md
+# ---------------------------------------------------------------------------
+# references/README.md is the seventh check-count touch point. It was not
+# enumerated in CLAUDE.md's "all 6 touch points" list, so 14 of these drifted
+# silently while every other count stayed in sync — three of them in the same
+# commit that added BL55, B30-B32 and E34. A file that states no count is fine;
+# only a stated count that disagrees with SKILL.md is a failure.
+echo ""
+echo "[48 ] references/README.md stated check count matches SKILL.md"
+check48_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    readme="$skill_dir/references/README.md"
+    [ -f "$readme" ] || continue
+    stated=$(grep -oE "all [0-9]+ checks" "$readme" | grep -oE "[0-9]+" | sort -u)
+    [ -z "$stated" ] && continue  # states no count: nothing to drift
+    # grep -c prints 0 and exits 1 on no match, so "|| echo 0" would append
+    # a SECOND zero and make a dispatcher skill fail against itself.
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
+    for s in $stated; do
+        if [ "$s" != "$actual" ]; then
+            fail "$name: references/README.md says 'all $s checks' but SKILL.md defines $actual"
+            check48_ok=0
+        fi
+    done
+done
+[ "$check48_ok" -eq 1 ] && pass "references/README.md stated check counts match SKILL.md"
+
+# ---------------------------------------------------------------------------
+# Check 49: PERFORMANCE_TUNING_GUIDE.md Check ID Reference rows match SKILL.md,
+#           and the count column sums to the stated total. Check 26 only covers
+#           the Skills at a Glance table, so this column drifted unnoticed:
+#           ranges were updated while the counts beside them were not.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[49 ] PERFORMANCE_TUNING_GUIDE.md Check ID Reference rows and column total"
+check49_ok=1
+guide_sum=0
+# A prefix may span several rows (X1–X12 event-level, X13–X25 workload
+# aggregate), so counts and maxima are accumulated per prefix+skill and
+# compared once, not row by row.
+declare -A guide_prefix_count=()
+declare -A guide_prefix_max=()
+declare -A guide_prefix_skill=()
+while IFS='|' read -r _ range skill _ count _; do
+    range=$(echo "$range" | tr -d ' `')
+    skill=$(echo "$skill" | tr -d ' `')
+    count=$(echo "$count" | tr -d ' ')
+    prefix=$(echo "$range" | grep -oE '^[A-Z]{1,2}')
+    [ -z "$prefix" ] && continue
+    case "$count" in ''|*[!0-9]*) continue ;; esac
+    guide_sum=$((guide_sum + count))
+    key="$prefix:$skill"
+    guide_prefix_count[$key]=$(( ${guide_prefix_count[$key]:-0} + count ))
+    guide_prefix_skill[$key]="$skill"
+    row_max=$(echo "$range" | grep -oE '[0-9]+$')
+    if [ "$row_max" -gt "${guide_prefix_max[$key]:-0}" ]; then
+        guide_prefix_max[$key]=$row_max
+    fi
+done < <(grep -E '^\| `[A-Z]{1,2}[0-9]+(–|-)[A-Z]{1,2}[0-9]+` \| `[a-z-]+` \|' PERFORMANCE_TUNING_GUIDE.md)
+
+for key in "${!guide_prefix_count[@]}"; do
+    prefix=${key%%:*}
+    skill=${guide_prefix_skill[$key]}
+    skill_file="skills/$skill/SKILL.md"
+    if [ ! -f "$skill_file" ]; then
+        fail "49: Check ID Reference row for '$prefix' names unknown skill '$skill'"
+        check49_ok=0
+        continue
+    fi
+    actual_count=$(grep -cE "^### ${prefix}[0-9]+" "$skill_file" || true)
+    actual_max=$(grep -oE "^### ${prefix}[0-9]+" "$skill_file" | grep -oE '[0-9]+$' | sort -n | tail -1)
+    if [ "${guide_prefix_count[$key]}" != "$actual_count" ]; then
+        fail "49: Check ID Reference rows for $prefix total ${guide_prefix_count[$key]} but $skill/SKILL.md defines $actual_count ${prefix}-checks"
+        check49_ok=0
+    fi
+    if [ "${guide_prefix_max[$key]}" != "$actual_max" ]; then
+        fail "49: Check ID Reference highest $prefix row ends at ${prefix}${guide_prefix_max[$key]} but $skill/SKILL.md ends at ${prefix}${actual_max}"
+        check49_ok=0
+    fi
+done
+guide_total=$(grep -oE '\*\*Total: [0-9]+ checks across all skills\.\*\*' PERFORMANCE_TUNING_GUIDE.md | grep -oE '[0-9]+' | head -1)
+if [ -n "$guide_total" ] && [ "$guide_sum" != "$guide_total" ]; then
+    fail "49: Check ID Reference count column sums to $guide_sum but the table footer says $guide_total"
+    check49_ok=0
+fi
+[ "$check49_ok" -eq 1 ] && pass "Check ID Reference rows match SKILL.md and sum to $guide_total"
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
