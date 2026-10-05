@@ -1,4 +1,4 @@
-# sqldbconfig-review — Check Explanations (B1–B32)
+# sqldbconfig-review — Check Explanations (B1–B36)
 
 Plain-English explanations for all 29 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
 
@@ -11,6 +11,8 @@ Plain-English explanations for all 29 configuration drift checks. Each entry fol
 - [B10–B18 — Database-Level Settings](#b10b18--database-level-settings)
 - [B19–B23 — File and Storage Configuration](#b19b23--file-and-storage-configuration)
 - [B24–B29 — Surface Area and Feature Exposure](#b24b29--surface-area-and-feature-exposure)
+- [B30–B32 — Scheduler and Process Settings](#b30b32--scheduler-and-process-settings)
+- [B33–B36 — Host and Licensing Capacity](#b33b36--host-and-licensing-capacity)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -1385,6 +1387,157 @@ Flag when the minimum is above zero and at least 90% of the maximum.
 
 **Related checks:** B6, B7, B8
 
+
+---
+
+## B33–B36 — Host and Licensing Capacity
+
+### B33 — Common Criteria Compliance Enabled
+
+**What it means:** `common criteria compliance enabled` switches on the behaviours an instance needs to meet Common Criteria evaluation assurance level 2 (EAL2) or 4+ (EAL4+). Three things change: memory allocations are overwritten with a known bit pattern before being handed to a new resource (Residual Information Protection), login auditing is turned on and per-session login statistics appear in `sys.dm_exec_sessions`, and a table-level `DENY` starts taking precedence over a column-level `GRANT`.
+
+**How to spot it:**
+
+```sql
+SELECT name, value, value_in_use
+FROM sys.configurations
+WHERE name = 'common criteria compliance enabled';
+```
+
+**Why it's a problem:** Only when nobody asked for it. Microsoft states that overwriting the memory allocation "can slow performance", and maintains a separate troubleshooting article for the symptom. The cost is paid on every memory reallocation, so it shows up as a diffuse slowdown with no single expensive query to blame — the kind of regression that survives weeks of query tuning. Two details make an unexamined "on" worse than it looks. Compliance is evaluated and certified only for Enterprise edition, and full compliance also requires installing the Common Criteria trigger scripts shipped with the datasheet; an instance with the option enabled and no triggers is paying for a certification it does not have.
+
+**Fix options:**
+1. **Establish the obligation first.** If the instance is in scope for EAL2/EAL4+, leave it on and verify the triggers are installed. The finding is then informational.
+2. **Audit the permission model before disabling it.** This is the step that gets skipped. While the option is on, a table-level `DENY` beats a column-level `GRANT`; turning it off reverses that, so a column someone was relying on `DENY` to protect can become readable. Enumerate column-level grants that overlap table-level denies before changing anything.
+3. **Disable it** once the above is clear:
+   ```sql
+   EXEC sys.sp_configure 'show advanced options', 1;
+   RECONFIGURE;
+   EXEC sys.sp_configure 'common criteria compliance enabled', 0;
+   RECONFIGURE WITH OVERRIDE;
+   ```
+   Restart the SQL Server service for the change to take effect.
+
+**Related checks:** B24–B28 (surface area), B34
+
+---
+
+### B34 — Usable Scheduler Count Below OS CPU Count
+
+**What it means:** `cpu_count` is the number of logical CPUs the operating system presents to SQL Server. `scheduler_count` is the number of user schedulers the instance actually configured. When the second is smaller, some of the machine's CPU capacity is unreachable by this instance.
+
+**How to spot it:**
+
+```sql
+SELECT
+    SERVERPROPERTY('Edition')   AS edition,
+    cpu_count,
+    scheduler_count,
+    affinity_type_desc,
+    virtual_machine_type_desc
+FROM sys.dm_os_sys_info;
+```
+
+**Why it's a problem:** Two reasons, and the second is easy to miss. The direct one is wasted hardware: a 32-core server running an edition capped at 24 cores is paying for eight cores the instance will not schedule work on. The indirect one is that scheduler count is an input to other sizing decisions in this skill — B23 targets `MIN(scheduler_count, 8)` TempDB files, and the MAXDOP guidance behind B1 and B3 is expressed per NUMA node in schedulers. A capped scheduler count quietly re-sizes all of them, so the configuration can look internally consistent while being sized to the wrong machine.
+
+The causes are distinguishable, and the remedy differs completely between them:
+
+| Cause | Evidence | Nature |
+|-------|----------|--------|
+| Edition compute capacity limit | `SERVERPROPERTY('Edition')` names the edition and licensing model | Licensing decision |
+| Processor affinity set | `affinity_type_desc = 'MANUAL'` | Configuration, reversible |
+| Core parking / BIOS P-states | scheduler_count = cpu_count but CPU still throttled | Host firmware (see B36) |
+
+Microsoft's documented per-instance compute capacity limits:
+
+| Edition / licensing | Limit for a single instance |
+|---------------------|-----------------------------|
+| Enterprise, Core-based licensing | Operating system maximum |
+| Developer | Operating system maximum |
+| Standard | Lesser of 4 sockets or 24 cores (SQL Server 2022 and earlier); 32 cores on later versions |
+| Express | Lesser of 1 socket or 4 cores |
+| Enterprise, Server + CAL licensing | 20 cores per instance (licensing not available for new agreements) |
+
+In a virtualized guest the limit counts logical processors rather than cores, because the processor architecture is not visible to the guest.
+
+**Fix options:**
+1. **Affinity, if `affinity_type_desc = 'MANUAL'`.** Return scheduling to the engine unless affinity was set for a documented reason such as instance isolation:
+   ```sql
+   ALTER SERVER CONFIGURATION SET PROCESS AFFINITY CPU = AUTO;
+   ```
+2. **Edition limit.** Report it as a licensing finding with the numbers attached, not as a misconfiguration. Note that the limits are per instance and not per server: Microsoft documents deploying multiple instances as an efficient way to use a server with more sockets or cores than one instance can address. Moving Enterprise from Server + CAL to Core-based licensing removes the 20-core cap.
+3. **Right-size the derived settings meanwhile.** While the cap stands, B23 and B1/B3 should be evaluated against the schedulers the instance can actually use, which is what those checks already read.
+4. **Rule out frequency scaling** via B36 before concluding the CPU shortfall is a count problem at all.
+
+**Related checks:** B1, B3, B23, B36
+
+---
+
+### B35 — Access Check Cache Options Changed From Default
+
+**What it means:** When SQL Server checks access to a database object, the result is cached in the access check result cache. `access check cache bucket count` controls the number of hash buckets; `access check cache quota` controls the number of entries held before the oldest are evicted. Both default to 0, which means the engine sizes them itself.
+
+**How to spot it:**
+
+```sql
+SELECT name, value, value_in_use
+FROM sys.configurations
+WHERE name IN ('access check cache bucket count', 'access check cache quota');
+```
+
+**Why it's a problem:** Mostly as a signal rather than a defect. Microsoft's guidance is that these options should be changed only when directed by Customer Support Services, so a non-zero pair usually means either an open support case or, more often, advice copied from an old article and never revisited. The second case is the risk, because the internal defaults these values were chosen against have changed:
+
+| Version | Architecture | Default bucket count | Default quota |
+|---------|--------------|----------------------|---------------|
+| SQL Server 2016 and later | x64 | 256 | 1,024 |
+| SQL Server 2008 to 2014 | x86 | 256 | 1,024 |
+| SQL Server 2008 to 2014 | x64 and IA-64 | 2,048 | 28,192,048 |
+
+A value chosen to shrink the cache on a 2012 x64 instance is close to the engine-managed default on 2016 and later, so carrying it forward achieves little; a value chosen to grow it can be orders of magnitude away. Where the pair is set deliberately, Microsoft documents a 1:4 ratio of bucket count to quota, so 512 should pair with 2048 — a pair that breaks the ratio is worth flagging on its own.
+
+**Fix options:**
+1. **Reset to engine-managed** unless a support case says otherwise:
+   ```sql
+   EXEC sys.sp_configure 'access check cache bucket count', 0;
+   RECONFIGURE;
+   EXEC sys.sp_configure 'access check cache quota', 0;
+   RECONFIGURE;
+   ```
+2. **Keep the 1:4 ratio** if the options stay set.
+3. **Treat the cause, not the cache.** Access check token entries with a class of 65535 in `sys.dm_os_memory_cache_entries` are cumulative permission checks for whole queries, and they accumulate on instances with a high rate of ad hoc query execution. Microsoft's recommendation is query parameterization or converting frequent patterns into stored procedures — which is the same remediation as B4 (Optimize for Ad Hoc Workloads) and overlaps the plan-cache findings in `/sqlmemory-review`.
+4. **Where the security cache is driving CPU,** Microsoft points at trace flags 4610 and 4618 to limit entries, and the matching spinlocks are `LOCK_RW_SECURITY_CACHE` (SQL Server 2016 CU2 and later), `SECURITY_CACHE` (2014 through 2016 CU1) and `MUTEX` (up to 2012). Spinlock evidence is out of scope for this skill.
+
+**Related checks:** B4, B24–B26
+
+---
+
+### B36 — Windows Power Plan Not Set for Sustained Load
+
+**What it means:** The active Windows power plan governs how aggressively processor frequency scales with load, through P-states and core parking. Windows Server defaults to Balanced.
+
+**How to spot it:** Not visible from T-SQL. On the host:
+
+```
+powercfg /getactivescheme
+```
+
+**Why it's a problem:** On a server that is consistently busy, Balanced can leave processors at a lower performance state than the workload wants, raising average response time for CPU-intensive work. Microsoft documents this as a known Windows Server symptom (KB2207548) affecting both physical and virtual environments.
+
+The widespread "always set High Performance for SQL Server" advice overstates what Microsoft actually recommends, which is why this check is Info rather than Warning. Microsoft's own ordering is:
+
+1. **Recommended resolution:** update the system BIOS to a current revision and apply the relevant operating-system and CPU updates. The root fault is the processors and the operating system not adjusting P-states and turning off core parking as needed.
+2. **Workaround:** switch to High Performance. Microsoft notes this "will disable dynamic performance scaling on the platform" and that it is "a viable solution" when "the platform is always under a heavy load" — but also that "special care should be taken before setting the power plan to High Performance as this can increase power consumption unnecessarily when the system is underutilized".
+
+A dedicated SQL Server host under steady load usually does meet the "always under a heavy load" condition, so High Performance is often the correct choice. The point of the check is to report it as a deliberate trade-off with a documented cost, not as a misconfiguration to fix reflexively.
+
+**Fix options:**
+1. **Update firmware and OS first** where the degradation is being actively investigated.
+2. **Switch to High Performance** on hosts that are consistently loaded, accepting the higher idle power draw.
+3. **Stay on Balanced and tune within it** by raising the Minimum Processor Performance State, expressed as a percentage of maximum processor frequency (0–100). This keeps dynamic scaling while setting a floor.
+4. **Confirm the effect before and after.** Frequency scaling shows up as CPU-bound symptoms with no matching query cost; pair with `/sqlwait-review` (`SOS_SCHEDULER_YIELD`) and B34 so a count problem is not mistaken for a frequency problem.
+
+**Related checks:** B34, B30
+
 ---
 
 ## Quick Reference Table
@@ -1423,3 +1576,7 @@ Flag when the minimum is above zero and at least 90% of the maximum.
 | B30 | Scheduler/Process | priority boost = 1 | Critical |
 | B31 | Scheduler/Process | lightweight pooling = 1 (fiber mode) | Critical |
 | B32 | Scheduler/Process | min server memory ≥ 90% of max | Warning |
+| B33 | Host/Licensing | common criteria compliance enabled = 1 | Warning |
+| B34 | Host/Licensing | scheduler_count < cpu_count | Warning |
+| B35 | Host/Licensing | access check cache option <> 0 | Info |
+| B36 | Host/Licensing | Windows power plan not High Performance | Info |
