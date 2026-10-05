@@ -1,4 +1,4 @@
-# sqldbconfig-review — Check Explanations (B1–B36)
+# sqldbconfig-review — Check Explanations (B1–B37)
 
 Plain-English explanations for all 29 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
 
@@ -12,7 +12,7 @@ Plain-English explanations for all 29 configuration drift checks. Each entry fol
 - [B19–B23 — File and Storage Configuration](#b19b23--file-and-storage-configuration)
 - [B24–B29 — Surface Area and Feature Exposure](#b24b29--surface-area-and-feature-exposure)
 - [B30–B32 — Scheduler and Process Settings](#b30b32--scheduler-and-process-settings)
-- [B33–B36 — Host and Licensing Capacity](#b33b36--host-and-licensing-capacity)
+- [B33–B37 — Host and Licensing Capacity](#b33b37--host-and-licensing-capacity)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -1390,7 +1390,7 @@ Flag when the minimum is above zero and at least 90% of the maximum.
 
 ---
 
-## B33–B36 — Host and Licensing Capacity
+## B33–B37 — Host and Licensing Capacity
 
 ### B33 — Common Criteria Compliance Enabled
 
@@ -1540,6 +1540,43 @@ A dedicated SQL Server host under steady load usually does meet the "always unde
 
 ---
 
+### B37 — Non-Microsoft Modules Loaded in the SQL Server Process
+
+**What it means:** `sys.dm_os_loaded_modules` "returns a row for each module loaded into the server address space" — every DLL sharing the SQL Server process. Most are Microsoft's own. The ones that are not arrived by being injected or loaded at runtime: antivirus and host intrusion-prevention agents, backup and monitoring agents, and OLE DB or ODBC providers brought in by a linked server.
+
+**How to spot it:**
+
+```sql
+SELECT name, company, description, file_version, product_version
+FROM sys.dm_os_loaded_modules
+WHERE company <> N'Microsoft Corporation'
+ORDER BY company, name;
+```
+
+A handful of Microsoft-shipped data-access modules report no company name and are not findings — `ODBC32.dll`, `MsdaDiag.DLL`, `XmlLite.dll`, `msxml3.dll`, `oledb32.dll`, `MSDART.DLL`, `msadce.dll`, and the `sqlevn70.rll` resource file. Exclude those before reporting.
+
+**Why it's a problem:** Code in the process shares everything with the engine: the virtual address space, the thread pool, and the failure domain. The practical consequence is misattribution. An access violation, a non-yielding scheduler report, or latency on a code path a filter driver intercepts all surface as SQL Server symptoms, and the engine's own diagnostics cannot see past its process boundary to say otherwise. Virtual address space consumed by a third-party module is likewise invisible to the memory clerks that `/sqlmemory-review` reads.
+
+Two signatures are common enough to name explicitly:
+
+| Module name pattern | Product | Typical symptom |
+|---------------------|---------|-----------------|
+| `HcThe*`, `HcApi*`, `HcSql*` | Host intrusion-prevention agent | Unexplained latency or instability; the agent inspects activity inside the process |
+| `OraOLEDButl11`, `OraOLEDBrst11`, `OraOLEDBrst10` | Oracle OLE DB provider | Arrives with a linked server; in-process providers can destabilise the engine |
+
+**Fix options:**
+1. **Identify before acting.** Map each module to its product via `company` and `description`. A monitoring agent you deployed deliberately is context, not a defect.
+2. **Exclude the agent from the SQL Server process and directories** where the symptom is unexplained instability or latency. Antivirus vendors support process and path exclusions specifically for database servers; this is the standard remediation and it is reversible.
+3. **Move a linked-server provider out of process.** Turning off the provider's `AllowInProcess` option puts it in a separate process, so a provider fault no longer takes the engine with it. Expect a throughput cost.
+4. **Correlate, do not assume.** Pair with `/sqlerrorlog-review` for access violations and non-yielding scheduler reports, and with `/sqlmemory-review` when virtual address space rather than buffer pool is the pressure.
+5. **Capture the list before and after any agent change** so the next investigation has a baseline.
+
+**Related checks:** B33 (Common Criteria overhead), B34 (scheduler capacity), `/sqlerrorlog-review`, `/sqlmemory-review`
+
+**Platform note:** `sys.dm_os_loaded_modules` is SQL Server only. There is no equivalent on Azure SQL Database or Azure SQL Managed Instance, where the host is platform-managed.
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger | Severity |
@@ -1580,3 +1617,4 @@ A dedicated SQL Server host under steady load usually does meet the "always unde
 | B34 | Host/Licensing | scheduler_count < cpu_count | Warning |
 | B35 | Host/Licensing | access check cache option <> 0 | Info |
 | B36 | Host/Licensing | Windows power plan not High Performance | Info |
+| B37 | Host/Licensing | module loaded with company <> Microsoft Corporation | Warning |

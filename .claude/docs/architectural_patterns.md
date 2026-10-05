@@ -107,7 +107,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `I` | `sqlstats-review` | IO metrics checks | I1–I18 |
 | `W` | `sqlstats-review` | Time/wait metrics checks | W1–W9 |
 | `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X25 |
-| `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V44 |
+| `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V45 |
 | `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
 | `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
 | `H` | `sqlhadr-review` | Always On AG health checks | H1–H28 (H21 retired) |

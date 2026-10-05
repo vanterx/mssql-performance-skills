@@ -3,7 +3,7 @@
 ## Contents
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
-- [Wait Statistics Checks (V1–V44)](#wait-statistics-checks-v1v44)
+- [Wait Statistics Checks (V1–V45)](#wait-statistics-checks-v1v45)
 - [Trend Analysis Checks (V19–V26)](#trend-analysis-checks-v19v26)
 - [Operational Checks (V27–V29)](#operational-checks-v27v29)
 - [Modern Feature Checks (V30–V36)](#modern-feature-checks-v30v36)
@@ -66,7 +66,7 @@ Note the reasoning that separates these from the rest: the exclusion list is jus
 
 ---
 
-## Wait Statistics Checks (V1–V44)
+## Wait Statistics Checks (V1–V45)
 
 ---
 
@@ -1432,6 +1432,45 @@ ORDER BY waiters DESC;
 **Related checks:** V9 (TempDB PFS/GAM/SGAM allocation page contention — different page range), V14 (LATCH_EX/SH on non-page latches)
 
 ---
+
+---
+
+### V45 — Spinlock Contention Burning CPU Outside Wait Statistics
+
+**What it means:** A spinlock is a lightweight synchronization object protecting a data structure that is normally held for a very short time. A thread that cannot acquire one does not suspend the way it would for a latch or a lock — it executes a loop, or "spins", retrying until the resource frees or the loop completes, and only then yields the scheduler. Microsoft's own summary of the trade-off: the practice "helps reduce excessive thread context switching, but when contention for a spinlock is high, significant CPU utilization may be observed."
+
+**How to spot it:** Not from `sys.dm_os_wait_stats` at all — that is the point of this check. Take two snapshots:
+
+```sql
+-- Snapshot, wait a measured interval under load, snapshot again.
+SELECT name, collisions, spins, spins_per_collision, sleep_time, backoffs
+FROM sys.dm_os_spinlock_stats
+ORDER BY spins DESC;
+```
+
+Compare the `spins` delta per spinlock name across the pair, normalised by the elapsed milliseconds and by `cpu_count` from `sys.dm_os_sys_info`, so the figure is comparable between servers of different sizes. The counters are cumulative since the instance started; `DBCC SQLPERF ('sys.dm_os_spinlock_stats', CLEAR)` resets all of them to zero.
+
+**Why it's a problem:** The CPU a spinning thread burns is real but unattributed. The thread is RUNNING, not SUSPENDED, so no wait type accrues; and when it finally backs off it sleeps, which also does not register as a resource wait. The visible symptom is therefore CPU pressure that query tuning does not explain, often alongside a high `SOS_SCHEDULER_YIELD` share. V7 already warns that `SOS_SCHEDULER_YIELD` does not indicate spinlock contention and that the two must be diagnosed separately — this check is the other half of that statement.
+
+**Fix options:** The spinlock name determines the diagnosis. Microsoft documents most types as "Internal use only" and only a handful with actionable guidance:
+
+| Spinlock | What it protects | Direction |
+|----------|------------------|-----------|
+| `SOS_CACHESTORE` | In-memory caches including the plan cache and temp table cache | Meaning depends on which cache; Microsoft's guidance is to contact Customer Support Services. Reducing ad hoc plan cache churn is the local lever (`/sqlmemory-review` O6, O10) |
+| `LOCK_HASH` | Lock manager hash table | Points at lock volume rather than CPU. See KB2926217 and the Transaction Locking and Row Versioning Guide; route to `/sqlblocking-review` |
+| `DP_LIST` | Dirty page list for a database with indirect checkpoint enabled | Apply KB4497928 or KB4040276, or evaluate trace flag 3468 |
+| `BACKUP_CTX` | Page list involved in I/O during a backup | Contended when long checkpoints or lazywriter activity overlap backups. Use indirect checkpoint instead of automatic checkpoint, allocate the instance enough memory to limit lazywriter activity, and reduce concurrent backups |
+| `DBTABLE` | Per-database in-memory property structure | Database containment check overhead; relevant on instances with very many databases |
+| `LOCK_RW_SECURITY_CACHE` (SQL 2016 CU2+), `SECURITY_CACHE` (2014–2016 CU1), `MUTEX` (to 2012) | Security token and access check cache entries | `TokenAndPermUserStore` growth. Evaluate trace flags 4610 and 4618 to limit entries; see `/sqldbconfig-review` B35 and parameterize ad hoc queries |
+
+Two platform facts that change the conclusion before any of the above:
+
+1. **SQL Server 2022 and later** include internal adjustments that make spinlocks more efficient, so a spinlock profile measured on an older version should not be assumed to carry forward.
+2. **Intel Skylake processors** require the update in KB4538688 and trace flag 8101. Confirm this before investigating a spinlock profile on Skylake hardware.
+
+A high delta on a spinlock documented as "Internal use only" is evidence to attach to a support case, not something to act on locally.
+
+**Related checks:** V7 (`SOS_SCHEDULER_YIELD`), V10 (signal wait ratio), `/sqldbconfig-review` B34/B35/B36, `/sqlblocking-review`
 
 ## Quick Reference: Checks by Category
 

@@ -251,7 +251,11 @@ These checks detect stalled or mismatched throughput that will cause queues to g
 - **Trigger:** `redo_rate = 0` AND `synchronization_state_desc = SYNCHRONIZING` AND
   `redo_queue_size > 0`
 - **Severity:** Warning
-- **Fix:** The redo thread has stalled despite queued log. Common causes: (1) long-running
+- **Fix:** The redo thread has stalled despite queued log. Confirm cause (1) directly on the
+  secondary: the redo thread surfaces in `sys.dm_exec_requests` with `command = 'DB STARTUP'`,
+  so a row with that command and a `wait_duration_ms` above roughly 15 seconds is positive
+  evidence that redo is blocked rather than merely idle, and `blocking_session_id` on that row
+  names the reader to kill or reschedule. Common causes: (1) long-running
   read query on a readable secondary holding a lock that blocks redo; (2) the secondary
   database is in a transitional state — check ERRORLOG; (3) redo thread has encountered an
   error — check `dm_hadr_database_replica_states.last_redone_lsn` for progress. Restarting

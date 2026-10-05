@@ -975,7 +975,11 @@ check49_ok=1
 guide_sum=0
 # A prefix may span several rows (X1–X12 event-level, X13–X25 workload
 # aggregate), so counts and maxima are accumulated per prefix+skill and
-# compared once, not row by row.
+# compared once, not row by row. The range half of a row is optional: a
+# category holding a single check is written as one ID (V45), and requiring
+# a fake range (V45–V45) to satisfy the grep would put the gate's convenience
+# ahead of the document's readability. Prefix and row maximum both parse from
+# a bare ID already.
 declare -A guide_prefix_count=()
 declare -A guide_prefix_max=()
 declare -A guide_prefix_skill=()
@@ -994,7 +998,7 @@ while IFS='|' read -r _ range skill _ count _; do
     if [ "$row_max" -gt "${guide_prefix_max[$key]:-0}" ]; then
         guide_prefix_max[$key]=$row_max
     fi
-done < <(grep -E '^\| `[A-Z]{1,2}[0-9]+(–|-)[A-Z]{1,2}[0-9]+` \| `[a-z-]+` \|' PERFORMANCE_TUNING_GUIDE.md)
+done < <(grep -E '^\| `[A-Z]{1,2}[0-9]+((–|-)[A-Z]{1,2}[0-9]+)?` \| `[a-z-]+` \|' PERFORMANCE_TUNING_GUIDE.md)
 
 for key in "${!guide_prefix_count[@]}"; do
     prefix=${key%%:*}

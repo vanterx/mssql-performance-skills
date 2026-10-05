@@ -206,7 +206,7 @@ Run these first to determine if SQL Server is under immediate memory pressure.
 - **Fix:** Queries are failing due to memory exhaustion. Immediate actions: (1) kill the sessions holding the largest grants; (2) set Resource Governor minimum memory grant percent lower; (3) add `OPTION (MIN_GRANT_PERCENT = 1)` to the offending query. Root cause: the query's estimated row count is drastically wrong, causing an oversized grant estimate — run `/sqlplan-review` to check N21 (cardinality estimate accuracy) and `/sqlstats-review` for stale statistics.
 
 ### O13 — Oversized Memory Grant
-- **Trigger:** Any single session has `granted_memory_kb` > 25% of `max_memory_grant` for the resource pool, OR `max_used_memory_kb / granted_memory_kb` < 0.25 (granted 4× more than actually used)
+- **Trigger:** Any single session has `granted_memory_kb` > 25% of `max_memory_grant` for the resource pool, OR `max_used_memory_kb / granted_memory_kb` < 0.25 (granted 4× more than actually used), OR any grant exceeds 1 GB in absolute terms regardless of ratio
 - **Severity:** Warning
 - **Fix:** The query received a large grant but used a fraction of it, blocking other queries from getting grants (see O11). The grant overestimate almost always traces to stale or low-sample statistics on join input tables. Run `/sqlplan-review` on this query and look for N21 (row count estimate mismatch). Fix statistics with `UPDATE STATISTICS ... WITH FULLSCAN`.
 

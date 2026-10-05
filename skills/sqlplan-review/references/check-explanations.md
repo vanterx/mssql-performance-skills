@@ -4,7 +4,7 @@
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
 - [Statement-Level Checks (S1–S38)](#statement-level-checks-s1s38)
-- [Node-Level Checks (N1–N73)](#node-level-checks-n1n73)
+- [Node-Level Checks (N1–N74)](#node-level-checks-n1n74)
 - [Quick Reference Tables](#quick-reference-tables)
 
 ---
@@ -1157,7 +1157,7 @@ Note: this count only reflects suggestions the optimizer chose to emit. An eager
 
 ---
 
-## Node-Level Checks (N1–N73)
+## Node-Level Checks (N1–N74)
 
 These checks examine individual operators within the plan tree.
 
@@ -3781,6 +3781,41 @@ If S18 or N41 is also firing on this statement and a `(MAX)`/LOB column is in th
 
 ---
 
+### N74 — Optimized Nested Loops (Batch Sort) Present
+
+**What it means**
+When the optimizer expects the inner side of a Nested Loops join to be large, it can insert a hidden sort that reorders the outer input rows so the inner-side lookups arrive in a more I/O-friendly order. Microsoft documents the attribute that records this: when `OPTIMIZED` is true on a Nested Loops operator, "an Optimized Nested Loops (or Batch Sort) is used to minimize I/O when the inner side table is large, regardless of it being parallelized or not."
+
+The reason this needs a check of its own is the next sentence in the same documentation: "the presence of this optimization in a given plan might not be very obvious when analyzing an execution plan, given the sort itself is a hidden operation. But by looking in the plan XML for the attribute OPTIMIZED, this indicates the Nested Loops join might try to reorder the input rows to improve I/O performance." There is no `Sort` operator in the tree to attribute the work to, so the memory and CPU it consumes appear to come from nowhere.
+
+**How to spot it**
+
+```xml
+<RelOp PhysicalOp="Nested Loops" LogicalOp="Inner Join" ...>
+  <NestedLoops Optimized="true">
+    ...
+  </NestedLoops>
+</RelOp>
+```
+
+The extractor surfaces this attribute; `grep` on the raw XML works too, but note the plan may be UTF-16, which is one of the reasons the skill reads plans through `scripts/extract_plan.py` rather than text tools.
+
+**Why it's a problem**
+Usually it is not — it is the optimizer making a reasonable choice, and when the estimate was right the result is less I/O than a naive nested loops join would have done. The check is Info because of what its presence *implies* rather than what it costs:
+
+1. **It is a statement about the estimate.** The optimization is only chosen when the inner side is estimated to be large. If N21/N22 show the cardinality estimate was badly wrong on that branch, then the premise for the batch sort was wrong too — and the same over-estimate will have inflated the memory grant (S2–S4).
+2. **It explains unattributed memory and CPU.** When the measured grant or CPU time exceeds what the visible operator tree seems to justify, a hidden batch sort is one of the few things that can account for the difference. Without this check the analysis has no candidate and tends to blame the wrong operator.
+
+**Fix options**
+1. **Nothing, when the estimate held.** Confirm against actual rows; if the inner side really was large and I/O is reasonable, record it as context and move on.
+2. **Fix the estimate, not the optimization.** Where N21/N22 show an over-estimate on the join's outer input, correct the cause — stale or low-sampled statistics (N72), a non-SARGable predicate, an implicit conversion (N7) — and let the optimizer re-decide. Targeting the batch sort directly is treating the symptom.
+3. **Re-check the grant afterwards.** If S2–S4 flagged an oversized grant on the same statement, re-measure after the estimate is corrected rather than applying a grant hint on top of a wrong estimate.
+4. **Only consider suppressing it** (trace-flag or hint-level control of optimized nested loops) with a measured before-and-after, because the optimization exists to reduce I/O and removing it can trade a memory problem for a much larger I/O problem.
+
+**Related checks:** N21/N22 (cardinality estimate quality), S2–S4 (memory grant), N61 (`AvgRowSize`), N72 (statistics sampling)
+
+---
+
 ## Quick Reference Tables
 
 ### Severity Levels
@@ -3865,3 +3900,4 @@ These fire to provide context but rarely require immediate action:
 | S37 — Hidden Scalar UDF Time (Info tier) | Below the 25% elapsed-time threshold; still worth noting for later |
 | S38 — In-Plan Wait Statistics (Info tier) | Below the 25% elapsed-time threshold; useful context, not yet dominant |
 | N73 — Memory Grant Undersized by LOB/(MAX) | Always Info — the actionable problem is the S18/N41 finding it explains |
+| N74 — Optimized Nested Loops (Batch Sort) | Always Info — context for an unattributed grant or CPU figure; act on the estimate (N21/N22), not the optimization |
