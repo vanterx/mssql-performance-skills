@@ -1040,7 +1040,7 @@ fi
 # Windows because of many small grep invocations, and the gate only works if it
 # is actually run.
 echo ""
-echo "[50-53] Claim-level invariants"
+echo "[50-54] Claim-level and cross-skill content invariants"
 # Probe each candidate rather than trusting `command -v`. On Windows, python3
 # usually resolves to the Microsoft Store App Execution Alias stub, which exists
 # on PATH, is not Python, and exits 49 with an install prompt. Existence is not
@@ -1054,7 +1054,7 @@ for candidate in python3 python py; do
     fi
 done
 if [ -z "$PYBIN" ]; then
-    warn "no working python found — claim-level checks 50-53 SKIPPED (structure checks above still ran)"
+    warn "no working python found — claim-level checks 50-54 SKIPPED (structure checks above still ran)"
 else
     claims_out=$("$PYBIN" scripts/verify-claims.py 2>&1)
     claims_rc=$?

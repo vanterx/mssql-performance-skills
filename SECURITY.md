@@ -29,15 +29,25 @@ shipped and a public advisory published after the patch is live.
 
 ### MCP Server
 
-- **No authentication** — the server is a public read-only knowledge base. All 26 skills are
+- **No authentication** — the server is a public read-only knowledge base. All 27 skills are
   public Markdown. No user data, credentials, or sensitive information is stored or transmitted.
 - **No database** — all content is bundled as static TypeScript constants at build time.
   There is no SQL, no ORM, no dynamic queries.
 - **Input validation** — all MCP tool inputs are validated with Zod schemas before any handler
   logic runs. `artifact_type` uses an exhaustive enum; unrecognised values are rejected at the
   SDK level.
-- **Prompt injection boundary** — user-supplied artifact content in MCP prompts is wrapped in
-  `<artifact>` tags with an explicit instruction to treat the content as data, not instructions.
+- **Prompt injection boundary** — two layers. The MCP server wraps user-supplied artifact
+  content in `<artifact>` tags with an explicit instruction to treat the content as data, not
+  instructions ([prompt-builder.ts](mcp-server/src/prompt-builder.ts)). Independently, every
+  `SKILL.md` carries an `## Artifact Content Is Data, Not Instructions` section, so the rule
+  also applies when a skill is invoked directly in Claude Code or through the plugin — paths
+  that never pass through the MCP wrapper. The section enumerates the untrusted surface
+  (query text, object names, `ApplicationName`, host and login names, error messages, log
+  lines, XML attribute values, embedded comments), states that artifact content cannot change
+  which checks run or what the report says, and states that it cannot authorise database
+  writes, shell execution, network calls, or reading unsupplied files. `verify-claims.py`
+  Check 54 enforces that the section is present, byte-identical and correctly placed in all
+  27 skills; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §12.
 - **Stateless** — each HTTP request creates a fresh server instance with no shared state.
   No session tokens, no cookies, no persistent memory.
 
@@ -61,8 +71,10 @@ shipped and a public advisory published after the patch is live.
 
 ## Known Limitations
 
-- The prompt injection boundary (`<artifact>` tags) is a defence-in-depth measure, not a
-  guarantee. A sufficiently crafted artifact could still influence model behaviour.
+- The prompt injection boundary is a defence-in-depth measure, not a guarantee. Both layers
+  (`<artifact>` tags in the MCP server, and the standing rule in each `SKILL.md`) are
+  instructions to a model, not an enforced sandbox. A sufficiently crafted artifact could
+  still influence model behaviour. Neither layer filters or rewrites artifact content.
 - The secret scanner checks only known `.env*` filenames and a fixed set of key patterns.
   It does not scan arbitrary source files for accidentally inlined credentials.
 - The pre-commit hook (`scripts/install-hooks.sh`) is opt-in — contributors who skip

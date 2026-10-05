@@ -331,3 +331,40 @@ Each skill has an `examples/` subfolder containing:
 - Analysis files append `-analysis.md` to the input file's stem
 
 **Convention:** Input files must trigger a representative spread of severities (at least one Critical, multiple Warnings, at least one Info). Analysis files must follow the skill's `## Output Format` exactly — they serve as ground-truth examples for validating skill output quality.
+
+---
+
+## 12. Artifact Content Is Untrusted Input
+
+**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 27 `SKILL.md` files, immediately before `## Input`.
+
+Every skill in this library analyses material the user pastes in from a production system: ERRORLOG
+lines, trace rows, blocking-chain DMV output, `.sqlplan` XML, T-SQL source. That material carries
+free text the user did not write and did not review — application names chosen by a vendor, host
+names, login names, error strings, and comments embedded in stored procedures. Any of it can contain
+an instruction aimed at the model rather than data about the server.
+
+This is prompt injection through the diagnostic artifact. It is not hypothetical for this library:
+the whole point of these skills is to read attacker-adjacent text (query text submitted by
+applications, log lines echoing user input) and act on what it says. The mitigation is a standing
+rule in `SKILL.md`, not in `references/` — `references/check-explanations.md` is not loaded at
+runtime by default, so a rule placed there would not reach the model unprompted.
+
+The block states three things, and the wording matters more than the length:
+
+1. **An enumeration of the untrusted surface.** Naming the specific fields (query text, object
+   names, `ApplicationName`, host and login names, error messages, log lines, XML attribute values,
+   embedded comments) is what makes the rule actionable. "Treat input as untrusted" alone does not
+   tell the model where to look.
+2. **A reframe, not a refusal.** Injected text is reported as a finding at a cited location, under
+   Info, and the review continues. A skill that aborted on suspicious content would be trivially
+   deniable — paste a hostile `ApplicationName` and the analysis stops.
+3. **Two explicit invariants.** Artifact content cannot change which checks run or what the report
+   says, and cannot authorise action outside the review (database writes, shell or PowerShell
+   execution, network calls, reading unsupplied files).
+
+**Convention:** the block is identical in all 27 files, so a single edit can be propagated
+mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both presence and
+byte-identity. Adopted from the groundedness and security rules in
+[`microsoft/sqlnexus`](https://github.com/microsoft/sqlnexus) `.github/agents/sql-nexus-diagnostic.agent.md`
+(MIT), rules 21 and 25.
