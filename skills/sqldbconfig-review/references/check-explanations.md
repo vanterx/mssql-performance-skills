@@ -1,4 +1,4 @@
-# sqldbconfig-review — Check Explanations (B1–B29)
+# sqldbconfig-review — Check Explanations (B1–B32)
 
 Plain-English explanations for all 29 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
 
@@ -1292,6 +1292,101 @@ ALTER SERVER ROLE sysadmin ADD MEMBER [NT SERVICE\SQLSERVERAGENT];
 
 ---
 
+## B30–B32 — Scheduler and Process Settings
+
+### B30 — Priority Boost Enabled
+
+**What it means:** `priority boost` raises the SQL Server process from the normal Windows priority base of 7 to 13, so it is scheduled ahead of most other work on the machine — including the operating system's own network and cluster components.
+
+**How to spot it:**
+
+```sql
+SELECT name, value, value_in_use, is_dynamic
+FROM sys.configurations
+WHERE name = 'priority boost';
+```
+
+**Why it's a problem:** Microsoft's guidance is unusually direct. The option "will be removed in a future version of SQL Server"; raising priority "might drain resources from essential operating system and network functions, resulting in problems shutting down SQL Server or using other operating system tasks on the server"; and "You don't need to use `priority boost` for performance tuning." The classic failure is a failover cluster instance where the cluster service cannot get enough CPU to answer health checks, and the node is failed over while SQL Server is technically healthy — which is why Microsoft says not to use it on an FCI at all.
+
+**Fix options:**
+1. **Turn it off** and schedule the restart it requires:
+   ```sql
+   EXEC sys.sp_configure 'show advanced options', 1;
+   RECONFIGURE;
+   EXEC sys.sp_configure 'priority boost', 0;
+   RECONFIGURE;
+   ```
+2. **Find the real bottleneck.** It is almost always CPU pressure from queries (route to `/sqlwait-review` for `SOS_SCHEDULER_YIELD`) or MAXDOP/CTFP configuration (B1–B3).
+3. **Leave it alone only** if Microsoft support asked for it during an active investigation.
+
+**Related checks:** B31, B1, B2
+
+---
+
+### B31 — Lightweight Pooling (Fiber Mode) Enabled
+
+**What it means:** With `lightweight pooling` set to 1, SQL Server schedules work on Windows fibers instead of threads, moving context switching inside the process.
+
+**How to spot it:**
+
+```sql
+SELECT name, value, value_in_use, is_dynamic
+FROM sys.configurations
+WHERE name = 'lightweight pooling';
+```
+
+**Why it's a problem:** It is deprecated as of SQL Server 2025, with guidance that reaches back across supported versions: "Because of known stability and compatibility issues, Microsoft recommends that you avoid using this feature in any version of SQL Server." It also breaks features outright rather than just slowing things down:
+
+| Broken under fiber mode | Consequence |
+|---|---|
+| CLR execution | Unsupported; takes out `hierarchyid`, `FORMAT`, replication, Policy-Based Management |
+| In-Memory OLTP | Cannot create or attach databases with memory-optimized filegroups; existing ones fail recovery after the enabling restart, and are marked suspect |
+| Thread-local storage / thread-owned objects | Components using them "can't function correctly in fiber mode" |
+
+The narrow case it was designed for — a large multi-CPU server at near-maximum CPU with a proven context-switching bottleneck — has narrowed further as Windows context switching improved.
+
+**Fix options:**
+1. **Turn it off** (advanced option, requires a restart):
+   ```sql
+   EXEC sys.sp_configure 'lightweight pooling', 0;
+   RECONFIGURE;
+   ```
+2. **Check for damage first** if the instance hosts memory-optimized tables — a database that failed recovery under fiber mode needs attention before the restart is treated as routine.
+3. **Address the actual CPU pressure** through MAXDOP, Cost Threshold, and query tuning.
+
+**Related checks:** B30, B24 (CLR), B1
+
+---
+
+### B32 — Min Server Memory Pinned At or Near Max Server Memory
+
+**What it means:** `min server memory (MB)` and `max server memory (MB)` are meant to bound a range the engine moves inside. Setting the floor at or just below the ceiling collapses that range and disables dynamic memory management.
+
+**How to spot it:**
+
+```sql
+SELECT name, value_in_use
+FROM sys.configurations
+WHERE name IN ('min server memory (MB)', 'max server memory (MB)');
+```
+
+Flag when the minimum is above zero and at least 90% of the maximum.
+
+**Why it's a problem:** Microsoft states it directly — "It isn't recommended to set `max server memory (MB)` and `min server memory (MB)` to be the same value, or near the same values." Once usage reaches the floor, SQL Server "can't free memory unless the value of `min server memory (MB)` is reduced". On a host shared with other instances, an SSIS package, or an antivirus agent, the engine can no longer respond to OS memory pressure, and the pressure lands on everything else instead.
+
+**Not the same as B7.** B7 flags any non-zero minimum as worth explaining. A deliberate floor is legitimate and sometimes recommended — in a virtualized guest it stops the balloon driver deflating the buffer pool. B32 only fires when the floor is so close to the ceiling that the range is gone.
+
+**One school of thought will trip this.** Some vendor guidance for dedicated hosts — BizTalk's is the best-known — recommends setting min equal to max precisely to stop the engine releasing memory. On a genuinely dedicated instance that reasoning holds, and Microsoft's general recommendation still points the other way. Report it as a Warning with the context rather than as a defect: ask whether the host is dedicated, whether anything else (SSIS, a monitoring agent, antivirus, another instance) needs memory, and whether the vendor guidance is current. If the host is dedicated and the floor is deliberate, record it as accepted rather than re-flagging it at every review.
+
+**Fix options:**
+1. **Lower the floor** to what the instance needs to stay responsive, leaving headroom below the ceiling.
+2. **Verify the ceiling is right** for the host (B6) — subtract the OS allowance and thread stack memory before setting it.
+3. **Keep a deliberate floor** where a hypervisor or a co-tenant justifies it; just not at the ceiling.
+
+**Related checks:** B6, B7, B8
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger | Severity |
@@ -1325,3 +1420,6 @@ ALTER SERVER ROLE sysadmin ADD MEMBER [NT SERVICE\SQLSERVERAGENT];
 | B27 | Surface Area | cross db ownership chaining = 1 (instance) | Warning |
 | B28 | Surface Area | remote admin connections = 0 | Info |
 | B29 | Surface Area | Service-SID login missing from sysadmin | Critical |
+| B30 | Scheduler/Process | priority boost = 1 | Critical |
+| B31 | Scheduler/Process | lightweight pooling = 1 (fiber mode) | Critical |
+| B32 | Scheduler/Process | min server memory ≥ 90% of max | Warning |

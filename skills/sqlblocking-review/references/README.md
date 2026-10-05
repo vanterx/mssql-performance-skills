@@ -12,7 +12,7 @@ you need:
   `open_transaction_count` to "does this resolve on its own?"
 - Background on lock modes, lock duration, and how to read a `wait_resource`
   string
-- The full Quick Reference table for all 54 checks at a glance
+- The full Quick Reference table for all 55 checks at a glance
 - The reasoning behind a recommendation, or which community tool to run
 
 Load a reference file when:
@@ -33,7 +33,7 @@ options, or DMV output examples. Also when the user asks "explain check BLx",
 session for the blocked process report).
 
 **What it covers:** The full five-part explanation (What it means / How to spot
-it / Example / Fix options / Related checks) for all 54 checks, the
+it / Example / Fix options / Related checks) for all 55 checks, the
 head-blocker state classification table, a background section on lock modes,
 lock duration, blocking versus deadlock, and `wait_resource` formats, plus the
 Quick Reference table.

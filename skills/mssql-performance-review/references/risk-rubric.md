@@ -56,6 +56,36 @@ Even when a recommendation's default class is Low or Medium, escalate one step (
 
 Domain memory escalators are checked against `references/domain-memory.md` when a facts file is loaded for the target instance (`~/.mssql-perf-review/instances/<server>.json`). When no facts file is present, the defaults in this table apply.
 
+## Finding severity: confirmation, not just thresholds
+
+Risk grades the *fix*. This section grades the *finding*, and exists because a single skill reading a single artifact routinely reports a symptom at a severity the whole picture does not support. The orchestrator sees several artifacts at once and is the only place the correction can be made.
+
+Grade a finding in three passes.
+
+**Pass 1 — base severity from the owning skill.** Take the Info / Warning / Critical the specialised skill assigns from its own thresholds. Do not re-derive it.
+
+**Pass 2 — confirmation from a co-firing peer.** A finding whose evidence is corroborated by an independent artifact is worth more than one that stands alone. Raise one step when a peer finding in a *different* artifact points at the same mechanism:
+
+| Finding | Confirming peer | Why it corroborates |
+|---|---|---|
+| High `CXPACKET` share | `SOS_SCHEDULER_YIELD` share, or runnable-task queue depth | Distinguishes real CPU oversubscription from parallelism that is merely visible |
+| `RESOURCE_SEMAPHORE` waits | Spills in plans, or oversized grants in `sqlmemory-review` | Confirms grant pressure is reaching queries rather than sitting in a counter |
+| Lock wait share (`/sqlwait-review`) | A captured chain or blocked process report | Wait statistics size blocking; only a chain names a blocker |
+| Plan regression (`/sqlquerystore-review`) | Matching CPU or I/O rise in the same window | Separates a plan change that mattered from one that did not |
+| Configuration drift (`/sqldbconfig-review`) | A runtime symptom the setting predicts | MAXDOP 0 matters when parallelism waits are present, not merely because it is 0 |
+
+**Pass 3 — tuning-class ceiling.** Some findings are chronically over-reported because they are always present to some degree. Cap these at **Warning** unless a confirming peer from Pass 2 fired:
+
+- Parallelism waits (`CXPACKET`, `CXCONSUMER`, `HT*`)
+- Any deviation-from-baseline or anomaly finding
+- High-DOP query counts
+- Single-use plan cache percentage on a cache below the size gate
+- Configuration drift with no matching runtime symptom
+
+The ceiling is not a downgrade of the evidence; it is a statement that the artifact cannot on its own distinguish "present" from "causing harm". Say which peer is missing when the ceiling is applied — "capped at Warning: no scheduler pressure in the wait capture to confirm it" — so the reader knows what to capture next rather than dismissing the finding.
+
+**Never capped:** THREADPOOL, poison waits, corruption signals, dumps, data-loss risks, and anything in the security or availability domains. These stand at their own severity with no corroboration required.
+
 ## Side-effects checklist (per recommendation)
 
 The orchestrator must list every applicable side effect. Categories:

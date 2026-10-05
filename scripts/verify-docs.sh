@@ -200,8 +200,12 @@ echo "[11 ] SKILL.md vs references/check-explanations.md check count per skill"
 check11_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    skill_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
-    expl_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null || echo 0)
+    # grep -c prints 0 AND exits 1 on no match, so a trailing "|| echo 0"
+    # appends a second zero and the value becomes two lines, failing every
+    # numeric comparison against it. Close the substitution first, then
+    # guard grep's own exit status with || true.
+    skill_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
+    expl_count=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/references/check-explanations.md" 2>/dev/null) || true
     # sqlplan-batch: aggregates sqlplan-review checks, no checks of its own
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor: check-explanations.md explains the merge/ranking pipeline,
@@ -241,7 +245,7 @@ for skill_file in skills/*/SKILL.md; do
     described=$(grep "^description:" "$skill_file" 2>/dev/null \
                 | grep -o '[0-9]* checks' | grep -o '^[0-9]*')
     [ -z "$described" ] && continue   # skill doesn't state a count — skip
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null) || true
     if [ "$described" != "$actual" ]; then
         warn "$name: frontmatter description says '$described checks' but SKILL.md has $actual — update the description"
         check14_ok=0
@@ -287,7 +291,7 @@ echo "[17 ] README Skill Details check counts match SKILL.md"
 check17_ok=1
 for skill_dir in skills/*/; do
     name=$(basename "$skill_dir")
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
     # Extract first "N checks" mention in the README's ## skill-name section
     readme_count=$(awk "/^## $name\$/{found=1; next} found && /^## /{exit} \
         found && /[0-9]+ checks/{print; exit}" README.md 2>/dev/null \
@@ -480,7 +484,7 @@ echo "[26 ] Per-skill count in PERFORMANCE_TUNING_GUIDE.md Skills at a Glance ma
 check26_ok=1
 while IFS= read -r skill_file; do
     name=$(basename "$(dirname "$skill_file")")
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_file" 2>/dev/null) || true
     # sqlplan-batch has no original checks (aggregator) — skip
     [ "$name" = "sqlplan-batch" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers — skip
@@ -786,7 +790,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "[40 ] AGENTS.md delegates to CLAUDE.md"
-claude_refs=$(grep -c "CLAUDE.md" AGENTS.md 2>/dev/null || echo 0)
+claude_refs=$(grep -c "CLAUDE.md" AGENTS.md 2>/dev/null) || true
 if [ "$claude_refs" -lt 2 ]; then
     warn "AGENTS.md references CLAUDE.md only $claude_refs time(s) — add at least 2 pointers so agents know where detail lives"
 else
@@ -855,7 +859,7 @@ for skill_dir in skills/*/; do
     [ "$name" = "mssql-performance-review" ] && continue
     # sqlindex-advisor uses derivation rules, not ### headers
     [ "$name" = "sqlindex-advisor" ] && continue
-    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null || echo 0)
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
     claude_count=$(grep "skills/$name/SKILL.md\]" CLAUDE.md 2>/dev/null \
         | grep -o '[0-9]* checks' | head -1 | grep -o '^[0-9]*')
     [ -z "$claude_count" ] && continue   # row has no stated count — skip
@@ -928,6 +932,148 @@ while IFS='|' read -r _ range count skill _; do
     fi
 done < <(awk '/^## Check Reference/{f=1;next} f && /^## /{exit} f && /^\| [A-Z]{1,2}[0-9]+[–-][A-Z]{1,2}[0-9]+ \|/{print}' README.md)
 [ "$check47_ok" -eq 1 ] && pass "README.md Check Reference rows match SKILL.md ranges and counts"
+
+
+# ---------------------------------------------------------------------------
+# Check 48: references/README.md stated check count matches SKILL.md
+# ---------------------------------------------------------------------------
+# references/README.md is the seventh check-count touch point. It was not
+# enumerated in CLAUDE.md's "all 6 touch points" list, so 14 of these drifted
+# silently while every other count stayed in sync — three of them in the same
+# commit that added BL55, B30-B32 and E34. A file that states no count is fine;
+# only a stated count that disagrees with SKILL.md is a failure.
+echo ""
+echo "[48 ] references/README.md stated check count matches SKILL.md"
+check48_ok=1
+for skill_dir in skills/*/; do
+    name=$(basename "$skill_dir")
+    readme="$skill_dir/references/README.md"
+    [ -f "$readme" ] || continue
+    stated=$(grep -oE "all [0-9]+ checks" "$readme" | grep -oE "[0-9]+" | sort -u)
+    [ -z "$stated" ] && continue  # states no count: nothing to drift
+    # grep -c prints 0 and exits 1 on no match, so "|| echo 0" would append
+    # a SECOND zero and make a dispatcher skill fail against itself.
+    actual=$(grep -cE "^### [A-Z]{1,2}[0-9]" "$skill_dir/SKILL.md" 2>/dev/null) || true
+    for s in $stated; do
+        if [ "$s" != "$actual" ]; then
+            fail "$name: references/README.md says 'all $s checks' but SKILL.md defines $actual"
+            check48_ok=0
+        fi
+    done
+done
+[ "$check48_ok" -eq 1 ] && pass "references/README.md stated check counts match SKILL.md"
+
+# ---------------------------------------------------------------------------
+# Check 49: PERFORMANCE_TUNING_GUIDE.md Check ID Reference rows match SKILL.md,
+#           and the count column sums to the stated total. Check 26 only covers
+#           the Skills at a Glance table, so this column drifted unnoticed:
+#           ranges were updated while the counts beside them were not.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[49 ] PERFORMANCE_TUNING_GUIDE.md Check ID Reference rows and column total"
+check49_ok=1
+guide_sum=0
+# A prefix may span several rows (X1–X12 event-level, X13–X25 workload
+# aggregate), so counts and maxima are accumulated per prefix+skill and
+# compared once, not row by row.
+declare -A guide_prefix_count=()
+declare -A guide_prefix_max=()
+declare -A guide_prefix_skill=()
+while IFS='|' read -r _ range skill _ count _; do
+    range=$(echo "$range" | tr -d ' `')
+    skill=$(echo "$skill" | tr -d ' `')
+    count=$(echo "$count" | tr -d ' ')
+    prefix=$(echo "$range" | grep -oE '^[A-Z]{1,2}')
+    [ -z "$prefix" ] && continue
+    case "$count" in ''|*[!0-9]*) continue ;; esac
+    guide_sum=$((guide_sum + count))
+    key="$prefix:$skill"
+    guide_prefix_count[$key]=$(( ${guide_prefix_count[$key]:-0} + count ))
+    guide_prefix_skill[$key]="$skill"
+    row_max=$(echo "$range" | grep -oE '[0-9]+$')
+    if [ "$row_max" -gt "${guide_prefix_max[$key]:-0}" ]; then
+        guide_prefix_max[$key]=$row_max
+    fi
+done < <(grep -E '^\| `[A-Z]{1,2}[0-9]+(–|-)[A-Z]{1,2}[0-9]+` \| `[a-z-]+` \|' PERFORMANCE_TUNING_GUIDE.md)
+
+for key in "${!guide_prefix_count[@]}"; do
+    prefix=${key%%:*}
+    skill=${guide_prefix_skill[$key]}
+    skill_file="skills/$skill/SKILL.md"
+    if [ ! -f "$skill_file" ]; then
+        fail "49: Check ID Reference row for '$prefix' names unknown skill '$skill'"
+        check49_ok=0
+        continue
+    fi
+    actual_count=$(grep -cE "^### ${prefix}[0-9]+" "$skill_file" || true)
+    actual_max=$(grep -oE "^### ${prefix}[0-9]+" "$skill_file" | grep -oE '[0-9]+$' | sort -n | tail -1)
+    if [ "${guide_prefix_count[$key]}" != "$actual_count" ]; then
+        fail "49: Check ID Reference rows for $prefix total ${guide_prefix_count[$key]} but $skill/SKILL.md defines $actual_count ${prefix}-checks"
+        check49_ok=0
+    fi
+    if [ "${guide_prefix_max[$key]}" != "$actual_max" ]; then
+        fail "49: Check ID Reference highest $prefix row ends at ${prefix}${guide_prefix_max[$key]} but $skill/SKILL.md ends at ${prefix}${actual_max}"
+        check49_ok=0
+    fi
+done
+guide_total=$(grep -oE '\*\*Total: [0-9]+ checks across all skills\.\*\*' PERFORMANCE_TUNING_GUIDE.md | grep -oE '[0-9]+' | head -1)
+if [ -n "$guide_total" ] && [ "$guide_sum" != "$guide_total" ]; then
+    fail "49: Check ID Reference count column sums to $guide_sum but the table footer says $guide_total"
+    check49_ok=0
+fi
+[ "$check49_ok" -eq 1 ] && pass "Check ID Reference rows match SKILL.md and sum to $guide_total"
+# ---------------------------------------------------------------------------
+# Checks 50-53: claim-level invariants (scripts/verify-claims.py)
+# ---------------------------------------------------------------------------
+# Everything above verifies STRUCTURE - counts, ranges, file presence. These
+# four verify the technical CLAIMS, which were previously unguarded: a correct
+# statement could be silently undone by a later edit, and three defects in one
+# session were caught only by review.
+#
+#   50  duplicated literal lists are identical across every copy
+#   51  claims Microsoft does not document carry their Unverified label
+#   52  fixed-width example tables keep their columns aligned
+#   53  specific claims that were wrong once stay fixed
+#
+# Delegated to Python rather than written as greps for one reason: all four run
+# against content read in a SINGLE pass. This script is already minutes-slow on
+# Windows because of many small grep invocations, and the gate only works if it
+# is actually run.
+echo ""
+echo "[50-53] Claim-level invariants"
+# Probe each candidate rather than trusting `command -v`. On Windows, python3
+# usually resolves to the Microsoft Store App Execution Alias stub, which exists
+# on PATH, is not Python, and exits 49 with an install prompt. Existence is not
+# evidence that it runs.
+PYBIN=""
+for candidate in python3 python py; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+        PYBIN="$candidate"
+        break
+    fi
+done
+if [ -z "$PYBIN" ]; then
+    warn "no working python found — claim-level checks 50-53 SKIPPED (structure checks above still ran)"
+else
+    claims_out=$("$PYBIN" scripts/verify-claims.py 2>&1)
+    claims_rc=$?
+    if [ "$claims_rc" -ne 0 ]; then
+        fail "verify-claims.py failed to run (exit $claims_rc): $(printf '%s' "$claims_out" | head -3)"
+    else
+        while IFS="$(printf '	')" read -r status id message; do
+            [ -z "$status" ] && continue
+            case "$status" in
+                PASS) pass "[$id] $message" ;;
+                WARN) warn "[$id] $message" ;;
+                FAIL) fail "[$id] $message" ;;
+                *)    fail "verify-claims.py emitted an unrecognised record: $status" ;;
+            esac
+        done <<CLAIMS_EOF
+$claims_out
+CLAIMS_EOF
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

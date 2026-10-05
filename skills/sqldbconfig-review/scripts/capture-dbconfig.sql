@@ -3,8 +3,23 @@
 -- Requires VIEW SERVER STATE and VIEW DATABASE STATE permissions
 -- Compatible with SQL Server 2012+ (some columns require 2016 SP2+ -- see notes inline)
 
-PRINT '-- 1. Instance configuration (sp_configure)';
-EXEC sp_configure;
+PRINT '-- 1. Instance configuration (sys.configurations)';
+/* sys.configurations rather than EXEC sp_configure: with "show advanced
+   options" left at its default of 0, sp_configure with no parameters lists
+   only the basic options, which omits nearly everything this skill checks —
+   MAXDOP, Cost Threshold for Parallelism, Max/Min Server Memory, priority
+   boost and lightweight pooling are all advanced. This view returns every
+   option regardless of that setting. value_in_use is what the engine is
+   running; value is what is configured, so a difference means a pending
+   RECONFIGURE or a restart-required option (is_dynamic = 0). */
+SELECT
+    name,
+    value,
+    value_in_use,
+    is_dynamic,     -- 0 = change needs a service restart
+    is_advanced
+FROM sys.configurations
+ORDER BY name;
 
 PRINT '';
 PRINT '-- 2. Database settings';
