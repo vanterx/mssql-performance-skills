@@ -1704,11 +1704,11 @@ EXEC msdb.dbo.sp_add_alert
 **How to spot it:** Group the active requests by statement and database. The pattern is three or more sessions on the identical text, every one past ten seconds elapsed, at least one `suspended` on an I/O-class wait, and `blocking_session_id` of 0 or NULL across the group.
 
 ```
-session_id  database   elapsed_s  status     wait_type        blocking_session_id  statement
-64          Sales      41         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
-71          Sales      38         runnable   NULL             0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
-77          Sales      33         suspended  PAGEIOLATCH_SH   0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
-82          Sales      29         runnable   SOS_SCHEDULER_YIELD0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+session_id  database   elapsed_s  status     wait_type            blocking_session_id  statement
+64          Sales      41         suspended  PAGEIOLATCH_SH       0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+71          Sales      38         runnable   NULL                 0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+77          Sales      33         suspended  PAGEIOLATCH_SH       0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
+82          Sales      29         runnable   SOS_SCHEDULER_YIELD  0                    SELECT ... FROM dbo.Orders WHERE CustomerId = @p
 ```
 
 Four sessions, one statement, no blocker anywhere, two waiting on page I/O. The previous capture had the same statement finishing in 40 ms.
