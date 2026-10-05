@@ -29,6 +29,7 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   migration:   ["sqlmigration-review"],
   migrationsecurity: ["sqlmigration-security-review"],
   migrationobjects:  ["sqlmigration-objects-review"],
+  perfmon:     ["sqlperfmon-review"],
   mixed:       ["mssql-performance-review"],
 };
 

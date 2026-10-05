@@ -676,6 +676,7 @@ declare -A P2S=(
     [U]="sqlbootstraplog-review"
     [G]="ssrstracelog-review"
     [BL]="sqlblocking-review"
+    [PM]="sqlperfmon-review"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"

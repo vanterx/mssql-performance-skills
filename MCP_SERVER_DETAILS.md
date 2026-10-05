@@ -64,7 +64,7 @@ HTTP request  ──►  index.ts (fetch handler)
 |----------|-----------|
 | Skills bundled at build time, not loaded at runtime | Cloudflare Workers have no filesystem; bundling avoids needing KV storage or external fetches |
 | Stateless — new server instance per request | Workers have no persistent memory between requests; this matches the execution model |
-| No authentication layer | The server is a public read-only knowledge base; all 27 skills are public Markdown |
+| No authentication layer | The server is a public read-only knowledge base; all 28 skills are public Markdown |
 | Zod validation on all tool inputs | Prevents malformed inputs reaching routing and lookup logic |
 | `WebStandardStreamableHTTPServerTransport` | Implements the MCP streamable HTTP transport over standard `Request`/`Response` — compatible with Cloudflare Workers' fetch API |
 
@@ -270,12 +270,12 @@ The `.js` extension in imports (`import type { SkillMeta } from "./skill-loader.
 This is the only file in `src/` that is generated rather than hand-authored. It exports:
 
 ```ts
-export const SKILLS: SkillMeta[]      // 27 skills, alphabetically sorted
+export const SKILLS: SkillMeta[]      // 28 skills, alphabetically sorted
 export const GUIDE_CONTENT: string    // full PERFORMANCE_TUNING_GUIDE.md
 export const VERSION_COMPAT_CONTENT: string  // full skills/VERSION_COMPATIBILITY.md
 ```
 
-The 27 skills in alphabetical order:
+The 28 skills in alphabetical order:
 
 | # | Name | Checks |
 |---|------|--------|
@@ -307,7 +307,7 @@ The 27 skills in alphabetical order:
 | 26 | ssrstracelog-review | 24 |
 | 27 | tsql-review | 85 |
 
-**Total: 916 checks across 25 analytical skills + 2 dispatcher skills**
+**Total: 930 checks across 26 analytical skills + 2 dispatcher skills**
 
 ---
 
@@ -321,7 +321,7 @@ Four utility tools are registered (`list_skills`, `get_skill`, `get_reference`, 
 
 ```
 Input:   none
-Output:  JSON array of { name, description, triggers, checkCount } for all 27 skills
+Output:  JSON array of { name, description, triggers, checkCount } for all 28 skills
 Purpose: Discovery — lets a client enumerate available skills before calling get_skill
 ```
 
@@ -413,7 +413,7 @@ Resources are URI-addressable, read-only data that MCP clients can fetch directl
 ### Resource index
 
 ```
-mssql://skills                              application/json    Index of all 27 skills with metadata
+mssql://skills                              application/json    Index of all 28 skills with metadata
 mssql://skills/{name}                       text/markdown       Full SKILL.md for a specific skill (×27)
 mssql://skills/{name}/references            application/json    List of reference files for a skill
 mssql://skills/{name}/references/{file}     text/markdown       One reference file (check-explanations.md, howto-*.md, concepts.md …)

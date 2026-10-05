@@ -29,7 +29,7 @@ shipped and a public advisory published after the patch is live.
 
 ### MCP Server
 
-- **No authentication** — the server is a public read-only knowledge base. All 27 skills are
+- **No authentication** — the server is a public read-only knowledge base. All 28 skills are
   public Markdown. No user data, credentials, or sensitive information is stored or transmitted.
 - **No database** — all content is bundled as static TypeScript constants at build time.
   There is no SQL, no ORM, no dynamic queries.
@@ -47,7 +47,7 @@ shipped and a public advisory published after the patch is live.
   which checks run or what the report says, and states that it cannot authorise database
   writes, shell execution, network calls, or reading unsupplied files. `verify-claims.py`
   Check 54 enforces that the section is present, byte-identical and correctly placed in all
-  27 skills; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §12.
+  28 skills; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §12.
 - **Stateless** — each HTTP request creates a fresh server instance with no shared state.
   No session tokens, no cookies, no persistent memory.
 

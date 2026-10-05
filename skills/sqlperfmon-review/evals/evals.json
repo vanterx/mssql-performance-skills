@@ -1,0 +1,23 @@
+{
+  "skill_name": "sqlperfmon-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "16-core host, 32 GB RAM. relog CSV over 6 minutes at a 15-second interval. Processor(_Total)\\% Processor Time rises 42 to 94. Process(sqlservr)\\% Processor Time rises 702 to 1448. Processor(_Total)\\% Privileged Time rises 9.2 to 36.9. LogicalDisk(_Total)\\Avg. Disk sec/Read peaks at 0.0166 but LogicalDisk(G:)\\Avg. Disk sec/Read peaks at 0.0524 while LogicalDisk(G:)\\Disk Transfers/sec only rises 188 to 305. One sample interval is 135 seconds instead of 15.",
+      "expected_output": "PM14 Warning reported FIRST (135 s gap = 9x the nominal interval, over the peak, so later peaks are floors not measurements). PM1 Critical: 1448/16 = 90.5% of the machine, above the 80 x 16 = 1280 Critical line. PM2 PASSES: residual 94.4 - 90.5 = ~3.9%, so SQL Server is the consumer, not another process. PM3 Warning: privileged time 36.9/94.4 = 39% of consumed CPU, above the 30% line. PM7 Critical on G: (0.0524 >= 0.050 data Critical) with the key reading that latency rose ~11x while throughput rose only 1.6x, so a sick path rather than a saturated volume. PM8 Warning: _Total at 0.0166 is inside the 0.020 threshold and would have passed, hiding G: entirely. Must show the per-core arithmetic. Should correlate PM3 with PM7 and recommend an antivirus exclusion test for the data/log/backup directories and sqlservr.exe as the cheapest reversible experiment, and hand off to /sqlwait-review for V7/V10/V45 now that attribution is settled.",
+      "files": ["examples/perfmon-counters.csv"]
+    },
+    {
+      "id": 2,
+      "prompt": "Batch Requests/sec averages 540 and SQL Compilations/sec averages 188. SQLServer:Plan Cache(SQL Plans)\\Cache Object Counts grows from 14,207 to 34,588 across the window while SQLServer:Plan Cache(Object Plans)\\Cache Object Counts stays at about 1,985. SQL Re-Compilations/sec averages 48. SQL Attention rate is 0.000 for the first six samples then rises to 0.402.",
+      "expected_output": "PM9 Critical: 188/540 = 34.8% of batches require a compile, above the 25% Critical line — must be expressed as a ratio, not as an absolute rate, because 188/sec would be healthy at 30,000 batches/sec. PM10 Warning: 48/540 = 8.9%, above the 5% line and approaching the 10% Critical line. PM11 Warning: growth concentrated in the SQL Plans instance with Object Plans flat is the signature of literal-concatenated ad hoc SQL; must read the instance rather than _Total, and must note that flat Object Plans rules out a stored-procedure problem. PM13 Warning: attention rate sustained above zero means clients are cancelling, and because a cancel ends the batch without rolling back the transaction, it should route to /sqlblocking-review BL10 for orphaned transactions. Should note PM9 and PM11 are the same workload measured from two sides and that their agreement is what makes the diagnosis safe, and that PM9/PM10 overlap by construction since SQL Compilations/sec includes statement-level recompiles.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Only sys.dm_os_performance_counters output was supplied: Page life expectancy 1688, Batch Requests/sec 478, SQL Compilations/sec 161, Cache Object Counts (SQL Plans) 34588. The user asks whether the server is CPU bound.",
+      "expected_output": "Must report PM1, PM2, PM3, PM5, PM6, PM7 and PM8 as NOT ASSESSED and state why: sys.dm_os_performance_counters exposes the SQLServer:* objects only, so the Process, Processor, Memory and LogicalDisk families are not available from it and host behaviour cannot be inferred from engine counters. Must NOT answer the CPU question from the engine counters. Should name the capture that would answer it (a Perfmon capture of Process(sqlservr)\\% Processor Time and Processor(_Total)\\% Processor Time, plus cpu_count from sys.dm_os_sys_info, without which a process counter is uninterpretable). Should still assess what is available: PM9 Critical (161/478 = 33.7%), PM11 on the SQL Plans count, and PM4 by deferring the page life expectancy threshold to /sqlmemory-review O1 rather than inventing one.",
+      "files": []
+    }
+  ]
+}
