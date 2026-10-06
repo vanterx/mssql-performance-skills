@@ -307,7 +307,7 @@ The 27 skills in alphabetical order:
 | 26 | ssrstracelog-review | 24 |
 | 27 | tsql-review | 85 |
 
-**Total: 909 checks across 25 analytical skills + 2 dispatcher skills**
+**Total: 916 checks across 25 analytical skills + 2 dispatcher skills**
 
 ---
 

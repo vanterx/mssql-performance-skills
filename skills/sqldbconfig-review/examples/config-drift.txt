@@ -3,21 +3,24 @@
 -- Captured 2026-06-08 using capture-dbconfig.sql
 
 -- 1. Instance configuration (sp_configure)
-name                              minimum     maximum       config_value  run_value
---------------------------------  ----------  ----------    ------------  ---------
-Ad Hoc Distributed Queries        0           1             0             0
-awe enabled                       0           1             0             0
-clr enabled                       0           1             0             0
-cost threshold for parallelism    0           32767         5             5
-cross db ownership chaining       0           1             1             1
-max degree of parallelism         0           32767         0             0
-max server memory (MB)            16          2147483647    0             2147483647
-min server memory (MB)            0           2147483647    0             16
-Ole Automation Procedures         0           1             1             1
-optimize for ad hoc workloads     0           1             0             0
-query governor cost limit         0           2147483647    0             0
-remote admin connections          0           1             0             0
-show advanced options             0           1             1             1
+name                                minimum     maximum       config_value  run_value
+----------------------------------  ----------  ----------    ------------  ---------
+access check cache bucket count     0           65536         256           256
+access check cache quota            0           2147483647    1024          1024
+Ad Hoc Distributed Queries          0           1             0             0
+awe enabled                         0           1             0             0
+clr enabled                         0           1             0             0
+common criteria compliance enabled  0           1             1             1
+cost threshold for parallelism      0           32767         5             5
+cross db ownership chaining         0           1             1             1
+max degree of parallelism           0           32767         0             0
+max server memory (MB)              16          2147483647    0             2147483647
+min server memory (MB)              0           2147483647    0             16
+Ole Automation Procedures           0           1             1             1
+optimize for ad hoc workloads       0           1             0             0
+query governor cost limit           0           2147483647    0             0
+remote admin connections            0           1             0             0
+show advanced options               0           1             1             1
 
 -- 2. Database settings
 name          compatibility_level  auto_shrink  auto_close  rcsi  page_verify   auto_create  auto_update  trustworthy  db_chaining  recovery   state
@@ -76,3 +79,11 @@ type_desc  file_count  total_size_mb
 ---------  ----------  -------------
 ROWS       2           16384
 LOG        1           512
+
+-- 8. Edition, licensing model and processor affinity
+edition                                            engine_edition  cpu_count  scheduler_count  scheduler_total_count  affinity_type_desc  virtual_machine_type_desc
+-------------------------------------------------  --------------  ---------  ---------------  ---------------------  ------------------  -------------------------
+Enterprise Edition: Core-based Licensing (64-bit)  3               64         64               72                     AUTO                NONE
+
+-- 9. Host power plan (powercfg /getactivescheme, run on the server)
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)

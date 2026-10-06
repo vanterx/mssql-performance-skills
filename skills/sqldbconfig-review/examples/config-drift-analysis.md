@@ -1,10 +1,11 @@
 # SQL Server Configuration Review
 
 ## Summary
-- **3 Critical, 12 Warnings, 3 Info**
+- **3 Critical, 13 Warnings, 5 Info**
 - **Highest-risk finding:** [C1] Max Server Memory not configured on a 256 GB server — SQL Server can consume all available RAM
 - **Databases affected:** SalesDB (auto-shrink, VLF, percent growth), ReportDB (compatibility level, auto-close, page verify, auto-update stats, Trustworthy, db-chaining), tempdb (file count)
-- **Instance-level:** MAXDOP = 0 on 4-NUMA, CTP at default, OLE Automation on, cross-DB chaining on, MAXDOP misconfigured, IFI disabled
+- **Instance-level:** MAXDOP = 0 on 4-NUMA, CTP at default, OLE Automation on, cross-DB chaining on, IFI disabled, Common Criteria compliance enabled with no compliance obligation
+- **Host:** all 64 logical CPUs are schedulable (Enterprise Core-based, affinity AUTO), but the power plan is Balanced
 
 ---
 
@@ -152,6 +153,17 @@
   -- Repeat for tempdev4 through tempdev8
   ```
 
+**[W14] Common Criteria Compliance Enabled (B33)**
+- **Observed:** `common criteria compliance enabled config_value = 1`, `run_value = 1`
+- **Impact:** Residual Information Protection overwrites every memory allocation with a known bit pattern before the memory is reallocated, which Microsoft documents as able to slow performance. The cost is spread across all memory reallocation rather than concentrated in one query, so it presents as a diffuse slowdown with no expensive statement to blame. No Common Criteria trigger scripts are evident in the capture, so this instance is paying the cost without being compliant.
+- **Before changing it:** with the option enabled a table-level `DENY` takes precedence over a column-level `GRANT`; disabling it reverses that precedence and can expose columns that were relying on the table-level `DENY`. Audit overlapping column grants and table denies first.
+- **Fix:** confirm there is no EAL2/EAL4+ obligation, then:
+  ```sql
+  EXEC sp_configure 'common criteria compliance enabled', 0;
+  RECONFIGURE WITH OVERRIDE;
+  ```
+  Requires a service restart.
+
 ---
 
 ### Info
@@ -170,10 +182,20 @@
 - **Observed:** `query governor cost limit config_value = 0`
 - **Action:** Consider enabling if runaway queries are a documented concern. Not required for all environments.
 
+**[I4] Access Check Cache Options Set Explicitly (B35)**
+- **Observed:** `access check cache bucket count = 256`, `access check cache quota = 1024` — both non-zero
+- **Impact:** None directly: on SQL Server 2019 these values match the engine-managed x64 defaults exactly, so the settings achieve nothing while signalling that someone followed older guidance. The 1:4 bucket-to-quota ratio Microsoft documents is satisfied.
+- **Action:** Microsoft recommends changing these only when directed by Customer Support Services. With no open case, return both to engine-managed: `EXEC sp_configure 'access check cache bucket count', 0; RECONFIGURE;` and the same for `access check cache quota`. If the original motivation was `TokenAndPermUserStore` growth, address it through query parameterization (see [W3], B4) rather than cache sizing.
+
+**[I5] Windows Power Plan Set to Balanced (B36)**
+- **Observed:** `powercfg /getactivescheme` reports the Balanced scheme (GUID `381b4222-f694-41f0-9685-ff5bb260df2e`)
+- **Impact:** Balanced is the Windows Server default and remains Microsoft's recommendation for workloads that vary, so this is a trade-off rather than a defect. On a host under steady load it can leave processors in a lower performance state, raising average response time for CPU-intensive work.
+- **Action:** Microsoft's primary resolution is to update system BIOS and apply the relevant OS and CPU updates so P-states and core parking adjust correctly. Switching to High Performance is the documented workaround and is called a viable solution when the platform is always under heavy load — it disables dynamic scaling and raises idle power draw, so confirm this instance is consistently busy before making the change. A middle option is to raise the Minimum Processor Performance State within Balanced.
+
 ---
 
 ### Passed Checks
-B7 (Min Server Memory = 0 ✓), B8 (LPIM not active ✓), B9 (AWE disabled ✓), B15 (auto-create stats ON all databases ✓), B24 (CLR disabled ✓), B26 (Ad Hoc Distributed Queries disabled ✓), B12 for SalesDB/ArchiveDB/HRDB (compatibility levels 130–150 ✓ — only ReportDB flagged), B10 for ReportDB/ArchiveDB/HRDB ✓, B11 for all except ReportDB ✓
+B7 (Min Server Memory = 0 ✓), B8 (LPIM not active ✓), B9 (AWE disabled ✓), B15 (auto-create stats ON all databases ✓), B24 (CLR disabled ✓), B26 (Ad Hoc Distributed Queries disabled ✓), B12 for SalesDB/ArchiveDB/HRDB (compatibility levels 130–150 ✓ — only ReportDB flagged), B10 for ReportDB/ArchiveDB/HRDB ✓, B11 for all except ReportDB ✓, B34 (scheduler_count 64 = cpu_count 64 ✓ — Enterprise Core-based licensing has no core cap, `affinity_type_desc = AUTO`, so all 64 logical CPUs are schedulable)
 
 ---
 
@@ -199,6 +221,9 @@ B7 (Min Server Memory = 0 ✓), B8 (LPIM not active ✓), B9 (AWE disabled ✓),
 | Instance | Cross-DB Chaining | On | Off | B27 ⚠️ |
 | Instance | IFI | Disabled | Enabled | B22 ⚠️ |
 | TempDB | Data file count | 2 | 8 | B23 ⚠️ |
+| Instance | Common Criteria compliance | On | Off | B33 ⚠️ |
+| Instance | Access check cache | 256 / 1024 | 0 / 0 (engine-managed) | B35 ℹ️ |
+| Host | Power plan | Balanced | High Performance (if always busy) | B36 ℹ️ |
 
 ---
 
