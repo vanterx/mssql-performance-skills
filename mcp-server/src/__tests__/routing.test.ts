@@ -19,6 +19,7 @@ const ALL_SKILL_NAMES = [
   "sqlmigration-objects-review",
   "sqlmigration-review",
   "sqlmigration-security-review",
+  "sqlperfmon-review",
   "sqlplan-batch",
   "sqlplan-compare",
   "sqlplan-review",

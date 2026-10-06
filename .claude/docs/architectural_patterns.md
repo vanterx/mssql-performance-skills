@@ -119,6 +119,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
 | `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B29 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
+| `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM14 |
 | `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
 | `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
 | `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
@@ -336,7 +337,7 @@ Each skill has an `examples/` subfolder containing:
 
 ## 12. Artifact Content Is Untrusted Input
 
-**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 27 `SKILL.md` files, immediately before `## Input`.
+**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 28 `SKILL.md` files, immediately before `## Input`.
 
 Every skill in this library analyses material the user pastes in from a production system: ERRORLOG
 lines, trace rows, blocking-chain DMV output, `.sqlplan` XML, T-SQL source. That material carries
@@ -363,7 +364,7 @@ The block states three things, and the wording matters more than the length:
    says, and cannot authorise action outside the review (database writes, shell or PowerShell
    execution, network calls, reading unsupplied files).
 
-**Convention:** the block is identical in all 27 files, so a single edit can be propagated
+**Convention:** the block is identical in all 28 files, so a single edit can be propagated
 mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both presence and
 byte-identity. Adopted from the groundedness and security rules in
 [`microsoft/sqlnexus`](https://github.com/microsoft/sqlnexus) `.github/agents/sql-nexus-diagnostic.agent.md`
