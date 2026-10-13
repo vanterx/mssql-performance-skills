@@ -106,7 +106,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `T` | `tsql-review` | T-SQL static analysis checks | T1–T85 |
 | `I` | `sqlstats-review` | IO metrics checks | I1–I18 |
 | `W` | `sqlstats-review` | Time/wait metrics checks | W1–W9 |
-| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X25 |
+| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X27 |
 | `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V45 |
 | `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
 | `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
@@ -117,11 +117,11 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `O` | `sqlmemory-review` | Memory pressure: PLE, plan cache, grants, clerks | O1–O20 |
 | `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
-| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B29 |
+| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B38 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
-| `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM14 |
-| `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
-| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
+| `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM15 |
+| `F` | `sqlag-review` | Always On AG configuration audit | F1–F38 |
+| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U25 |
 | `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
 | `J` | `sqlmigration-security-review` | Migration security-object portability | J1–J15 |
 | `M` | `sqlmigration-objects-review` | Migration operational-object portability | M1–M16 |

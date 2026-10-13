@@ -4,7 +4,7 @@
 
 - [Before You Start: Key Concepts](#before-you-start-key-concepts)
 - [Event-Level Checks (X1–X12)](#event-level-checks-x1x12)
-- [Workload-Level Checks (X13–X25)](#workload-level-checks-x13x25)
+- [Workload-Level Checks (X13–X27)](#workload-level-checks-x13x27)
 - [How to Capture Trace Data](#how-to-capture-trace-data)
 - [Quick Reference: Checks by Severity](#quick-reference-checks-by-severity)
 
@@ -401,7 +401,7 @@ EventClass  TextData
 
 ---
 
-## Workload-Level Checks (X13–X25)
+## Workload-Level Checks (X13–X27)
 
 ---
 
@@ -807,6 +807,90 @@ Duration > 5,000 ms → triggers X25
 
 ---
 
+### X26 — Diagnostic-Collector Queries in the Capture
+
+**What it means**
+The tool that took the capture — PSSDIAG, SQL LogScout, or similar — runs its own probes on
+the server while it records, and those probes land in the trace next to the application's
+work. On a quiet window they can rank among the "top" queries.
+
+**Why it matters**
+A report that sends someone to tune `sp_perf_stats` has wasted their afternoon. And when the
+collector's share of CPU is large, the capture is changing the behaviour it measures — the
+observer effect — so every other number in it is inflated by the tool.
+
+**How to spot it**
+```
+normalized_text                                       executions   total_cpu_ms   share
+EXEC tempdb.dbo.sp_perf_stats ...                            240         38,400    6.1%
+EXEC tempdb.dbo.sp_blocker_pss ...                           240          9,120    1.4%
+EXEC dbo.usp_GetOrders @CustomerId = ?                    12,841        231,138   36.7%
+```
+Shares are of 629,500 CPU-ms in the window. Collector batches 7.5% of CPU → X26 Warning. Exclude both rows; `usp_GetOrders` is the real
+top consumer.
+
+The text patterns come from the filter list in `microsoft/SqlNexus` (MIT), which strips
+collector noise before comparing two captures. They are names of the collectors' own
+procedures and probes, not documented SQL Server objects, so they are unverified against
+Microsoft Learn; say which pattern matched when you exclude a row.
+
+**Fix options**
+1. Exclude collector batches before building any top-N table, and state the count excluded.
+2. Do not exclude by broad words (`repl`, `distribution`, `backupset`) — SQL Nexus does, but
+   those match real replication, distribution and backup work.
+3. If the share is ≥ 5%, shorten the capture or lengthen the probe interval, and check
+   `/sqldbconfig-review` B38 for the sessions the collector left running.
+
+**Related checks:** X17 (top resource consumers), X22 (showplan capture overhead), B38
+
+---
+
+### X27 — Single Query Consumes a Large Share of Machine CPU
+
+**What it means**
+The query's total CPU divided by the CPU the machine had available over the trace window:
+
+```
+share = SUM(cpu_ms) / (cpu_count × window_ms)
+```
+
+**Why it matters**
+"Top query by CPU" says which query is biggest, not whether it matters. On a 16-core host over
+a 30-minute window the machine has 16 × 1,800,000 = 28,800,000 CPU-ms available. A top query at
+230,000 ms is 0.8% of that: tuning it will not relieve CPU pressure, and the pressure is
+coming from volume or from outside SQL Server. A top query at 12,000,000 ms is 41.7% — that is
+the CPU problem.
+
+**How to spot it**
+```
+cpu_count = 16    window = 09:00:00 – 09:30:00 (1,800,000 ms)    capacity = 28,800,000 CPU-ms
+
+normalized_text                             total_cpu_ms    share
+EXEC dbo.usp_MonthEndRollup @Period = ?       12,004,800    41.7%   ← X27 Warning
+SELECT ... FROM dbo.Orders WHERE ...             231,138     0.8%
+```
+
+**Caveats to state in the report**
+- A trace filtered by a duration floor (for example 100 ms) leaves short executions out, so
+  every share is a lower bound.
+- A window that includes idle time understates a burst. Quote the window used.
+- SQL Trace `CPU` units differ by event class and version (see the skill's Input section);
+  convert to milliseconds before dividing.
+
+**Fix options**
+1. ≥ 25%: send the pattern to `/sqlplan-review` with its plan, and `/sqlquerystore-review` for
+   its history — this is where tuning pays.
+2. Top query far below 25% while the host is busy: the pressure is spread across volume (X13)
+   or outside SQL Server — `/sqlperfmon-review` PM1 and PM2.
+
+**Related checks:** X2 (high CPU per execution), X17, X18, `/sqlperfmon-review` PM1–PM2
+
+The capacity denominator follows `microsoft/SqlNexus` `DiagnosticAnalyzer.GetTopCpuQueries`
+(`pct_of_cpu_capacity`, MIT); Microsoft's high-CPU troubleshooting guide expresses query CPU as a
+percentage of total CPU capacity the same way.
+
+---
+
 ## How to Capture Trace Data
 
 ### Method 1 — sys.fn_trace_gettable() (existing .trc file)
@@ -870,6 +954,7 @@ ORDER BY event_time;
 | X1 | Duration ≥ 30 s |
 | X3 | Logical reads ≥ 1 M |
 | X8 | Error severity ≥ 20 |
+| X27 | One query ≥ 50% of machine CPU |
 
 ### Warning
 | Check | Issue |
@@ -886,7 +971,9 @@ ORDER BY event_time;
 | X10 | Hash warning present |
 | X12 | Missing join predicate present |
 | X13 | ≥ 1,000 executions same query |
-| X14 | Max duration > 10× min, same query |
+| X14 | Max duration > 10× min, slowest ≥ 1 s; plan-shape (reads ≥ 10×) or unclassified |
+| X26 | Collector batches ≥ 5% of CPU |
+| X27 | One query ≥ 25% of machine CPU |
 | X16 | Recompiles > 5% of batch events |
 | X19 | Auto-grow event present |
 
@@ -903,3 +990,5 @@ ORDER BY event_time;
 | X23 | Columnstore Delta Store Flush Frequency |
 | X24 | Ledger Block Generation Events |
 | X25 | ADR Version Cleaner Long-Duration Events |
+| X14 | Wait variance (duration ≥ 10×, reads < 10×) |
+| X26 | Diagnostic-collector queries present |

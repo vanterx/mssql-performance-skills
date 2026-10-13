@@ -50,4 +50,4 @@ the first hypotheses to test in the ERRORLOG.
 | 4 | Run `scripts/check-pending-reboot.ps1` (must exit 0), then rerun setup with the corrected INI | U7 pre-flight |
 | 5 | Post-install: /sqldbconfig-review (B22/B23 confirm IFI + TempDB) and /sqldiskio-review (Z6–Z10 placement) | validation |
 
-> Analyzed by: `sqlbootstraplog-review` (U1–U24)
+> Analyzed by: `sqlbootstraplog-review` (U1–U25)

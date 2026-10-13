@@ -280,11 +280,11 @@ The 28 skills in alphabetical order:
 | # | Name | Checks |
 |---|------|--------|
 | 1 | mssql-performance-review | 0 (dispatcher) |
-| 2 | sqlag-review | 37 |
+| 2 | sqlag-review | 38 |
 | 3 | sqlblocking-review | 55 |
-| 4 | sqlbootstraplog-review | 24 |
+| 4 | sqlbootstraplog-review | 25 |
 | 5 | sqlclusterlog-review | 30 |
-| 6 | sqldbconfig-review | 32 |
+| 6 | sqldbconfig-review | 38 |
 | 7 | sqldeadlock-review | 17 |
 | 8 | sqldiskio-review | 15 |
 | 9 | sqlencryption-review | 112 |
@@ -295,19 +295,20 @@ The 28 skills in alphabetical order:
 | 14 | sqlmigration-objects-review | 16 |
 | 15 | sqlmigration-review | 15 |
 | 16 | sqlmigration-security-review | 15 |
-| 17 | sqlplan-batch | 0 (dispatcher) |
-| 18 | sqlplan-compare | 20 |
-| 19 | sqlplan-review | 111 |
-| 20 | sqlprocstats-review | 25 |
-| 21 | sqlquerystore-review | 32 |
-| 22 | sqlspn-review | 54 |
-| 23 | sqlstats-review | 27 |
-| 24 | sqltrace-review | 25 |
-| 25 | sqlwait-review | 44 |
-| 26 | ssrstracelog-review | 24 |
-| 27 | tsql-review | 85 |
+| 17 | sqlperfmon-review | 15 |
+| 18 | sqlplan-batch | 0 (dispatcher) |
+| 19 | sqlplan-compare | 20 |
+| 20 | sqlplan-review | 112 |
+| 21 | sqlprocstats-review | 25 |
+| 22 | sqlquerystore-review | 32 |
+| 23 | sqlspn-review | 54 |
+| 24 | sqlstats-review | 27 |
+| 25 | sqltrace-review | 27 |
+| 26 | sqlwait-review | 45 |
+| 27 | ssrstracelog-review | 24 |
+| 28 | tsql-review | 85 |
 
-**Total: 930 checks across 26 analytical skills + 2 dispatcher skills**
+**Total: 936 checks across 26 analytical skills + 2 dispatcher skills**
 
 ---
 

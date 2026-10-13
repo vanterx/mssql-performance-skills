@@ -1,6 +1,6 @@
-# sqlag-review Check Explanations (F1–F37)
+# sqlag-review Check Explanations (F1–F38)
 
-Plain-English explanations for all 37 checks. Load this file when a user asks "explain check
+Plain-English explanations for all 38 checks. Load this file when a user asks "explain check
 F##", requests deeper fix options, or wants to understand why a threshold was chosen.
 
 ---
@@ -13,7 +13,7 @@ F##", requests deeper fix options, or wants to understand why a threshold was ch
 - [Category 4 — Backup Strategy (F19–F23)](#category-4--backup-strategy-f19f23)
 - [Category 5 — Endpoint Security (F24–F27)](#category-5--endpoint-security-f24f27)
 - [Category 6 — Distributed AG and Advanced Features (F28–F33)](#category-6--distributed-ag-and-advanced-features-f28f33)
-- [Category 7 — Operational Monitoring (F34–F37)](#category-7--operational-monitoring-f34f37)
+- [Category 7 — Operational Monitoring (F34–F38)](#category-7--operational-monitoring-f34f38)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -938,7 +938,7 @@ Review T-SQL code or application layer for:
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F37)
+## Category 7 — Operational Monitoring (F34–F38)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 
@@ -1123,6 +1123,49 @@ does not mean seeding was clean)
 
 ---
 
+### F38 — SQLDIAG Failover Diagnostics Log Turned Off
+
+**What it means:** To decide whether the primary replica is healthy, the SQL Server resource DLL
+in the Windows cluster calls `sp_server_diagnostics` over a dedicated connection. Each result it
+receives is saved automatically to the SQLDIAG logs in the instance's Log directory, as
+`<HOSTNAME>_<INSTANCENAME>_SQLDIAG_*.xel`. `ALTER SERVER CONFIGURATION SET DIAGNOSTICS LOG OFF`
+stops that, and `sys.dm_os_server_diagnostics_log_configurations.is_enabled` then reads `0`.
+
+**How to spot it:**
+```sql
+SELECT is_enabled, [path], max_size, max_files
+FROM sys.dm_os_server_diagnostics_log_configurations;
+```
+```
+is_enabled  path                                                   max_size  max_files
+0           C:\Program Files\Microsoft SQL Server\MSSQL16...\Log   100       10
+```
+
+**Why it matters:** When an AG fails over because SQL Server reported itself unhealthy, the
+cluster log records the decision and the SQLDIAG logs record the evidence. Microsoft's failover
+troubleshooting procedure opens the SQLDIAG files from the primary and looks for the
+`component_health_result` whose `state_desc` is `error` — that row names the component
+(`system`, `resource`, `query_processing`) and carries its detail. With logging off, the failover
+can still be seen; its cause cannot.
+
+**Fix options:**
+1. `ALTER SERVER CONFIGURATION SET DIAGNOSTICS LOG ON;` on every replica. No restart is needed.
+   Requires `ALTER SETTINGS` and `VIEW SERVER STATE` (on SQL Server 2022 and later,
+   `VIEW SERVER PERFORMANCE STATE` is accepted instead).
+2. Check `path`: the resource DLL runs as Local System, which needs read and write access there.
+3. Size retention deliberately. `max_size × max_files` is how much history survives; on a busy
+   primary, make sure it covers the time between an incident and the files being collected.
+
+**Related checks:** F34 (AG Extended Events session), F5 (failure condition level — what the
+health results are judged against), `/sqlclusterlog-review` (the cluster side of the same
+failover), `/sqlhadr-review` (runtime state)
+
+**Source note:** adapted from `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeHadrHealth` (MIT),
+which raises this as a Low-severity issue; it is Warning here because the logs are the only
+record of why a health-driven failover happened.
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger Summary | Severity |
@@ -1164,3 +1207,4 @@ does not mean seeding was clean)
 | F35 | Monitoring | Listener IP is_conformant = 0 | Warning |
 | F36 | Monitoring | AG database count exceeds Microsoft's tested scale ceiling (>100) | Warning |
 | F37 | Monitoring | seeding_mode_desc = AUTOMATIC during a manual-restore workflow | Warning |
+| F38 | Monitoring | sys.dm_os_server_diagnostics_log_configurations.is_enabled = 0 | Warning |

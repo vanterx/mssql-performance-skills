@@ -134,3 +134,11 @@ FROM sys.dm_xe_sessions
 WHERE name LIKE '%hadr%'
    OR name LIKE '%ag%'
    OR name LIKE '%alwayson%';
+
+PRINT '--- Query 9: SQLDIAG failover diagnostics log configuration (F38) - run on every replica ---';
+SELECT
+    is_enabled,
+    [path],
+    max_size,
+    max_files
+FROM sys.dm_os_server_diagnostics_log_configurations;

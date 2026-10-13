@@ -81,7 +81,7 @@ ORDER BY backup_start_date DESC;
 |---|---|---|
 | Logins, server/db permissions, credentials, certificates/keys ownership, CMS registrations | `sqlmigration-security-review` (J1–J15) | Distinct check-prefix family; large enough scope to warrant its own skill |
 | SQL Agent jobs/operators/alerts/proxies, linked servers, Database Mail, backup devices, custom error messages, server triggers, XE sessions, endpoints | `sqlmigration-objects-review` (M1–M16) | Distinct check-prefix family; large enough scope to warrant its own skill |
-| Always On AG topology, listener architecture, backup preference | `sqlag-review` (F1–F37) | Already a complete AG-configuration audit; Y13 only checks the edition ceiling for seeding, not AG design |
+| Always On AG topology, listener architecture, backup preference | `sqlag-review` (F1–F38) | Already a complete AG-configuration audit; Y13 only checks the edition ceiling for seeding, not AG design |
 | AG replica health during/after migration cutover | `sqlhadr-review` (H1–H28, H21 retired) | Runtime health DMVs, not a configuration audit |
 | Cross-domain authentication, SPN/Kerberos for the new instance name | `sqlspn-review` (K1–K40) | SPN/delegation is a complete domain of its own |
 | TDE, certificate-protected backups, transport encryption | `sqlencryption-review` (A1–A112) | Encryption posture is a complete domain of its own |

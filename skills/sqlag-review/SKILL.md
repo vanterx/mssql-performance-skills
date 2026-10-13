@@ -1,6 +1,6 @@
 ---
 name: sqlag-review
-description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 37 checks (F1–F37) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, endpoint encryption, or automatic seeding mode during a manual-restore workflow. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
+description: Audits SQL Server Always On Availability Group configuration correctness across all layers — prerequisites, replica design, listener architecture, backup strategy, endpoint security, distributed AG topology, Basic and Contained AG constraints, and application integration readiness. Use this skill when setting up a new AG, reviewing an existing AG design before a DR test, preparing for a failover, or investigating connection failures, listener misconfigurations, backup failures on secondaries, or endpoint certificate expiry. Applies 38 checks (F1–F38) across 7 categories. Trigger for questions about AG prerequisites, session timeout, failure condition level, read-only routing configuration, MultiSubnetFailover, backup preferred replica, distributed AG setup, Basic AG limits, Contained AG, endpoint encryption, or automatic seeding mode during a manual-restore workflow. Companion to /sqlhadr-review (runtime health) and /sqlclusterlog-review (WSFC events).
 triggers:
   - /sqlag-review
   - /ag-review
@@ -15,7 +15,7 @@ triggers:
 ## Purpose
 
 Audit the configuration and design of one or more SQL Server Always On Availability Groups.
-Applies 37 checks (F1–F37) across seven categories:
+Applies 38 checks (F1–F38) across seven categories:
 
 - **F1–F6** — Prerequisites and instance setup: AlwaysOn feature, database recovery model,
   endpoint state, endpoint encryption, failure condition level, version alignment across replicas
@@ -30,7 +30,7 @@ Applies 37 checks (F1–F37) across seven categories:
   firewall port gaps
 - **F28–F33** — Distributed AG and advanced features: listener URL requirement for distributed AGs,
   Basic AG limits, Contained AG auth, synchronous distributed link, cross-database dependencies
-- **F34–F37** — Operational monitoring: Extended Events AG session, listener IP conformance, AG database-count scale ceiling, automatic seeding left active during a manual-restore workflow
+- **F34–F38** — Operational monitoring: Extended Events AG session, listener IP conformance, AG database-count scale ceiling, automatic seeding left active during a manual-restore workflow, SQLDIAG failover diagnostics log turned off
 
 **Scope distinction:** This skill audits configuration correctness ("is the AG designed right?").
 Use `/sqlhadr-review` (H1–H28) for runtime health ("is the AG healthy right now?") and
@@ -167,6 +167,12 @@ SELECT
 FROM sys.certificates
 WHERE pvt_key_encryption_type_desc IS NOT NULL
 ORDER BY expiry_date;
+```
+
+**Query 7 — SQLDIAG failover diagnostics log (run on every replica; F38)**
+```sql
+SELECT is_enabled, [path], max_size, max_files
+FROM sys.dm_os_server_diagnostics_log_configurations;
 ```
 
 ---
@@ -550,7 +556,7 @@ or leave databases unjoinable.
 
 ---
 
-## Category 7 — Operational Monitoring (F34–F37)
+## Category 7 — Operational Monitoring (F34–F38)
 
 ### F34 — No Extended Events Session for AG Diagnostics
 - **Trigger:** `sys.dm_xe_sessions` contains no session with events targeting
@@ -613,6 +619,11 @@ or leave databases unjoinable.
   that should not auto-create databases, and check `sys.dm_hadr_automatic_seeding` for any
   seeding operation that started without being requested.
 
+
+### F38 — SQLDIAG Failover Diagnostics Log Turned Off
+- **Trigger:** `sys.dm_os_server_diagnostics_log_configurations.is_enabled = 0` on any replica
+- **Severity:** Warning
+- **Fix:** The SQL Server resource DLL monitors the primary replica through `sp_server_diagnostics`, and every health result it receives is written to the SQLDIAG logs — `<HOSTNAME>_<INSTANCENAME>_SQLDIAG_*.xel` in the instance Log directory. Those files are where Microsoft's failover troubleshooting procedure looks for the component (`system`, `resource`, `query_processing`) that reported `error` before an AG failed over; with logging off, a health-driven failover leaves the cluster log saying *that* the AG was unhealthy and nothing saying *why*. Turn it back on with `ALTER SERVER CONFIGURATION SET DIAGNOSTICS LOG ON;` on each replica — no restart is needed, and the statement needs `ALTER SETTINGS` plus `VIEW SERVER STATE` (`VIEW SERVER PERFORMANCE STATE` is accepted on SQL Server 2022 and later). While there, read `path`, `max_size` and `max_files` from the same view: the resource DLL runs as Local System, which needs read and write access to `path`, and `max_size × max_files` is the history you will have — size it to cover the gap between an incident and someone collecting the files. Pair with F34 (an XE session for AG events) and `/sqlclusterlog-review` (L-checks), which reads the cluster-side half of the same failover. Adapted from `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeHadrHealth` (MIT).
 ---
 
 ## Version-Aware Check Suppression
