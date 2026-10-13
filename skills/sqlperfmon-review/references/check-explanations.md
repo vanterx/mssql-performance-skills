@@ -52,6 +52,25 @@ Worked arithmetic on a 24-logical-processor host:
 | `Processor(_Total)\% Processor Time` average | 81 | Total host load 81%, so SQL Server accounts for nearly all of it |
 | Samples above 60 × 24 = 1,440 | 92% of window | Sustained, not a spike |
 
+**Report runs, not just the average.** A run is three or more consecutive samples at or above
+the threshold. On the same host with 15-second samples:
+
+| Run | Start | End | Samples | Peak | Reading |
+|-----|-------|-----|---------|------|---------|
+| 1 | 09:12:00 | 09:31:45 | 80 | 2,302 (95.9%) | Critical — 20 minutes at or above 80 × 24 = 1,920 |
+| 2 | 10:04:30 | 10:05:15 | 4 | 1,610 (67.1%) | Warning-level run, short |
+
+The window average for the hour could read 55% and pass. The runs show a 20-minute
+saturation, and that is what the user felt. The same run detection is used by
+`microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeCpuUsage` (3 or more consecutive samples
+above 70%).
+
+**No Perfmon capture?** `RING_BUFFER_SCHEDULER_MONITOR` rows in `sys.dm_os_ring_buffers` hold
+roughly the last few hours of SQL Server vs. idle CPU at about one sample a minute — enough for
+PM1 and PM2, nothing else. The record layout is unverified against Microsoft Learn (the ring
+buffer type is undocumented), so treat it as a fallback and say so; the query is in the
+skill's Input section.
+
 **Why it's a problem:** Not inherently — a database server using its processors is a database server doing its job. The finding is diagnostic rather than remedial: it settles the attribution question, and it stops the next hour being spent on the wrong layer. The value is in what it rules out, which is that something other than SQL Server is eating the machine.
 
 **Fix options:**

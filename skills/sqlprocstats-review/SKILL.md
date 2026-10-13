@@ -79,6 +79,7 @@ For trend checks (R16–R20), Q5 output with ≥ 3 rows per object is required. 
 | `physical_pct` | computed | Physical reads as % of logical (cache miss rate) |
 | `execs_per_sec` | computed | Execution rate per second |
 | `max_to_avg_cpu_ratio` | computed | max_cpu_ms / avg_cpu_ms — parameter sniffing signal |
+| `max_to_avg_reads_ratio` | computed, optional | max_logical_reads / avg_logical_reads — separates a different access path from per-row computation in R9 |
 | `cpu_to_elapsed_ratio` | computed | avg_cpu / avg_elapsed — > 1.5 = parallel; < 0.2 = blocking/IO |
 | `sample_seconds` | delta SP | Duration of the collection interval |
 | `cache_age_minutes` | computed | How long the current plan has been in cache |
@@ -154,6 +155,7 @@ Apply these regardless of execution count — an infrequent but expensive proc m
 ### R9 — Max vs Average CPU Skew (Parameter Sniffing Signal)
 - **Trigger:** `max_to_avg_cpu_ratio` ≥ 10 (worst single execution used 10× the average CPU)
 - **Severity:** Info if ≥ 3; Warning if ≥ 10; Critical if ≥ 100
+- **Corroborate with reads when the capture has them:** `max_logical_reads / avg_logical_reads` (`sys.dm_exec_procedure_stats` exposes `max_logical_reads`). CPU, unlike elapsed time, is not inflated by waiting, so blocking does not cause R9 — but CPU skew has two shapes. Reads skew ≥ 10× as well means the worst execution touched far more data: a different access path, the parameter-sniffing reading. CPU skew with flat reads means similar data access with more computation per row — a scalar UDF, string or XML processing, or a sort or hash that scales with a parameter; a plan fix is less likely to help, so look at the statement-level CPU first. Classifying by reads spread follows `microsoft/SqlNexus` `DiagnosticAnalyzer.GetTopCpuQueries` (MIT).
 - **Fix:** The plan was compiled for one parameter set but executed with a very different set. The worst execution was dramatically more expensive than the average. Add `OPTION (RECOMPILE)` as immediate mitigation. Long term: use `OPTION (OPTIMIZE FOR)`, filtered statistics, or a plan guide. Run `/sqlplan-review` on the bad-parameter plan.
 ### R10 — High Spills per Execution
 - **Trigger:** `avg_spills` ≥ 1 (the object spills to TempDb on average at least once per execution)

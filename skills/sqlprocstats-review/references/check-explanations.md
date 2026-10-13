@@ -272,6 +272,20 @@ Average call takes 12 ms. But one execution took 148 seconds. The plan was compi
 a parameter that returns 1 row (fast nested loops), but someone passed a parameter that
 returns 2 million rows (nested loops × 2M = catastrophic).
 
+**Reads tell you which kind of skew it is.** If the capture includes `max_logical_reads`,
+divide by `avg_logical_reads`:
+
+```
+object_name          max_to_avg_cpu_ratio   max_to_avg_reads_ratio   reading
+usp_SearchCustomers  12,333                 9,870                    different access path — sniffing
+usp_FormatInvoice    41                     1.3                      same data, more computation per row
+```
+
+`usp_FormatInvoice` reads the same pages on its worst call but burns 41× the CPU — the cost
+scales with something a parameter controls (a scalar UDF over a long string, an XML shred),
+not with the plan's access path. `RECOMPILE` will not move it; find the expensive statement
+first.
+
 ```sql
 -- Fix option 1: recompile per execution
 CREATE PROCEDURE dbo.usp_SearchCustomers @Status nvarchar(20)

@@ -117,6 +117,8 @@ Example hypotheses:
 
 Record hypotheses with initial confidence (HIGH / MEDIUM / LOW). Confidence updates as probes complete.
 
+Every MEDIUM or LOW carries its reason in parentheses, naming what is missing or thin: `MEDIUM (no Query Store data)`, `LOW (2 samples)`, `MEDIUM (wait capture and trace do not overlap)`. A bare MEDIUM tells the reader nothing about what would raise it; the reason doubles as the next capture to ask for. HIGH needs no reason beyond the evidence already cited. The convention follows rule 14 of `microsoft/SqlNexus` `.github/agents/sql-nexus-diagnostic.agent.md` (MIT).
+
 ## Dispatch — DAG-Driven
 
 Tier 1 used a fixed five-phase order. Tier 2 replaces fixed phases with a dynamic skill-graph DAG built from artifact types and probe findings. The DAG walks with maximal parallelism, follows edges that become available as findings accumulate, and stops on early termination.
@@ -263,7 +265,7 @@ Every recommended fix carries the following fields. The full rubric is in `refer
 | Side effects | Storage impact, lock duration, write overhead, other queries affected |
 | Rollback | The exact T-SQL or steps to undo the change |
 | Verification | Which capture to re-run after deployment and the expected metric change |
-| Confidence | HIGH / MEDIUM / LOW, inherited from the underlying finding |
+| Confidence | HIGH / MEDIUM / LOW, inherited from the underlying finding, with the reason for anything below HIGH |
 
 Recommendations without explicit rollback are rejected — "just do this" is not acceptable output.
 
@@ -356,7 +358,7 @@ The reference files are progressive disclosure — keep SKILL.md compact; load d
   - [source artifact]: [observed value] vs threshold [threshold value]
   - [source artifact]: [observed value] vs threshold [threshold value]
   - [source artifact]: [observed value] vs threshold [threshold value]
-- Confidence: HIGH/MEDIUM/LOW
+- Confidence: HIGH, or MEDIUM/LOW (reason — what is missing or thin)
 - Impact: [one-sentence runtime effect]
 
 #### Warnings

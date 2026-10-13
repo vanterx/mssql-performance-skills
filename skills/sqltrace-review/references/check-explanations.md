@@ -469,8 +469,29 @@ A plan sniffed on a rare "small" parameter value uses Nested Loops (correct for 
 ```
 Normalized query: EXEC dbo.GetCustomerOrders @customerId = ?
 Executions: 12,841  |  Avg Duration: 45 ms  |  Min: 1 ms  |  Max: 142,800 ms
+Reads:      Min: 6  |  Max: 2,104,377
+Duration CV: 1,840%
 ```
-Max / Min = 142,800 — triggers X14 (> 10×, ≥ 10 executions)
+Max / Min duration = 142,800 with a slowest run over 1 s — triggers X14. Reads spread is 350,729× (2,104,377 / 6), so this is **plan-shape variance**: the slow calls did vastly more work.
+
+**Separating sniffing from waiting with reads**
+
+Duration alone cannot tell a wrong plan from a blocked one — both make one execution slow. Logical reads can: a plan compiled for a different parameter value does more work, while a blocked or I/O-starved execution does the same work and waits longer.
+
+```
+Normalized query: UPDATE dbo.Inventory SET Qty = Qty - ? WHERE Sku = ?
+Executions: 3,204  |  Min: 2 ms  |  Max: 31,600 ms
+Reads:      Min: 4  |  Max: 9
+```
+Duration spread 15,800×, reads spread about 2×: **wait variance**. Recompiling changes nothing here; look for the blocker active when the 31-second execution started.
+
+| Duration spread | Reads spread | Classification | First move |
+|-----------------|--------------|----------------|-----------|
+| ≥ 10× | ≥ 10× | Plan-shape variance | Diff fast and slow plans with `/sqlplan-compare` |
+| ≥ 10× | < 10× | Wait variance | Correlate with blocking or wait captures |
+| ≥ 10× | no `Reads` column | Unclassified | Capture both plans before choosing a fix |
+
+The coefficient of variation (`stdev / mean × 100`) is reported alongside: an intermittently slow query, the usual sniffing shape, scores high; a uniformly slow one scores low.
 
 **Confirming parameter sniffing vs other variance causes:**
 - Run the slow call and fast call through `/sqlplan-review` separately
@@ -484,7 +505,7 @@ Max / Min = 142,800 — triggers X14 (> 10×, ≥ 10 executions)
 4. Use Query Store to force the good plan: `EXEC sp_query_store_force_plan`.
 5. Separate procedures for high/low cardinality callers.
 
-**Related checks:** X7 (recompile), X11 (missing statistics), X1 (duration), `/sqlplan-compare`
+**Related checks:** X7 (recompile), X11 (missing statistics), X1 (duration), `/sqlplan-compare`, `/sqlblocking-review` (wait variance)
 
 ---
 

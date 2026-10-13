@@ -50,6 +50,20 @@ Accept any of:
 - Output from `SELECT ... FROM sys.dm_os_performance_counters` (covers the `SQLServer:*` counters only - see the scope note below)
 - A pasted extract of a few counters with timestamps, for example a column of `Avg. Disk sec/Read` values
 - A natural language description of counter behaviour ("sqlservr is at 1500% processor time on a 24-core box", "available MBytes dropped to 200 overnight")
+- **Fallback when no Perfmon capture exists:** `sys.dm_os_ring_buffers` rows of type `RING_BUFFER_SCHEDULER_MONITOR`. Each record's XML carries `ProcessUtilization` (SQL Server's CPU share, 0-100 of the whole machine) and `SystemIdle`, so `100 - SystemIdle - ProcessUtilization` is the non-SQL share. This feeds PM1 and PM2 only, at roughly one record per minute over the last few hours. It has no kernel-time, memory, disk or per-process detail, so PM3 and PM5-PM8 stay NOT ASSESSED, and because `ProcessUtilization` is already a 0-100 share of the machine it is compared to the thresholds without dividing by `cpu_count`. Unverified against Microsoft Learn: Microsoft documents `sys.dm_os_ring_buffers` but states that most ring buffer types are unsupported unless separately documented, and this one is not, so the record layout and cadence are field practice rather than a contract — say so in the report. The same fallback appears in `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeCpuUsage` (MIT).
+
+  ```sql
+  -- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER PERFORMANCE STATE (2022 and later)
+  DECLARE @ms_now bigint = (SELECT ms_ticks FROM sys.dm_os_sys_info);
+  SELECT DATEADD(ms, rb.[timestamp] - @ms_now, SYSDATETIME()) AS sample_time,
+         rb.rec.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS sql_cpu_pct,
+         rb.rec.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int')         AS system_idle_pct
+  FROM (SELECT [timestamp], CONVERT(xml, record) AS rec
+        FROM sys.dm_os_ring_buffers
+        WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR'
+          AND record LIKE N'%<SystemHealth>%') AS rb
+  ORDER BY sample_time;
+  ```
 
 ### Scope note: which counters come from where
 
@@ -154,7 +168,7 @@ Without `cpu_count`, report PM1-PM3 as NOT ASSESSED rather than guessing - `% Pr
 
 ### PM1 - SQL Server Process CPU Saturated
 
-- **Trigger:** `Process(sqlservr)\% Processor Time` sustained at or above 60 x `cpu_count` across the majority of the sample window
+- **Trigger:** `Process(sqlservr)\% Processor Time` sustained at or above 60 x `cpu_count` across the majority of the sample window, or any single run at or above 80 x `cpu_count`. *Sustained* means a run of at least 3 consecutive samples at or above the threshold; report each run with its start, end, sample count and peak rather than only the window's maximum and average, because an average hides a 20-minute saturation inside a quiet hour and a maximum cannot tell one spike from an episode.
 - **Severity:** Warning at 60 x `cpu_count`; Critical at 80 x `cpu_count`
 - **Fix:** Read the scale first. `Process\% Processor Time` is the sum across logical processors, so on a 24-core host the ceiling is 2400 and a value of 1800 is 75% of the machine, not an error. Sustained is the operative word - a backup window or an index rebuild at 90% is expected, and a single spike is not a finding. Once confirmed, this check has done its job: it establishes that SQL Server is the consumer, and the question moves inside the engine. Hand off to `/sqlwait-review` for the signal-wait ratio (V10) and `SOS_SCHEDULER_YIELD` (V7), and to `/sqlplan-review` or `/sqlquerystore-review` for the statements responsible. Two things to rule out before accepting that the workload simply needs more CPU: a scheduler count below the OS CPU count, because an edition cap or an affinity mask means the engine cannot use what the counter says exists (`/sqldbconfig-review` B34), and spinlock contention, whose CPU never appears as a wait type (`/sqlwait-review` V45).
 

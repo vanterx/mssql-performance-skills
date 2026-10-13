@@ -112,6 +112,18 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
         "asserts": re.compile(r"`?MAX`?\s+for\s+elapsed", re.I),
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
+    {
+        # sys.dm_os_ring_buffers is documented; this ring buffer type's record
+        # layout is not, and Microsoft says undocumented types are unsupported.
+        "name": "SQL Nexus 20,000 spins/ms/CPU spinlock cue",
+        "asserts": re.compile(r"20,000 spins per millisecond", re.I),
+        "marker": re.compile(r"unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        "name": "RING_BUFFER_SCHEDULER_MONITOR record layout",
+        "asserts": re.compile(r"ProcessUtilization|SystemIdle"),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
 )
 
 # ---------------------------------------------------------------------------
