@@ -22,3 +22,7 @@ output/
 # Generated inventory (regenerate with: bash scripts/generate-inventory.sh)
 skill-inventory.md
 
+
+# Python bytecode
+__pycache__/
+*.pyc
