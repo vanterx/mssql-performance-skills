@@ -1,6 +1,16 @@
 # Plan — Adopting SQL Nexus AI-Assisted Analysis Ideas
 
-Status: **Proposed** — nothing below is implemented yet.
+Status: **Implemented** on branch `claude/friendly-davinci-wcbw6s`, except 5.5 (deferred, see below).
+
+| Phase | Landed as |
+|-------|-----------|
+| 0–1 | Random per-request envelope tag with in-input escaping and an instruction-pattern pre-scan in the MCP server; Check 55 (capture scripts read-only, setup scripts self-describing); `Requires:` permission line on every script; deadlock and trace XE setup scripts restore `show advanced options` and carry a commented teardown |
+| 2 | X14 classified by reads spread, R9 reads corroboration, PM1 sustained-run rule, PM ring-buffer fallback input, V45 spinlock cue, mandatory reason on MEDIUM/LOW confidence |
+| 3 | X26, X27, B38, PM15, U25, F38 (930 → 936 checks) |
+| 4 | New skill `sqlworkload-compare`, WC1–WC14 (936 → 950 checks, 29 skills); MCP `route_artifact` enum now derived from the routing map, which also restored the missing `blocking` and `perfmon` types |
+| 5 | 5.1 `skills/mssql-performance-review/scripts/redact_artifact.py` (placed with the orchestrator rather than in the repo-level `scripts/`, which holds repo tooling, so it ships with the skill; tests are the built-in `--self-test` fixtures); 5.2 Capture Coverage Pre-flight; 5.3 LogScout scenario column and map, `IO` labelled unverified; 5.4 Wait-Bound Query Attribution; 5.6 required notice line under the report title (the optional per-skill footer was not added — 29 extra footers would add noise without adding evidence the findings do not already cite); 5.7 "Questions to ask" in `HOW_TO_USE.md` and the README |
+
+5.5 stays deferred: Microsoft Learn documents the LogScout scenario names but not the output file-naming scheme, and a routing map built on undocumented names would break silently when LogScout renames a file. Content-based classification already routes LogScout files one at a time.
 
 Source material, all MIT-licensed, read 2026-10-13:
 

@@ -1853,6 +1853,19 @@ Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom de
 | Resume from bundle | `/mssql-performance-review --resume ./captures/<run-id>/` |
 | Verification (baseline-diff) | `/mssql-performance-review --baseline ./state/<prior>/state.json ./new-captures/` |
 
+**Questions to ask** — give it the artifacts and ask what you want to know:
+
+| Question | Answered mainly by |
+|----------|--------------------|
+| What is the dominant bottleneck, and which queries use the most CPU, including parameter-sensitive ones? | `sqlwait-review`, `sqlquerystore-review`, `sqlprocstats-review`, `sqltrace-review` |
+| Is the slow I/O the storage or SQL Server reading too much? | `sqldiskio-review`, `sqlperfmon-review`, `sqlwait-review` |
+| Who is the head blocker and why does it hold its locks? | `sqlblocking-review` |
+| Which queries were waiting rather than running, and on what? | Wait-bound query attribution (trace batches joined to `sys.dm_exec_requests` snapshots) |
+| What changed between the fast run and the slow run? | `sqlworkload-compare`, `sqlplan-compare` |
+| Give me a prioritised summary with risk and rollback. | Consolidated Fix Priority |
+
+Each report opens with a one-line AI-generated notice, checks first that the artifacts cover the incident window and each other, and names the capture script and SQL LogScout scenario for anything missing. To strip host names, logins and addresses before sharing an artifact, run [`scripts/redact_artifact.py`](skills/mssql-performance-review/scripts/README.md) on it: it substitutes consistent tokens (`HOST_01`), so cross-artifact correlations survive.
+
 **Eleven cross-cutting primitives** (the full agentic stack):
 
 | Primitive | What it does |

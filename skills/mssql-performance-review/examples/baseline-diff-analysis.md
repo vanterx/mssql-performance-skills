@@ -1,5 +1,7 @@
 # SQL Server Performance Review — Unified Report (Baseline-Diff)
 
+> AI-generated analysis of the supplied artifacts. It can be wrong: confirm each Critical finding against the cited rows before acting.
+
 **Run ID:** 20260518-1015-post-fix
 **Baseline:** ./state/20260517-0942/state.json (`mixed-artifacts-analysis.md`)
 **Time since baseline:** 24 hours 33 minutes

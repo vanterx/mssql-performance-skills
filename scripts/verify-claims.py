@@ -124,6 +124,14 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
         "asserts": re.compile(r"ProcessUtilization|SystemIdle"),
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
+    {
+        # Learn names GeneralPerf, DetailedPerf, LightPerf, Memory, AlwaysOn,
+        # NeverEndingQuery, Setup, BackupRestore, NetworkTrace and Replication;
+        # no Learn article names the IO scenario.
+        "name": "SQL LogScout IO scenario",
+        "asserts": re.compile(r"\|\s*`IO`\s"),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
 )
 
 # ---------------------------------------------------------------------------
