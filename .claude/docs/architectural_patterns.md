@@ -364,6 +364,14 @@ The block states three things, and the wording matters more than the length:
    says, and cannot authorise action outside the review (database writes, shell or PowerShell
    execution, network calls, reading unsupplied files).
 
+**The MCP path adds two code-level layers** ([mcp-server/src/prompt-builder.ts](../../mcp-server/src/prompt-builder.ts)).
+The envelope tag is random per request, because a fixed `<artifact>` tag can be closed early by
+any artifact that contains `</artifact>`. A regex pre-scan
+([injection-scan.ts](../../mcp-server/src/injection-scan.ts), patterns adapted from
+`microsoft/SqlNexus` `UntrustedDataEnvelope.cs`) places a note outside the envelope when lines
+resemble instructions. SQL Nexus replaces matched values with a placeholder; this repo does not,
+because rewriting evidence would hide exactly what the reframe above asks the model to report.
+
 **Convention:** the block is identical in all 28 files, so a single edit can be propagated
 mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both presence and
 byte-identity. Adopted from the groundedness and security rules in
