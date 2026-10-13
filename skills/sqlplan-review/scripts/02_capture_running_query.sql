@@ -13,6 +13,9 @@
   Two approaches:
     A — Find slow queries by current wait type / duration (triage first)
     B — Capture plan for a specific SPID
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 

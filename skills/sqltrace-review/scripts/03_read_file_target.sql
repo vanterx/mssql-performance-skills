@@ -7,6 +7,10 @@
   (sustained capture > 30 minutes). Adjust the file path below.
 
   After running, paste the result set into Claude and run: /sqltrace-review
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later) for
+  sys.fn_xe_file_target_read_file.
 ================================================================================
 */
 

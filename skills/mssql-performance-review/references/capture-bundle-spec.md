@@ -29,6 +29,10 @@ The orchestrator's writes are confined to `./captures/<run-id>/` (the bundle dir
 
 `<run-id>` follows the format `YYYYMMDD-HHMM-<short-symptom>` (e.g., `20260517-0930-cpu-spike`). The user can rename the directory; `--resume` works on directory path, not the run-id.
 
+## Script classes
+
+Only **capture** scripts go into a bundle. A capture script is any `skills/<name>/scripts/*.sql` not named `*_create_*`; `verify-claims.py` Check 55 guarantees it contains no state-changing statement outside comments and string literals, and that it carries a `Requires:` line naming its permissions. **Setup** scripts (`*_create_*.sql` — for example `sqltrace-review/scripts/01_create_xe_session.sql` and `sqldeadlock-review/scripts/02_create_dedicated_xe_session.sql`) create Extended Events sessions or change server options. They are never copied into a bundle; when a hypothesis needs one, the README names it, quotes its `CHANGES SERVER STATE` header, and points at its Teardown section.
+
 ## Curation rules (per hypothesis class)
 
 Not all 27 available capture scripts every time — the orchestrator curates 3–5 scripts that target the active hypotheses.

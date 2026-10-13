@@ -1,7 +1,10 @@
 -- sqldbconfig-review capture script
 -- Run on the target SQL Server instance and paste the output into /sqldbconfig-review
--- Requires VIEW SERVER STATE and VIEW DATABASE STATE permissions
 -- Compatible with SQL Server 2012+ (some columns require 2016 SP2+ -- see notes inline)
+-- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+--   PERFORMANCE STATE (SQL Server 2022 and later), which also covers VIEW
+--   DATABASE STATE, plus VIEW ANY DEFINITION (or CREATE DATABASE / ALTER ANY
+--   DATABASE) for every row of sys.master_files.
 
 PRINT '-- 1. Instance configuration (sys.configurations)';
 /* sys.configurations rather than EXEC sp_configure: with "show advanced

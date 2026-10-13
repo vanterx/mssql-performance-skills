@@ -377,3 +377,29 @@ mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both 
 byte-identity. Adopted from the groundedness and security rules in
 [`microsoft/sqlnexus`](https://github.com/microsoft/sqlnexus) `.github/agents/sql-nexus-diagnostic.agent.md`
 (MIT), rules 21 and 25.
+
+---
+
+## 13. Shipped Scripts: Capture vs. Setup
+
+**Where:** every file under `skills/*/scripts/`. Enforced by `verify-claims.py` Check 55.
+
+Users run these scripts on production servers, often by pasting them from a capture bundle the
+orchestrator assembled. Two classes exist, told apart by file name:
+
+| Class | Name | Contract |
+|-------|------|----------|
+| Capture | any `.sql` not named `*_create_*` | Read-only. Outside comments and string literals: no DML against permanent tables (temp tables and table variables are fine), no DDL, no `sp_configure` with a value, no `RECONFIGURE`, no `DBCC` outside a read-only allowlist, no state-changing system procedures, no `GRANT`/`REVOKE`/`DENY`, no `BACKUP`/`RESTORE`, no `xp_cmdshell`. |
+| Setup | `*_create_*.sql` | May change state. The header says `CHANGES SERVER STATE` and lists each change; the file ends with a commented `Teardown` section that undoes it. A setup script that changes an `sp_configure` value prints the previous value first, and puts `show advanced options` back the way it found it. |
+
+Every `.sql` and `.ps1` also carries a `Requires:` line naming the permission it needs — on SQL
+Server 2022 and later usually the granular `VIEW SERVER PERFORMANCE STATE` rather than `VIEW
+SERVER STATE` — so a reader can run it under a least-privilege login instead of `sa`.
+
+Only capture scripts are copied into an orchestrator capture bundle.
+
+**Why:** the read-only promise was in `capture-bundle-spec.md` before anything enforced it, and
+one setup script changed two server options and left a startup-state XE session behind with no
+documented way back. The rule follows the read-only enforcement in `microsoft/SqlNexus`
+`SqlNexus.McpServer` (a ScriptDom parse that admits one `SELECT`), scaled down to a regex check
+over comment- and string-stripped text: it does not see dynamic SQL assembled from fragments.

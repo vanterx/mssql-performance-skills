@@ -1,3 +1,11 @@
+<#
+    capture-all-encryption.ps1 - captures the encryption DMVs and catalog views for sqlencryption-review.
+
+    Requires: VIEW SERVER STATE and VIEW ANY DEFINITION on the instance (on SQL Server 2022 and
+    later the security-related DMVs need VIEW SERVER SECURITY STATE instead of VIEW SERVER STATE).
+    Uses Invoke-Sqlcmd from the SqlServer module when present, otherwise System.Data.SqlClient.
+    Read-only: the script runs SELECT statements only.
+#>
 [CmdletBinding()]
 param(
     [string]$ServerInstance = "localhost",

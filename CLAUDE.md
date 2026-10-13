@@ -231,7 +231,7 @@ Every change must be made on a new branch — never commit directly to `main`. B
 ### Before committing
 Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
 
-Checks 1–49 verify **structure** (counts, ranges, file presence, table rows). Checks 50–54 verify **claims and cross-skill content** and are delegated to [scripts/verify-claims.py](scripts/verify-claims.py), which `verify-docs.sh` invokes once so all five run against content read in a single pass:
+Checks 1–49 verify **structure** (counts, ranges, file presence, table rows). Checks 50–55 verify **claims, cross-skill content and shipped scripts** and are delegated to [scripts/verify-claims.py](scripts/verify-claims.py), which `verify-docs.sh` invokes once so all six run against content read in a single pass:
 
 | Check | Guards |
 |-------|--------|
@@ -240,12 +240,13 @@ Checks 1–49 verify **structure** (counts, ranges, file presence, table rows). 
 | 52 | Fixed-width example tables keep their column count, so a long value cannot eat its separator |
 | 53 | Specific claims that were wrong once stay fixed (a regression guard, not a correctness proof) |
 | 54 | The untrusted-artifact-content rule is present, byte-identical and correctly placed in all 28 `SKILL.md` files |
+| 55 | Every script under `skills/*/scripts/` has a `Requires:` permission line; capture `.sql` scripts contain no state-changing statement outside comments and strings; setup scripts (`*_create_*.sql`) say `CHANGES SERVER STATE` and carry a `Teardown` section |
 
 When adding content that duplicates a literal list, asserts something MS Learn does not document, or fixes a technical claim, extend the matching registry at the top of `verify-claims.py` — `DUPLICATED_LISTS`, `UNVERIFIED_CLAIMS`, or `CLAIM_SENTINELS`. If the untrusted-artifact-content rule is reworded, edit it in all 28 `SKILL.md` files in one pass — Check 54 fails on a single drifted copy; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §12. Keep `CLAIM_SENTINELS` short and tie every entry to a defect that actually shipped; a broad banned-phrase linter is deliberately not implemented, because it produces false positives and pressures authors to word around the check instead of fixing the content.
 
 These checks catch *regressions* of known-wrong claims. They cannot catch a new wrong claim, because nothing in the repo knows it is wrong yet — Microsoft Learn validation remains the actual gate, and this is a ratchet behind it.
 
-If no working Python interpreter is present, checks 50–54 are skipped with a warning and the structure checks still run. Detection probes each candidate rather than trusting `command -v`: on Windows, `python3` normally resolves to the Microsoft Store App Execution Alias stub, which is on `PATH`, is not Python, and exits 49 with an install prompt.
+If no working Python interpreter is present, checks 50–55 are skipped with a warning and the structure checks still run. Detection probes each candidate rather than trusting `command -v`: on Windows, `python3` normally resolves to the Microsoft Store App Execution Alias stub, which is on `PATH`, is not Python, and exits 49 with an install prompt.
 
 ### Dollar signs in SKILL.md files
 Never write `$` immediately followed by a digit or `[` inside SKILL.md files. The skill loader performs shell-style variable expansion on the entire file content, so `$0` expands to the input file path argument, `$1`/`$15` expand to empty strings, and `$[...]` is parsed as deprecated bash arithmetic. This bites SQL Server content in practice — named instances (`MSSQL$SQL2019`), shell snippets, and currency literals in T-SQL examples. Rephrase with a placeholder (`MSSQL$<InstanceName>`) or drop the symbol (`Amount > 1500.00`). Dollar signs followed by a letter are safe: PowerShell variables (`$true`), instance placeholders, and JSON paths (`'$.path'`) all pass. Enforced by verify-docs.sh Check 5; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §10.

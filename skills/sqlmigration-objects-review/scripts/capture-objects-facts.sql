@@ -1,6 +1,13 @@
 -- capture-objects-facts.sql
 -- Run on the SOURCE instance to collect facts needed by /sqlmigration-objects-review (M1-M16).
 -- Native T-SQL only -- no third-party tooling required.
+-- Requires: VIEW ANY DEFINITION and ALTER ANY LOGIN (or VIEW ANY DEFINITION
+--   alone on most catalog views), plus SELECT on the msdb tables read here
+--   (sysjobs, sysjobsteps, sysschedules, syscategories, sysoperators,
+--   sysalerts, sysproxies, sysmail_profile, sysmail_account) — SQL Server
+--   Agent and Database Mail tables are not covered by server-level metadata
+--   permissions. sysadmin covers all of it; use a dedicated login rather
+--   than sa.
 
 -- Query 1: Agent jobs, owners, and category
 SELECT j.name, j.enabled, c.name AS category_name, j.owner_sid

@@ -1,3 +1,10 @@
+<#
+    test-tls.ps1 - reads the SChannel protocol registry keys and tests a TLS connection to SQL Server.
+
+    Requires: read access to HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL
+    on the machine it runs on, and network reach to the target port. No SQL Server permission is
+    needed. Read-only.
+#>
 [CmdletBinding()]
 param(
     [string]$ComputerName = "localhost",

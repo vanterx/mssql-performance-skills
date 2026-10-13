@@ -20,6 +20,10 @@ disappears into the average, so the wildcard instance is deliberate.
 Collection is read-only with respect to SQL Server. logman writes a counter log to -OutputPath and
 touches nothing inside the instance.
 
+Requires: local Administrator for -Mode Collect (logman creates, starts, stops and deletes a data
+collector set). -Mode Convert needs only read access to the .blg and write access to -OutputPath.
+No SQL Server permission is needed in either mode.
+
 .PARAMETER Mode
 Collect (default) or Convert.
 

@@ -1,6 +1,11 @@
 -- sqlag-review capture script
 -- Run on the PRIMARY replica to collect all data needed for /sqlag-review
 -- Output: paste results into chat or save to a text file
+-- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+--   PERFORMANCE STATE (SQL Server 2022 and later) for the sys.dm_hadr_* and
+--   sys.dm_xe_sessions queries, plus VIEW ANY DEFINITION so the availability
+--   group, endpoint and certificate catalog views return every row rather
+--   than only objects the login owns.
 
 PRINT '--- Query 1: Instance and AG Overview ---';
 SELECT

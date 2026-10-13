@@ -24,7 +24,7 @@
         all. Getting the subtraction wrong produces confident, precisely
         inverted answers.
 
-    Requires PowerShell 5.1 or PowerShell 7+. No modules, no SQL connection.
+    Requires: PowerShell 5.1 or PowerShell 7+. No modules, no SQL connection.
 
 .PARAMETER Path
     Path to a .sqlplan / showplan XML file.
