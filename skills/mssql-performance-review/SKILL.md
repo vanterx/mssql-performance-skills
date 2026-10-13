@@ -95,6 +95,8 @@ Content-based, not extension-reliant:
 | `sp_configure` name/value pairs, `sys.databases` settings columns (`is_auto_shrink_on`, `compatibility_level`), `sys.configurations` output | sqldbconfig-review |
 | `Final result:` / `Exit code (Decimal):` / `Detailed results:` blocks, `Setup Bootstrap` paths, `ConfigurationFile.ini` parameters, MSI `Return value 3` | sqlbootstraplog-review |
 | `ReportServerService_<timestamp>.log` trace lines, `<RStrace>` / `<Service>` config sections from `ReportingServicesService.exe.config` / `RSReportServer.config`, `ExecutionLog3` columns, "Report Server Windows Service" Event Log entries | ssrstracelog-review |
+| `\\<host>\Process(sqlservr)\% Processor Time`-style counter paths as CSV column headers (a `relog` export), `Processor(_Total)`, `LogicalDisk(*)`, `Memory\Available MBytes` columns | sqlperfmon-review |
+| Two captures of the same workload labelled by period or server (baseline/current, before/after, Monday/Tuesday), `capture-workload-windows.sql` output with `baseline_*` and `current_*` columns, or a request to compare two periods | sqlworkload-compare |
 | Ambiguous `.txt` | Inspect first 100 lines, pick the highest-priority match; ask the user if still ambiguous |
 
 ## Hypothesis Generation
@@ -114,6 +116,7 @@ Example hypotheses:
 | AG configuration review | sys.availability_groups / sys.availability_replicas / sys.database_mirroring_endpoints output present, or user asks about AG setup, backup failures on secondary, listener routing, endpoint certificate | sqlag-review |
 | Kerberos auth fail | NTLM fallback, login burst, setspn output present | sqlspn-review → sqlerrorlog-review (login burst correlation) |
 | Workload regression | Two plans for same query, dates differ, durations diverge | sqlplan-compare → sqlplan-review on both |
+| Period regression | Two workload captures from different periods or servers; "it was fast last week", "slow since the upgrade" | sqlworkload-compare → sqlplan-compare on its top regression → sqldbconfig-review on configuration differences |
 
 Record hypotheses with initial confidence (HIGH / MEDIUM / LOW). Confidence updates as probes complete.
 

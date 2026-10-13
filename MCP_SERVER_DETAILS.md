@@ -64,7 +64,7 @@ HTTP request  ──►  index.ts (fetch handler)
 |----------|-----------|
 | Skills bundled at build time, not loaded at runtime | Cloudflare Workers have no filesystem; bundling avoids needing KV storage or external fetches |
 | Stateless — new server instance per request | Workers have no persistent memory between requests; this matches the execution model |
-| No authentication layer | The server is a public read-only knowledge base; all 28 skills are public Markdown |
+| No authentication layer | The server is a public read-only knowledge base; all 29 skills are public Markdown |
 | Zod validation on all tool inputs | Prevents malformed inputs reaching routing and lookup logic |
 | `WebStandardStreamableHTTPServerTransport` | Implements the MCP streamable HTTP transport over standard `Request`/`Response` — compatible with Cloudflare Workers' fetch API |
 
@@ -209,7 +209,7 @@ fetch(request)
         │
         ├── createServer()
         │     ├── registerTools(server, SKILLS)      →  31 tools registered (4 utility + 27 per-skill)
-        │     ├── registerResources(server, SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT)  →  skills index, 27 SKILL.md, per-skill reference index + files, guide, version-compat resources registered
+        │     ├── registerResources(server, SKILLS, GUIDE_CONTENT, VERSION_COMPAT_CONTENT)  →  skills index, 29 SKILL.md, per-skill reference index + files, guide, version-compat resources registered
         │     └── registerPrompts(server, SKILLS)    →  27 prompts registered
         │
         ├── server.connect(transport)
@@ -270,12 +270,12 @@ The `.js` extension in imports (`import type { SkillMeta } from "./skill-loader.
 This is the only file in `src/` that is generated rather than hand-authored. It exports:
 
 ```ts
-export const SKILLS: SkillMeta[]      // 28 skills, alphabetically sorted
+export const SKILLS: SkillMeta[]      // 29 skills, alphabetically sorted
 export const GUIDE_CONTENT: string    // full PERFORMANCE_TUNING_GUIDE.md
 export const VERSION_COMPAT_CONTENT: string  // full skills/VERSION_COMPATIBILITY.md
 ```
 
-The 28 skills in alphabetical order:
+The 29 skills in alphabetical order:
 
 | # | Name | Checks |
 |---|------|--------|
@@ -305,10 +305,11 @@ The 28 skills in alphabetical order:
 | 24 | sqlstats-review | 27 |
 | 25 | sqltrace-review | 27 |
 | 26 | sqlwait-review | 45 |
-| 27 | ssrstracelog-review | 24 |
-| 28 | tsql-review | 85 |
+| 27 | sqlworkload-compare | 14 |
+| 28 | ssrstracelog-review | 24 |
+| 29 | tsql-review | 85 |
 
-**Total: 936 checks across 26 analytical skills + 2 dispatcher skills**
+**Total: 950 checks across 27 analytical skills + 2 dispatcher skills**
 
 ---
 
@@ -322,7 +323,7 @@ Four utility tools are registered (`list_skills`, `get_skill`, `get_reference`, 
 
 ```
 Input:   none
-Output:  JSON array of { name, description, triggers, checkCount } for all 28 skills
+Output:  JSON array of { name, description, triggers, checkCount } for all 29 skills
 Purpose: Discovery — lets a client enumerate available skills before calling get_skill
 ```
 
@@ -365,7 +366,7 @@ Every `references/*.md` file (check explanations, how-to guides, concepts, error
 ```
 Input:   artifact_type: enum (25 values)
 Output:  JSON array of { name, description, primaryTrigger } for recommended skills
-Zod:     z.enum([...]) — exhaustive enum, rejects any unrecognised value at the SDK level
+Zod:     z.enum(ARTIFACT_TYPES) — derived from the map's keys, rejects any unrecognised value at the SDK level
 ```
 
 The routing table is a static `Record<string, string[]>` at the top of the file:
@@ -397,9 +398,15 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   migration:   ["sqlmigration-review"],
   migrationsecurity: ["sqlmigration-security-review"],
   migrationobjects:  ["sqlmigration-objects-review"],
+  perfmon:     ["sqlperfmon-review"],
+  workloadcompare: ["sqlworkload-compare"],
   mixed:       ["mssql-performance-review"],
 };
+
+export const ARTIFACT_TYPES = Object.keys(ARTIFACT_SKILL_MAP) as [string, ...string[]];
 ```
+
+The tool's enum is `ARTIFACT_TYPES`, derived from the map, so a type cannot be routable in the map and rejected by the schema. An earlier hand-maintained enum list had drifted: `blocking` and `perfmon` were in the map and missing from the enum, so `route_artifact` rejected them. `routing.test.ts` now asserts that the registered schema accepts every mapped type.
 
 Some artifact types map to two skills (`sqlplan` → review + index advisor). The `mixed` type routes to the `mssql-performance-review` orchestrator, which handles mixed or unknown artifact combinations by dispatching to the appropriate specialised skills. The response includes `primaryTrigger` — the first element of `skill.triggers`, which is the slash command the user would type.
 
@@ -414,8 +421,8 @@ Resources are URI-addressable, read-only data that MCP clients can fetch directl
 ### Resource index
 
 ```
-mssql://skills                              application/json    Index of all 28 skills with metadata
-mssql://skills/{name}                       text/markdown       Full SKILL.md for a specific skill (×27)
+mssql://skills                              application/json    Index of all 29 skills with metadata
+mssql://skills/{name}                       text/markdown       Full SKILL.md for a specific skill (×29)
 mssql://skills/{name}/references            application/json    List of reference files for a skill
 mssql://skills/{name}/references/{file}     text/markdown       One reference file (check-explanations.md, howto-*.md, concepts.md …)
 mssql://guide                               text/markdown       Full PERFORMANCE_TUNING_GUIDE.md

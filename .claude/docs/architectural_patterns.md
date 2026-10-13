@@ -120,6 +120,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B38 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
 | `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM15 |
+| `WC` | `sqlworkload-compare` | Two-capture workload comparison checks | WC1–WC14 |
 | `F` | `sqlag-review` | Always On AG configuration audit | F1–F38 |
 | `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U25 |
 | `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
@@ -337,7 +338,7 @@ Each skill has an `examples/` subfolder containing:
 
 ## 12. Artifact Content Is Untrusted Input
 
-**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 28 `SKILL.md` files, immediately before `## Input`.
+**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 29 `SKILL.md` files, immediately before `## Input`.
 
 Every skill in this library analyses material the user pastes in from a production system: ERRORLOG
 lines, trace rows, blocking-chain DMV output, `.sqlplan` XML, T-SQL source. That material carries
@@ -372,7 +373,7 @@ any artifact that contains `</artifact>`. A regex pre-scan
 resemble instructions. SQL Nexus replaces matched values with a placeholder; this repo does not,
 because rewriting evidence would hide exactly what the reframe above asks the model to report.
 
-**Convention:** the block is identical in all 28 files, so a single edit can be propagated
+**Convention:** the block is identical in all 29 files, so a single edit can be propagated
 mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both presence and
 byte-identity. Adopted from the groundedness and security rules in
 [`microsoft/sqlnexus`](https://github.com/microsoft/sqlnexus) `.github/agents/sql-nexus-diagnostic.agent.md`

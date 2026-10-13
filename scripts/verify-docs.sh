@@ -677,6 +677,7 @@ declare -A P2S=(
     [G]="ssrstracelog-review"
     [BL]="sqlblocking-review"
     [PM]="sqlperfmon-review"
+    [WC]="sqlworkload-compare"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
