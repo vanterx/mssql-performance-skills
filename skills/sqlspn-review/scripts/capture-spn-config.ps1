@@ -65,6 +65,9 @@
     Requires: PowerShell 5.1+ or 7+, the ActiveDirectory module (RSAT), and
     setspn.exe (built into Windows). Domain-joined host, running as a domain user
     with read access to AD. No elevation required for the read-only queries.
+    With -ServerInstance, the login also needs VIEW SERVER STATE (VIEW SERVER
+    PERFORMANCE STATE on SQL Server 2022 and later) to read sys.dm_exec_connections
+    beyond its own session.
 
     For SQL Server on Linux (K49-K51) this script does not apply - capture instead:
       /opt/mssql/bin/mssql-conf validate-ad-config /var/opt/mssql/secrets/mssql.keytab

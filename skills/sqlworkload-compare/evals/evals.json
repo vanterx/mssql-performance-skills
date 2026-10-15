@@ -1,0 +1,23 @@
+{
+  "skill_name": "sqlworkload-compare",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Compare Monday 09:00-10:00 (baseline) with Tuesday 09:00-10:00 (current) for SalesDB. Output from capture-workload-windows.sql is attached.",
+      "expected_output": "WC1 passes (same Query Store, 60-minute windows, cpu_count 16 both sides) and is reported first. Total duration 1,257,260 -> 2,868,055 ms (2.28x). WC2 Critical for 0x1A2B... (18.4 -> 61.2 ms, 27.6% of current duration, added 554,260 ms) classified WC8 reads-driven (reads 7.95x); WC2 Critical for 0x3C4D... (210 -> 690 ms) classified WC7 CPU-driven (CPU +430 of +480 ms, reads 1.10x); WC2 Critical for 0x2B3C... (42 -> 118.5 ms) classified WC9 wait-driven (CPU 1.08x, reads 1.04x) with an explicit warning not to apply RECOMPILE. WC6 Warning: 4 of 8 matched queries regressed (50%). WC4 Warning for the current-only usp_ReconcileLedger at 10.3% of duration. WC5 Info for the baseline-only usp_ExportDailyOrders (7.2%), noting capture mode ALL rules out a capture gap. WC10 Info for the price lookup (750 -> 1,600 execs/min, cost flat). WC3 Info for the shipment lookup (0.59x). WC11 cost threshold 50 -> 5, WC12 CU12 -> CU14, WC13 compatibility level 140 -> 160, all Warning. WC14 Warning with waits normalised per second per CPU (lock 0.9 -> 4.6, 5.1x). Regressions ranked by added time, not ratio. Action order puts the configuration changes before per-query tuning.",
+      "files": ["examples/workload-windows.txt"]
+    },
+    {
+      "id": 2,
+      "prompt": "Baseline: one-hour Query Store window, total duration 1,200,000 ms, 4,000 executions of usp_GetOrders. Current: four-hour window, total duration 4,950,000 ms, 16,400 executions of usp_GetOrders at the same average. The user says everything is four times slower.",
+      "expected_output": "WC1 Warning reported first: the windows differ 4x and the user is comparing totals. Normalised per minute the workload grew about 3% (20,000 -> 20,625 ms/min) and usp_GetOrders executions per minute grew 2.5% (66.7 -> 68.3), so there is no regression. Must not report WC2 for usp_GetOrders (same average). Should explain that totals compare nothing across windows of different length and recommend comparing equivalent windows.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Trace aggregates for a slow day and a fast day. The slow day's trace had a 100 ms duration filter; the fast day's trace had none. Query 0xAA... appears only in the fast day's aggregates with 30,000 executions averaging 4 ms. The user asks why that query stopped running on the slow day.",
+      "expected_output": "WC1 Warning: the two sides have different filters, so baseline-only and current-only rows are suspect. WC5 must not conclude the query stopped: at 4 ms it falls below the slow day's 100 ms filter, so its absence is a capture artefact. Should recommend re-capturing the slow day without the filter (or with Query Store) before drawing conclusions, and should note the asymmetry the SQL Nexus comparison suffers from when a floor is applied to one side only.",
+      "files": []
+    }
+  ]
+}

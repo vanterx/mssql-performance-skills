@@ -1,6 +1,6 @@
 ---
 name: sqltrace-review
-description: Analyze SQL Server trace files and Extended Events output to identify workload-level performance patterns. Applies 25 checks (X1–X12 event-level, X13–X25 workload aggregate) covering long-running queries, high-frequency N+1 patterns, parameter sniffing signals, recompilations, lock timeouts, hash/sort warnings, top resource consumers, and SQL 2019/2022 modern feature events. Use when a user provides Profiler trace output, sys.fn_trace_gettable() results, or Extended Events session data.
+description: Analyze SQL Server trace files and Extended Events output to identify workload-level performance patterns. Applies 27 checks (X1–X12 event-level, X13–X27 workload aggregate) covering long-running queries, high-frequency N+1 patterns, parameter sniffing signals, recompilations, lock timeouts, hash/sort warnings, top resource consumers, and SQL 2019/2022 modern feature events. Use when a user provides Profiler trace output, sys.fn_trace_gettable() results, or Extended Events session data.
 triggers:
   - /sqltrace-review
   - /trace-review
@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Analyze workload-level diagnostic data from SQL Server Profiler traces (`.trc`), Extended Events sessions (`.xel`), `sys.fn_trace_gettable()` output, or XE session query results. Produce a ranked summary of top resource consumers and a prioritized findings report covering 25 checks (X1–X25) across event patterns and cross-event workload aggregates.
+Analyze workload-level diagnostic data from SQL Server Profiler traces (`.trc`), Extended Events sessions (`.xel`), `sys.fn_trace_gettable()` output, or XE session query results. Produce a ranked summary of top resource consumers and a prioritized findings report covering 27 checks (X1–X27) across event patterns and cross-event workload aggregates.
 
 Trace analysis reveals patterns that no single-query artifact can show: which queries run thousands of times per minute, which have wildly inconsistent durations (parameter sniffing), how many recompilations are happening globally, and whether spill or lock events correlate with slow periods.
 
@@ -42,6 +42,7 @@ Accept any of:
 - SSMS Profiler trace grid — copy-paste from the trace window
 - A `.trc` or `.xel` file path (describe what to extract if the file cannot be read directly)
 - A natural-language description of trace contents ("the trace shows 48,000 executions of a stored proc in 60 seconds, each reading 3,200 pages")
+- Optionally, the instance's logical processor count (`SELECT cpu_count FROM sys.dm_os_sys_info;`) — X27 needs it to express a query's CPU as a share of the machine
 
 **Duration units:** SQL Profiler `.trc` Duration column = **microseconds**. Extended Events `duration` = **microseconds**. CPU units differ by event class: for `SQL:BatchCompleted` (EventClass 12), CPU is in **milliseconds**; for `RPC:Completed` (EventClass 10), CPU is in **microseconds beginning with SQL Server 2012 (11.x)**, and in **milliseconds in earlier versions**. On SQL Server 2008 R2 and earlier, all trace CPU values were in milliseconds. Normalize all duration values to milliseconds before applying thresholds and displaying results.
 
@@ -95,10 +96,12 @@ Accept any of:
 | Error severity — critical | error severity ≥ 20 |
 | Recompile threshold | ≥ 3 recompile events for the same object/query in trace window |
 | High-frequency query | ≥ 1,000 executions of the same normalized query |
-| Parameter sniffing signal | max duration > 10× min duration, same normalized query, ≥ 10 executions |
+| Parameter sniffing signal | max duration > 10× min duration and slowest ≥ 1,000 ms, same normalized query, ≥ 2 executions; classified by reads spread (≥ 10× = plan-shape) |
 | Global recompile ratio | recompile events > 5% of (SQL:BatchCompleted + RPC:Completed) events |
 | Workload concentration | top 3 normalized queries > 80% of total CPU |
 | Ad-hoc ratio | distinct query texts / total query events > 80% |
+| Diagnostic-collector load (X26) | collector queries ≥ 5% of total CPU → Warning; any present → Info |
+| One query's share of machine CPU (X27) | ≥ 25% of `cpu_count × window` → Warning; ≥ 50% → Critical |
 
 ---
 
@@ -156,7 +159,7 @@ Evaluate per-event rows. A check fires if any single event meets its trigger con
 
 ---
 
-## Workload-Level Checks (X13–X25)
+## Workload-Level Checks (X13–X27)
 
 Evaluate aggregated patterns across all events in the trace.
 ### X13 — High-Frequency Query (N+1 Signal)
@@ -164,9 +167,13 @@ Evaluate aggregated patterns across all events in the trace.
 - **Severity:** Warning
 - **Fix:** A query executing 1,000+ times in the trace window is a classic N+1 pattern — the application loops over a result set and issues one query per row. Rewrite as a single set-based query with a JOIN or use a table-valued parameter to batch the lookups. Even if each execution is fast, 10,000 round trips × 1 ms = 10 seconds of serial latency per batch.
 ### X14 — Parameter Sniffing Signal (High Duration Variance)
-- **Trigger:** Same normalized query pattern with ≥ 10 executions where `max(duration) > 10 × min(duration)`
-- **Severity:** Warning
-- **Fix:** The cached plan was compiled for one parameter value but executes poorly for others. Fixes ranked by impact: (1) `OPTION(RECOMPILE)` on the query — per-execution plan, eliminates sniffing; (2) `OPTION(OPTIMIZE FOR (@param = typical_value))` — pins a representative plan; (3) separate stored procedures for high/low cardinality paths; (4) use Query Store to force the good plan. Use `/sqlplan-compare` to diff the fast and slow plans.
+- **Trigger:** Same normalized query pattern with ≥ 2 executions where `max(duration) > 10 × min(duration)` and the slowest execution took ≥ 1,000 ms — a spread entirely below one second is cache, compile and scheduling noise. Below 10 executions, say the sample is small. When the trace carries `Reads`, classify the spread before recommending anything:
+  - **Plan-shape variance** — `max(reads) ≥ 10 × max(min(reads), 1)`. The slow executions did far more logical work, which a plan compiled for different parameter values explains and a wait does not.
+  - **Wait variance** — duration spreads ≥ 10× but reads stay within 10×. The slow executions did about the same work and spent the difference waiting (blocking, I/O, memory grant, log), so the plan is not the cause.
+  - **Unclassified** — the trace has no `Reads` column; say so.
+  Report the coefficient of variation alongside, `stdev(duration) / avg(duration) × 100`: a high value separates an intermittently slow query, the usual sniffing shape, from one that is uniformly slow.
+- **Severity:** Warning for plan-shape variance or unclassified; Info for wait variance
+- **Fix:** *Plan-shape variance:* the cached plan was compiled for one parameter value but executes poorly for others. Fixes ranked by impact: (1) `OPTION(RECOMPILE)` on the query — per-execution plan, eliminates sniffing; (2) `OPTION(OPTIMIZE FOR (@param = typical_value))` — pins a representative plan; (3) separate stored procedures for high/low cardinality paths; (4) use Query Store to force the good plan. Use `/sqlplan-compare` to diff the fast and slow plans. *Wait variance:* do not apply a plan fix — `RECOMPILE` adds compile cost and changes nothing about the wait. Correlate the slow executions' `StartTime` with blocking or wait captures from the same window and route to `/sqlblocking-review` or `/sqlwait-review`. *Unclassified:* capture both plans and diff them with `/sqlplan-compare` before choosing a fix. Classifying by reads spread follows `microsoft/SqlNexus` `DiagnosticAnalyzer.GetTopCpuQueries` (MIT).
 ### X15 — Ad-Hoc / Unparameterized Workload
 - **Trigger:** Distinct normalized query texts / total query events > 80%, OR large number of near-identical queries with embedded literals (e.g., `WHERE Id = 1`, `WHERE Id = 2`, ..., `WHERE Id = N`)
 - **Severity:** Info
@@ -217,6 +224,16 @@ Evaluate aggregated patterns across all events in the trace.
 - **Severity:** Warning — ADR Persistent Version Store (PVS) garbage collection is taking > 5 seconds; this blocks version store space reclamation and can indicate long-running transactions preventing cleanup
 - **Fix:** Identify blocking transactions: `SELECT * FROM sys.dm_tran_active_transactions WHERE transaction_begin_time < DATEADD(MINUTE,-5,GETUTCDATE())`. Check PVS size: `SELECT * FROM sys.dm_tran_persistent_version_store_stats`. Commit or roll back idle transactions to unblock cleanup.
 
+
+### X26 — Diagnostic-Collector Queries in the Capture
+- **Trigger:** Batches issued by the diagnostic collector that produced the capture are present. Identify them by text — PSSDIAG and SQL LogScout run their own procedures and probes, and the names `microsoft/SqlNexus` filters out of its comparisons include `sp_perf_stats`, `sp_sqldiag`, `sp_blocker_pss`, `sp_code_runner`, `sp_set_blk_threshold`, `sp_diag_trace_flag`, `TraceFlagOriginalStatus`, `HasMemoryScribblerIssue` and `##MaxNameWidth`, alongside generic probes such as `DBCC SQLPERF`, `DBCC TRACESTATUS`, `xp_msver` and `fn_trace_getinfo` — or by an `ApplicationName` that names the collector. These names come from SQL Nexus's source, not from Microsoft documentation: unverified against Microsoft Learn, so treat a match as a strong hint and say which pattern matched.
+- **Severity:** Info when present; Warning when the collector's batches account for ≥ 5% of total CPU in the window
+- **Fix:** Exclude collector batches from every top-N table (X1–X13, X27) before ranking, and report how many were excluded and their share of CPU and duration — a monitoring probe should never be the "top query" a report sends someone to tune. Do not widen the filter to generic words such as `repl`, `distribution` or `backupset`, which SQL Nexus also filters but which match real application and maintenance work. A share above 5% is the observer effect: the capture is materially loading the server it measures, usually because a statement-level or blocking probe runs at a short interval. Shorten the capture or lengthen the probe interval, and see `/sqldbconfig-review` B38 for the server-side sessions behind it.
+
+### X27 — Single Query Consumes a Large Share of Machine CPU
+- **Trigger:** For a normalized query pattern, `SUM(cpu) / (cpu_count × window)` ≥ 25%, where `window` is the elapsed time from the first event's start to the last event's end and `cpu_count` is the instance's logical processor count (`sys.dm_os_sys_info.cpu_count`). Convert CPU to milliseconds first, using the unit rules in the Input section — SQL Trace `CPU` units differ by event class and version, and Extended Events `cpu_time` is microseconds. Without `cpu_count`, report X27 as NOT ASSESSED rather than guessing.
+- **Severity:** Warning at ≥ 25%; Critical at ≥ 50%
+- **Fix:** Total CPU ranks queries against each other; this check ranks a query against the machine, which is what decides whether tuning it changes anything the user can feel. A query at 40% of capacity is the CPU problem; a top query at 2% means the CPU pressure is spread thin, so per-query tuning will not move it and the next stop is workload volume (X13) or `/sqlperfmon-review` PM1/PM2 for who else is using the host. Two caveats belong in the report: a trace filtered by a duration floor omits short executions, so every share is a lower bound; and a window that includes idle time understates a burst — quote the window. Route the top pattern to `/sqlplan-review` with its plan, or to `/sqlquerystore-review` for its history. The capacity denominator follows `microsoft/SqlNexus` `DiagnosticAnalyzer.GetTopCpuQueries` (`pct_of_cpu_capacity`, MIT) and Microsoft's high-CPU troubleshooting guide, which expresses query CPU as a percentage of total CPU capacity in the same way.
 ---
 
 ## Version-Aware Check Suppression

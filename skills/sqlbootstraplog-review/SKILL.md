@@ -1,6 +1,6 @@
 ---
 name: sqlbootstraplog-review
-description: Analyze SQL Server Setup Bootstrap log files to diagnose failed installations, failed Cumulative Update or Service Pack patching, failed cluster node operations, and risky setup-time configuration. Parses Summary.txt, Detail.txt, MSI/MSP logs, ConfigurationFile.ini, and SystemConfigurationCheck_Report content from the Setup Bootstrap Log folder. Applies 24 checks (U1–U24) covering final-result failure and exit-code extraction, failed setup rules (pending reboot, disk space, account permissions, prerequisites, cluster rules), Detail.txt exception forensics, MSI "Return value 3" patterns, and ConfigurationFile.ini review (service accounts, instant file initialization, TempDB layout, mixed authentication, feature sprawl, directory placement). Use this skill whenever SQL Server setup, an in-place upgrade, a patch, or add/remove node fails, or when a user pastes Summary.txt, Detail.txt, or ConfigurationFile.ini content.
+description: Analyze SQL Server Setup Bootstrap log files to diagnose failed installations, failed Cumulative Update or Service Pack patching, failed cluster node operations, and risky setup-time configuration. Parses Summary.txt, Detail.txt, MSI/MSP logs, ConfigurationFile.ini, and SystemConfigurationCheck_Report content from the Setup Bootstrap Log folder. Applies 25 checks (U1–U25) covering final-result failure and exit-code extraction, failed setup rules (pending reboot, disk space, account permissions, prerequisites, cluster rules), Detail.txt exception forensics, MSI "Return value 3" patterns, missing Windows Installer cache packages, and ConfigurationFile.ini review (service accounts, instant file initialization, TempDB layout, mixed authentication, feature sprawl, directory placement). Use this skill whenever SQL Server setup, an in-place upgrade, a patch, or add/remove node fails, or when a user pastes Summary.txt, Detail.txt, or ConfigurationFile.ini content.
 triggers:
   - /sqlbootstraplog-review
   - /bootstrap-log
@@ -13,7 +13,7 @@ triggers:
 
 Analyze SQL Server Setup Bootstrap log artifacts to find why an installation, upgrade,
 patch (CU/SP), repair, or cluster node operation failed — and to flag risky setup-time
-configuration before it becomes production drift. Applies 24 checks (U1–U24) across four
+configuration before it becomes production drift. Applies 25 checks (U1–U25) across five
 categories:
 
 - **U1–U6** — Summary and outcome: final result failure, exit-code extraction, failed
@@ -25,6 +25,8 @@ categories:
   setup crashes, failure-chain root-cause ordering, Datastore state files
 - **U19–U24** — ConfigurationFile.ini review: service accounts, instant file
   initialization, TempDB layout, security surface, feature sprawl, directory placement
+- **U25** — Windows Installer cache: a cached `.msi` or `.msp` missing from
+  `%windir%\Installer`, which blocks every later patch, repair, and uninstall
 
 Setup runs three phases — (1) Global Rules verification, (2) Component update,
 (3) the user-requested action — and writes a dated log folder per run. This skill is the
@@ -66,6 +68,7 @@ Accept any of:
 - **SystemConfigurationCheck_Report.htm** content (pasted as text) — rule names, short
   descriptions, and execution status
 - **`%temp%\sqlsetup*.log`** — logs from unattended-mode runs
+- **`FindSQLInstalls.vbs` output** or a SQL LogScout `*_MissingMsiMsp_Detailed.txt` file — missing Windows Installer cache packages (U25)
 - A natural-language description ("setup failed with 0x851A001A installing the engine")
 
 ### Where the files live
@@ -375,6 +378,15 @@ password parameter is normal, not a finding.
   drive. The INI parameters map 1:1 to the Database Engine Configuration → Data
   Directories setup page. Post-install validation: `/sqldiskio-review` Z6–Z10.
 
+
+---
+
+## Windows Installer Cache Check (U25)
+
+### U25 — Cached MSI or MSP Package Missing From the Windows Installer Cache
+- **Trigger:** A setup or MSI log names a cached package missing from `%windir%\Installer`, or reports a Windows Installer error Microsoft lists as a missing-cache symptom: `1612` (installation source not available), `1620` (package could not be opened), `1635` or `1636` (MSP could not be opened), `1642` (upgrade cannot be installed), `1706`, or `1714` (older SQL Server Native Client cannot be removed). Microsoft notes several of these are not specific to a missing cache, so the trigger needs the error together with a named `.msi`/`.msp` path or a `LocalPackage` reference; an error code alone is reported as *possible* cache damage.
+- **Severity:** Critical when it is the reason a patch, repair, or uninstall failed; Warning when found in a log whose operation succeeded (the next update will hit it)
+- **Fix:** Windows Installer keeps a stripped copy of every `.msi` and every update's `.msp` in `%windir%\Installer`, and every later update, repair and uninstall reads them. The files are unique to each machine and cannot be copied from another server. Restore them from the original media in the order Microsoft's KB969052 gives: the FixMissingMSI tool (scans the cache, re-caches from extracted media), then the `FindSQLInstalls.vbs` script (names each missing file and the exact source path to re-establish), then manual restore using the `LocalPackage` value under `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Patches\` to map the missing `.msp`, and finally a system state restore. Extract cumulative updates and service packs with `/X` before pointing a tool at them, run elevated, and run a setup repair once the files are back before retrying the update. If the cache keeps losing files, look for disk cleanup tools, group policies or backup agents that prune `C:\Windows\Installer` — Microsoft warns that manual changes to that folder cause exactly this. Adapted from `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeSetupHealth` (MIT), which reads the same condition from the SQL LogScout `*_MissingMsiMsp_Detailed.txt` output; that file, when supplied, is direct evidence.
 ---
 
 ## Version-Aware Check Suppression
@@ -411,7 +423,7 @@ Present findings in this order:
    if required → rerun → post-install validation), with companion skill references.
 6. **Configuration advisories** — U19–U24 findings, separated from the failure analysis.
 
-> Analyzed by: `sqlbootstraplog-review` (U1–U24)
+> Analyzed by: `sqlbootstraplog-review` (U1–U25)
 
 ---
 

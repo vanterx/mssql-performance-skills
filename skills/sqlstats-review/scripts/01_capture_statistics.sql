@@ -17,6 +17,10 @@
     - If you want to test cold cache (physical reads), run:
         DBCC DROPCLEANBUFFERS;  -- only on non-production!
     - Include all JOIN'd tables' stats — the output shows each table separately.
+
+  Requires: only the permissions to run the query being measured. SET
+  STATISTICS IO and SET STATISTICS TIME need no further permission (SHOWPLAN
+  is not required).
 ================================================================================
 */
 

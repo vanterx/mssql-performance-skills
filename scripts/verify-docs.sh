@@ -677,6 +677,7 @@ declare -A P2S=(
     [G]="ssrstracelog-review"
     [BL]="sqlblocking-review"
     [PM]="sqlperfmon-review"
+    [WC]="sqlworkload-compare"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
@@ -1028,7 +1029,7 @@ if [ -n "$guide_total" ] && [ "$guide_sum" != "$guide_total" ]; then
 fi
 [ "$check49_ok" -eq 1 ] && pass "Check ID Reference rows match SKILL.md and sum to $guide_total"
 # ---------------------------------------------------------------------------
-# Checks 50-53: claim-level invariants (scripts/verify-claims.py)
+# Checks 50-55: claim-level invariants (scripts/verify-claims.py)
 # ---------------------------------------------------------------------------
 # Everything above verifies STRUCTURE - counts, ranges, file presence. These
 # four verify the technical CLAIMS, which were previously unguarded: a correct
@@ -1045,7 +1046,7 @@ fi
 # Windows because of many small grep invocations, and the gate only works if it
 # is actually run.
 echo ""
-echo "[50-54] Claim-level and cross-skill content invariants"
+echo "[50-55] Claim-level, cross-skill content and shipped-script invariants"
 # Probe each candidate rather than trusting `command -v`. On Windows, python3
 # usually resolves to the Microsoft Store App Execution Alias stub, which exists
 # on PATH, is not Python, and exits 49 with an install prompt. Existence is not
@@ -1059,7 +1060,7 @@ for candidate in python3 python py; do
     fi
 done
 if [ -z "$PYBIN" ]; then
-    warn "no working python found — claim-level checks 50-54 SKIPPED (structure checks above still ran)"
+    warn "no working python found — claim-level checks 50-55 SKIPPED (structure checks above still ran)"
 else
     claims_out=$("$PYBIN" scripts/verify-claims.py 2>&1)
     claims_rc=$?

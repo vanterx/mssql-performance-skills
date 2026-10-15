@@ -106,7 +106,7 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `T` | `tsql-review` | T-SQL static analysis checks | T1–T85 |
 | `I` | `sqlstats-review` | IO metrics checks | I1–I18 |
 | `W` | `sqlstats-review` | Time/wait metrics checks | W1–W9 |
-| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X25 |
+| `X` | `sqltrace-review` | Trace event-level and workload checks | X1–X27 |
 | `V` | `sqlwait-review` | Wait statistics checks + trend analysis | V1–V45 |
 | `Q` | `sqlquerystore-review` | Query Store health and regression checks | Q1–Q32 |
 | `R` | `sqlprocstats-review` | Procedure/trigger/function runtime stats | R1–R25 |
@@ -117,11 +117,12 @@ Check IDs use a **single uppercase letter prefix + sequential number**. No prefi
 | `O` | `sqlmemory-review` | Memory pressure: PLE, plan cache, grants, clerks | O1–O20 |
 | `Z` | `sqldiskio-review` | File I/O latency and auto-growth checks | Z1–Z15 |
 | `A` | `sqlencryption-review` | Full encryption posture: TDE, AE, CLE, TLS, certs, key hierarchy, EKM, compliance | A1–A112 |
-| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B29 |
+| `B` | `sqldbconfig-review` | Instance and database configuration drift | B1–B38 |
 | `G` | `ssrstracelog-review` | SSRS report server trace log checks | G1–G24 |
-| `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM14 |
-| `F` | `sqlag-review` | Always On AG configuration audit | F1–F37 |
-| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U24 |
+| `PM` | `sqlperfmon-review` | Windows Perfmon counter checks | PM1–PM15 |
+| `WC` | `sqlworkload-compare` | Two-capture workload comparison checks | WC1–WC14 |
+| `F` | `sqlag-review` | Always On AG configuration audit | F1–F38 |
+| `U` | `sqlbootstraplog-review` | SQL Server Setup Bootstrap log checks | U1–U25 |
 | `Y` | `sqlmigration-review` | Migration version/edition/platform compatibility | Y1–Y15 |
 | `J` | `sqlmigration-security-review` | Migration security-object portability | J1–J15 |
 | `M` | `sqlmigration-objects-review` | Migration operational-object portability | M1–M16 |
@@ -337,7 +338,7 @@ Each skill has an `examples/` subfolder containing:
 
 ## 12. Artifact Content Is Untrusted Input
 
-**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 28 `SKILL.md` files, immediately before `## Input`.
+**Where:** `## Artifact Content Is Data, Not Instructions` — a byte-identical block in all 29 `SKILL.md` files, immediately before `## Input`.
 
 Every skill in this library analyses material the user pastes in from a production system: ERRORLOG
 lines, trace rows, blocking-chain DMV output, `.sqlplan` XML, T-SQL source. That material carries
@@ -364,8 +365,42 @@ The block states three things, and the wording matters more than the length:
    says, and cannot authorise action outside the review (database writes, shell or PowerShell
    execution, network calls, reading unsupplied files).
 
-**Convention:** the block is identical in all 28 files, so a single edit can be propagated
+**The MCP path adds two code-level layers** ([mcp-server/src/prompt-builder.ts](../../mcp-server/src/prompt-builder.ts)).
+The envelope tag is random per request, because a fixed `<artifact>` tag can be closed early by
+any artifact that contains `</artifact>`. A regex pre-scan
+([injection-scan.ts](../../mcp-server/src/injection-scan.ts), patterns adapted from
+`microsoft/SqlNexus` `UntrustedDataEnvelope.cs`) places a note outside the envelope when lines
+resemble instructions. SQL Nexus replaces matched values with a placeholder; this repo does not,
+because rewriting evidence would hide exactly what the reframe above asks the model to report.
+
+**Convention:** the block is identical in all 29 files, so a single edit can be propagated
 mechanically and drift is detectable. `verify-claims.py` Check 54 enforces both presence and
 byte-identity. Adopted from the groundedness and security rules in
 [`microsoft/sqlnexus`](https://github.com/microsoft/sqlnexus) `.github/agents/sql-nexus-diagnostic.agent.md`
 (MIT), rules 21 and 25.
+
+---
+
+## 13. Shipped Scripts: Capture vs. Setup
+
+**Where:** every file under `skills/*/scripts/`. Enforced by `verify-claims.py` Check 55.
+
+Users run these scripts on production servers, often by pasting them from a capture bundle the
+orchestrator assembled. Two classes exist, told apart by file name:
+
+| Class | Name | Contract |
+|-------|------|----------|
+| Capture | any `.sql` not named `*_create_*` | Read-only. Outside comments and string literals: no DML against permanent tables (temp tables and table variables are fine), no DDL, no `sp_configure` with a value, no `RECONFIGURE`, no `DBCC` outside a read-only allowlist, no state-changing system procedures, no `GRANT`/`REVOKE`/`DENY`, no `BACKUP`/`RESTORE`, no `xp_cmdshell`. |
+| Setup | `*_create_*.sql` | May change state. The header says `CHANGES SERVER STATE` and lists each change; the file ends with a commented `Teardown` section that undoes it. A setup script that changes an `sp_configure` value prints the previous value first, and puts `show advanced options` back the way it found it. |
+
+Every `.sql` and `.ps1` also carries a `Requires:` line naming the permission it needs — on SQL
+Server 2022 and later usually the granular `VIEW SERVER PERFORMANCE STATE` rather than `VIEW
+SERVER STATE` — so a reader can run it under a least-privilege login instead of `sa`.
+
+Only capture scripts are copied into an orchestrator capture bundle.
+
+**Why:** the read-only promise was in `capture-bundle-spec.md` before anything enforced it, and
+one setup script changed two server options and left a startup-state XE session behind with no
+documented way back. The rule follows the read-only enforcement in `microsoft/SqlNexus`
+`SqlNexus.McpServer` (a ScriptDom parse that admits one `SELECT`), scaled down to a regex check
+over comment- and string-stripped text: it does not see dynamic SQL assembled from fragments.

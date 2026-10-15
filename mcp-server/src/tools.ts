@@ -30,8 +30,14 @@ export const ARTIFACT_SKILL_MAP: Record<string, string[]> = {
   migrationsecurity: ["sqlmigration-security-review"],
   migrationobjects:  ["sqlmigration-objects-review"],
   perfmon:     ["sqlperfmon-review"],
+  workloadcompare: ["sqlworkload-compare"],
   mixed:       ["mssql-performance-review"],
 };
+
+// The route_artifact enum is derived from the map, so a type cannot be routable in the map but
+// rejected by the tool's schema. Before this, "blocking" and "perfmon" were in the map and missing
+// from a hand-maintained enum list.
+export const ARTIFACT_TYPES = Object.keys(ARTIFACT_SKILL_MAP) as [string, ...string[]];
 
 export function registerTools(server: McpServer, skills: SkillMeta[]): void {
   const byName = new Map(skills.map((s) => [s.name, s]));
@@ -114,13 +120,7 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
     "Given an artifact type, returns the recommended skill(s) to use for analysis",
     {
       artifact_type: z
-        .enum([
-          "tsql", "sqlplan", "plancompare", "planbatch",
-          "deadlock", "waits", "trace", "stats", "querystore",
-          "procstats", "hadr", "clusterlog", "errorlog", "spn",
-          "memory", "diskio", "encryption", "dbconfig", "setuplog", "ssrslog",
-          "agconfig", "migration", "migrationsecurity", "migrationobjects", "mixed",
-        ])
+        .enum(ARTIFACT_TYPES)
         .describe(
           "Type of artifact to analyze. " +
           "plancompare = two plans for regression diff; planbatch = folder of many plans; " +
@@ -131,7 +131,10 @@ export function registerTools(server: McpServer, skills: SkillMeta[]): void {
           "agconfig = AG catalog output (sys.availability_groups, sys.availability_replicas, listeners, endpoints); " +
           "migration = migration-readiness facts (source version/edition, features in use, target platform); " +
           "migrationsecurity = login, permission, credential, and certificate inventory for a migration; " +
-          "migrationobjects = SQL Agent jobs, linked servers, Database Mail, and other instance-level objects for a migration. " +
+          "migrationobjects = SQL Agent jobs, linked servers, Database Mail, and other instance-level objects for a migration; " +
+          "blocking = blocking-chain DMV output or blocked process reports; " +
+          "perfmon = Windows Performance Monitor counters (relog CSV) or sys.dm_os_performance_counters output; " +
+          "workloadcompare = two captures of the same workload (baseline and current periods, or two servers) to compare. " +
           "Use 'mixed' when the artifact combines multiple types or the type is unknown — routes to the mssql-performance-review orchestrator."
         ),
     },

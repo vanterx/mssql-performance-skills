@@ -1,6 +1,6 @@
-# sqldbconfig-review — Check Explanations (B1–B37)
+# sqldbconfig-review — Check Explanations (B1–B38)
 
-Plain-English explanations for all 29 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
+Plain-English explanations for all 38 configuration drift checks. Each entry follows the five-part structure: What it means / How to spot it / Example / Fix options / Related checks.
 
 ---
 
@@ -12,7 +12,7 @@ Plain-English explanations for all 29 configuration drift checks. Each entry fol
 - [B19–B23 — File and Storage Configuration](#b19b23--file-and-storage-configuration)
 - [B24–B29 — Surface Area and Feature Exposure](#b24b29--surface-area-and-feature-exposure)
 - [B30–B32 — Scheduler and Process Settings](#b30b32--scheduler-and-process-settings)
-- [B33–B37 — Host and Licensing Capacity](#b33b37--host-and-licensing-capacity)
+- [B33–B38 — Host and Licensing Capacity](#b33b38--host-and-licensing-capacity)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -1390,7 +1390,7 @@ Flag when the minimum is above zero and at least 90% of the maximum.
 
 ---
 
-## B33–B37 — Host and Licensing Capacity
+## B33–B38 — Host and Licensing Capacity
 
 ### B33 — Common Criteria Compliance Enabled
 
@@ -1577,6 +1577,50 @@ Two signatures are common enough to name explicitly:
 
 ---
 
+### B38 — High-Overhead Extended Events Session or SQL Trace Left Running
+
+**What it means:** Something is tracing the instance continuously with events that fire per statement, per lock or per wait. Microsoft's high-CPU troubleshooting procedure has a step for exactly this — "Disable heavy tracing" — and names the event families that cause it: query plan XML, statement-level, login and logout, lock, wait, and SQL Audit events depending on what is audited.
+
+**How to spot it:** Run the step 7 queries from [Troubleshoot high-CPU-usage issues in SQL Server](https://learn.microsoft.com/troubleshoot/sql/database-engine/performance/troubleshoot-high-cpu-usage-issues#step-7-disable-heavy-tracing). The XE half, extended with the predicate so an unfiltered event is visible:
+
+```sql
+SELECT s.name AS session_name, e.event_name, e.event_predicate
+FROM sys.dm_xe_sessions AS s
+JOIN sys.dm_xe_session_events AS e ON s.address = e.event_session_address
+ORDER BY s.name, e.event_name;
+
+SELECT t.id, t.path, t.is_default, t.start_time, t.event_count
+FROM sys.traces AS t
+WHERE t.status = 1;   -- running; reading sys.traces needs ALTER TRACE
+```
+
+Example output:
+
+```
+session_name        event_name                       event_predicate
+WorkloadCapture     sql_statement_completed          <duration > 100000>
+WorkloadCapture     rpc_completed                    <duration > 100000>
+PlanCapture_Mar     query_post_execution_showplan    NULL
+system_health       xml_deadlock_report              ...
+```
+
+`system_health` is a Microsoft system session and stays. `WorkloadCapture` is this library's own trace setup script, scoped by duration — Warning, and it should have been torn down. `PlanCapture_Mar` captures every execution plan on the instance with no predicate — Critical.
+
+**Why it's a problem:** Every event that fires costs CPU to collect its fields and actions, whether or not anyone reads the target. Microsoft says of the Showplan XML event class that including it "will significantly impede performance", and that it should be limited to traces that "monitor specific problems for brief periods of time". A session started for last month's incident and never stopped is the usual source, which is why the symptom often appears as unexplained CPU with no query to blame.
+
+**Fix options:**
+1. **Find the owner first.** A monitoring product may own the session; stopping it blind can break the product.
+2. **Stop what is no longer needed.** `ALTER EVENT SESSION [name] ON SERVER STATE = STOP;` — or drop it. For a SQL Trace, `EXEC sp_trace_setstatus @traceid = <id>, @status = 0;` then `@status = 2` to close it.
+3. **Scope what must stay.** Add a predicate on `database_id`, `session_id` or a `duration` floor so a per-statement event becomes a per-slow-statement event.
+4. **Capture plans more cheaply.** `query_post_execution_plan_profile` uses lightweight profiling rather than standard profiling; Query Store keeps plans without any trace.
+5. **Make the next one time-bound.** Where the version supports `MAX_DURATION`, a session stops on its own and cannot be forgotten. This library's own setup scripts (`sqltrace-review/scripts/01_create_xe_session.sql`, `sqldeadlock-review/scripts/02_create_dedicated_xe_session.sql`) end with a Teardown section for the same reason.
+
+**Related checks:** `/sqltrace-review` X20–X22 (showplan events inside a trace you analyse — the trace-file side of the same cost), `/sqlperfmon-review` PM1 (SQL Server CPU saturation), `/sqlwait-review` V45 (CPU with no wait to explain it)
+
+**Source note:** adapted from `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeTracingOverhead` (MIT), re-based on the event families and expensive trace event IDs Microsoft documents. SQL Nexus also excludes `telemetry_xevents`, `hkenginexesession` and `sp_server_diagnostics session` as built in; Microsoft documents `system_health`, `AlwaysOn_health` and `telemetry_events`, so the other names are unverified against Microsoft Learn.
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger | Severity |
@@ -1618,3 +1662,4 @@ Two signatures are common enough to name explicitly:
 | B35 | Host/Licensing | access check cache option <> 0 | Info |
 | B36 | Host/Licensing | Windows power plan not High Performance | Info |
 | B37 | Host/Licensing | module loaded with company <> Microsoft Corporation | Warning |
+| B38 | Host/Licensing | user XE session or SQL Trace running a heavy event family | Warning / Critical |

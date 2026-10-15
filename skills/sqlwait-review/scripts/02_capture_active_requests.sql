@@ -13,6 +13,9 @@
     - A user reports "it's slow right now"
     - You want to identify blocking chains in real time
     - You want to confirm a wait type without waiting for a full interval
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 

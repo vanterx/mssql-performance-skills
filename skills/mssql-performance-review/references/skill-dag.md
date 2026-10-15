@@ -41,6 +41,8 @@ Some skill outputs always inform another skill. These are static edges:
 | sqlerrorlog-review → sqlclusterlog-review (when AG failover detected) | AG events in ERRORLOG correlate with WSFC events |
 | sqlclusterlog-review → sqlhadr-review | WSFC state change implies AG state question |
 | sqlerrorlog-review → sqlspn-review (when Kerberos errors in ERRORLOG) | Login burst with NTLM fallback signals SPN issue |
+| sqlworkload-compare → sqlplan-compare (for the top WC2 regression) | A regression named by query_hash needs one plan from each side to explain it |
+| sqlworkload-compare → sqldbconfig-review (when WC11–WC13 fire) | A changed setting may also be a poor one; B-checks grade it on its own merits |
 
 These edges are deterministic from the input set.
 
@@ -55,6 +57,7 @@ Some edges only appear when a probe's findings open them. The DAG walker adds th
 | sqlwait-review reports PAGEIOLATCH_SH dominant | sqlwait-review → sqlplan-review (for the top reader plan) |
 | sqlstats-review fires I5 (single table dominates reads) | sqlstats-review → sqlindex-advisor (specifically for that table) |
 | sqlprocstats-review fires R1 (proc CPU hotspot) | sqlprocstats-review → sqlplan-review (for the hot proc's plan) |
+| sqlworkload-compare fires WC9 (wait-driven regression) or WC14 | sqlworkload-compare → sqlwait-review and sqlblocking-review (current window) |
 
 Dynamic edges are how the orchestrator adapts: a finding in one skill creates a follow-up edge to another skill that would not have run otherwise.
 

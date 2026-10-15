@@ -1,6 +1,11 @@
 -- sqlag-review capture script
 -- Run on the PRIMARY replica to collect all data needed for /sqlag-review
 -- Output: paste results into chat or save to a text file
+-- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+--   PERFORMANCE STATE (SQL Server 2022 and later) for the sys.dm_hadr_* and
+--   sys.dm_xe_sessions queries, plus VIEW ANY DEFINITION so the availability
+--   group, endpoint and certificate catalog views return every row rather
+--   than only objects the login owns.
 
 PRINT '--- Query 1: Instance and AG Overview ---';
 SELECT
@@ -129,3 +134,11 @@ FROM sys.dm_xe_sessions
 WHERE name LIKE '%hadr%'
    OR name LIKE '%ag%'
    OR name LIKE '%alwayson%';
+
+PRINT '--- Query 9: SQLDIAG failover diagnostics log configuration (F38) - run on every replica ---';
+SELECT
+    is_enabled,
+    [path],
+    max_size,
+    max_files
+FROM sys.dm_os_server_diagnostics_log_configurations;

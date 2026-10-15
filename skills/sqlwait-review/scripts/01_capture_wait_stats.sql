@@ -16,6 +16,10 @@
   For differential analysis (measures waits over a specific time window):
     Run Section A (before snapshot) → wait the desired interval → run Section B.
     The diff shows only what accumulated during that window, ignoring history.
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later), plus VIEW ANY DEFINITION for
+  every row of sys.master_files.
 ================================================================================
 */
 

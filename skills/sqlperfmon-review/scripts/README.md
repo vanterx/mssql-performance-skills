@@ -2,7 +2,7 @@
 
 ## capture-perfmon.ps1
 
-Captures the counters the 14 PM checks read, or converts an existing `.blg` binary log into the
+Captures the counters the 15 PM checks read, or converts an existing `.blg` binary log into the
 CSV the skill analyses.
 
 ### Modes

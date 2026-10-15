@@ -11,6 +11,11 @@
     /sqlplan-review  — analyze the specific plan that caused a performance incident
 
   Run inside the target user database.
+
+  Requires: VIEW DATABASE STATE in the target database (SQL Server 2019 and
+  earlier) or VIEW DATABASE PERFORMANCE STATE (SQL Server 2022 and later).
+  The commented-out section C (force/unforce a plan) changes the database and
+  needs ALTER on the database — it is not part of the capture.
 ================================================================================
 */
 

@@ -1,10 +1,11 @@
-# sqlbootstraplog-review — Checks Explained (U1–U24)
+# sqlbootstraplog-review — Checks Explained (U1–U25)
 
 ## Contents
 - [Summary and Outcome Checks (U1–U6)](#summary-and-outcome-checks-u1u6)
 - [Rule-Failure Pattern Checks (U7–U13)](#rule-failure-pattern-checks-u7u13)
 - [Detail.txt and MSI Forensic Checks (U14–U18)](#detailtxt-and-msi-forensic-checks-u14u18)
 - [ConfigurationFile.ini Review Checks (U19–U24)](#configurationfileini-review-checks-u19u24)
+- [Windows Installer Cache Check (U25)](#windows-installer-cache-check-u25)
 - [Quick Reference](#quick-reference)
 
 The Setup Bootstrap log layout, file purposes, and the documented search methods
@@ -625,6 +626,65 @@ data directory empty — a data file growth event can fill `C:\` and freeze the 
 
 ---
 
+## Windows Installer Cache Check (U25)
+
+### U25 — Cached MSI or MSP Package Missing From the Windows Installer Cache
+
+**What it means:** Windows Installer keeps a stripped copy of each product's `.msi`, and of
+every update's `.msp`, in `%windir%\Installer`. Every later cumulative update, service pack,
+repair and uninstall reads those cached files. When one is missing, the next servicing
+operation fails — often long after whatever deleted it. The cached files are unique to the
+machine; copying them from another server does not work.
+
+**How to spot it:** A setup or MSI log that names a missing cached package, or one of the
+error codes Microsoft lists for this condition:
+
+| Code | Message (abridged) |
+|------|--------------------|
+| 1612 | The installation source for this product is not available |
+| 1620 | This installation package could not be opened |
+| 1635 / 1636 | Unable to install Windows Installer MSP file |
+| 1642 | The upgrade cannot be installed by the Windows Installer service |
+| 1706 | The endpoint format is invalid |
+| 1714 | The older version of Microsoft SQL Server Native Client cannot be removed |
+
+Microsoft notes that several of these are not specific to a missing cache, so look for the
+named package as well. `FindSQLInstalls.vbs` output makes it explicit:
+
+```
+!!!! C:\WINDOWS\Installer\19b4d2.msi DOES NOT exist in the Installer cache. !!!!
+Action needed, re-establish the path to G:\x64\setup\sql_engine_core_inst_msi\
+```
+
+**Example:** A CU install fails with `1636`; the setup log names
+`C:\WINDOWS\Installer\145258.msp`; the `Patches` registry key maps that `LocalPackage`
+to the original `sqlrun_sql.msp`. The cache file is gone, so the update cannot compute
+what it is replacing.
+
+**Fix options** (in the order Microsoft's KB969052 gives):
+1. **FixMissingMSI** — scans the cache, highlights missing files in red, and re-caches them
+   from extracted media (`Fix All`). Extract each CU or SP with `/X` first.
+2. **FindSQLInstalls.vbs** — run elevated; it lists each missing file and the source path to
+   re-establish. Re-establish the path, re-run until clean.
+3. **Manual restore** — find the missing `.msp` under
+   `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Patches\`
+   (`LocalPackage`), map it to the product, and copy the original file to the cached name.
+4. **System state restore** if the above cannot recover it.
+5. Run a setup **repair** before retrying the update, so the cache is validated end to end.
+6. If it recurs, find what is pruning `C:\Windows\Installer` — cleanup tools, group policy,
+   or a backup agent. Microsoft warns that manual changes to that folder cause this.
+
+**Related checks:** U5 (patch failed for one instance), U15 (MSI "Return value 3" — read the
+lines before it for these codes), U12 (policy/AV blocking the installer)
+
+**Source note:** adapted from `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeSetupHealth`
+(MIT), which reads the same condition from SQL LogScout's `*_MissingMsiMsp_Detailed.txt`.
+Error codes and restore order from Microsoft Learn: *Restore missing Windows Installer cache
+files and fix problems that occur during a SQL Server update* (KB969052) and *Missing Windows
+Installer cache requires a computer rebuild* (KB2667628).
+
+---
+
 ## Quick Reference
 
 | Check | Category | Trigger | Severity |
@@ -653,3 +713,4 @@ data directory empty — a data file growth event can fill `C:\` and freeze the 
 | U22 | INI | Mixed auth / protocol surface | Warning |
 | U23 | INI | FEATURES beyond server purpose | Info |
 | U24 | INI | Directories co-located / on system drive | Warning |
+| U25 | Installer cache | Cached .msi/.msp missing; 1612/1620/1635/1636/1642/1706/1714 with a named package | Critical / Warning |

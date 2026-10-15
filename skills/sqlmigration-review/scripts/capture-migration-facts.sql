@@ -1,6 +1,11 @@
 -- capture-migration-facts.sql
 -- Run on the SOURCE instance to collect facts needed by /sqlmigration-review (Y1-Y15).
 -- Native T-SQL only -- no third-party tooling required.
+-- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+--   PERFORMANCE STATE (SQL Server 2022 and later), VIEW ANY DEFINITION, and
+--   SELECT on msdb.dbo.backupset and msdb.dbo.sysjobs (backup and SQL Server
+--   Agent tables are not covered by server-level metadata permissions).
+--   sysadmin covers all of it; use a dedicated login rather than sa.
 
 -- Query 1: Instance version, edition, engine edition
 SELECT SERVERPROPERTY('ProductVersion') AS product_version,

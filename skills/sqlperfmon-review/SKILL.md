@@ -1,6 +1,6 @@
 ---
 name: sqlperfmon-review
-description: Analyze Windows Performance Monitor counter data for a SQL Server host to establish whether the operating system itself is the bottleneck and which process is responsible. Applies 14 checks (PM1-PM14) covering SQL process CPU saturation, non-SQL CPU competition, privileged/kernel time, page life expectancy, virtual address space growth, OS memory exhaustion, logical disk latency, hot volumes masked by the _Total instance, compilation and recompilation rates expressed against batch throughput, plan cache object growth, batch request baseline shifts, client cancellation rate, and counter collection integrity. Use this skill when a .blg or relog CSV is supplied, when sys.dm_os_performance_counters output is pasted, when CPU is high but no query explains it, when the host is suspected rather than the database, or when asked whether SQL Server or something else on the server is consuming the machine.
+description: Analyze Windows Performance Monitor counter data for a SQL Server host to establish whether the operating system itself is the bottleneck and which process is responsible. Applies 15 checks (PM1-PM15) covering SQL process CPU saturation, non-SQL CPU competition, privileged/kernel time, page life expectancy, virtual address space growth, OS memory exhaustion, logical disk latency, hot volumes masked by the _Total instance, compilation and recompilation rates expressed against batch throughput, plan cache object growth, batch request baseline shifts, client cancellation rate, and counter collection integrity. Use this skill when a .blg or relog CSV is supplied, when sys.dm_os_performance_counters output is pasted, when CPU is high but no query explains it, when the host is suspected rather than the database, or when asked whether SQL Server or something else on the server is consuming the machine.
 triggers:
   - /sqlperfmon-review
   - /perfmon-review
@@ -11,13 +11,13 @@ triggers:
 
 ## Purpose
 
-Determine whether the operating system hosting SQL Server is itself the constraint, and attribute the consumption to a process. Applies 14 checks (PM1-PM14) across five categories:
+Determine whether the operating system hosting SQL Server is itself the constraint, and attribute the consumption to a process. Applies 15 checks (PM1-PM15) across five categories:
 
 - **PM1-PM3** - CPU attribution: SQL Server process saturation, non-SQL process competition, and privileged/kernel time that points outside the engine
 - **PM4-PM6** - Memory: page life expectancy, virtual address space growth against committed memory, and OS-level memory exhaustion
 - **PM7-PM8** - Storage: logical disk latency per volume, and a hot volume hidden behind the `_Total` instance
 - **PM9-PM12** - Compilation and workload: compile and recompile rates expressed against batch throughput, plan cache object growth by cache type, and batch request baseline shifts
-- **PM13-PM14** - Client behaviour and collection integrity: attention (cancellation) rate, and gaps or too-short a sample window in the capture itself
+- **PM13-PM15** - Client behaviour and collection integrity: attention (cancellation) rate, gaps or too-short a sample window in the capture itself, and more than one `sqlservr` process in the capture so CPU and memory cannot be attributed to the instance under review
 
 Every other skill in this library reads something SQL Server produced about itself. This one reads what Windows observed about the process, which is the only way to answer three questions the engine cannot answer about itself: is the machine saturated, is it SQL Server doing it, and is the time going to kernel code the engine does not control.
 
@@ -50,6 +50,20 @@ Accept any of:
 - Output from `SELECT ... FROM sys.dm_os_performance_counters` (covers the `SQLServer:*` counters only - see the scope note below)
 - A pasted extract of a few counters with timestamps, for example a column of `Avg. Disk sec/Read` values
 - A natural language description of counter behaviour ("sqlservr is at 1500% processor time on a 24-core box", "available MBytes dropped to 200 overnight")
+- **Fallback when no Perfmon capture exists:** `sys.dm_os_ring_buffers` rows of type `RING_BUFFER_SCHEDULER_MONITOR`. Each record's XML carries `ProcessUtilization` (SQL Server's CPU share, 0-100 of the whole machine) and `SystemIdle`, so `100 - SystemIdle - ProcessUtilization` is the non-SQL share. This feeds PM1 and PM2 only, at roughly one record per minute over the last few hours. It has no kernel-time, memory, disk or per-process detail, so PM3 and PM5-PM8 stay NOT ASSESSED, and because `ProcessUtilization` is already a 0-100 share of the machine it is compared to the thresholds without dividing by `cpu_count`. Unverified against Microsoft Learn: Microsoft documents `sys.dm_os_ring_buffers` but states that most ring buffer types are unsupported unless separately documented, and this one is not, so the record layout and cadence are field practice rather than a contract — say so in the report. The same fallback appears in `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeCpuUsage` (MIT).
+
+  ```sql
+  -- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER PERFORMANCE STATE (2022 and later)
+  DECLARE @ms_now bigint = (SELECT ms_ticks FROM sys.dm_os_sys_info);
+  SELECT DATEADD(ms, rb.[timestamp] - @ms_now, SYSDATETIME()) AS sample_time,
+         rb.rec.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS sql_cpu_pct,
+         rb.rec.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int')         AS system_idle_pct
+  FROM (SELECT [timestamp], CONVERT(xml, record) AS rec
+        FROM sys.dm_os_ring_buffers
+        WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR'
+          AND record LIKE N'%<SystemHealth>%') AS rb
+  ORDER BY sample_time;
+  ```
 
 ### Scope note: which counters come from where
 
@@ -82,10 +96,11 @@ A counter file keeps the output small. One counter path per line, passed with `-
 ```
 \Processor(_Total)\% Processor Time
 \Processor(_Total)\% Privileged Time
-\Process(sqlservr)\% Processor Time
-\Process(sqlservr)\Virtual Bytes
-\Process(sqlservr)\Private Bytes
-\Process(sqlservr)\Working Set
+\Process(sqlservr*)\% Processor Time
+\Process(sqlservr*)\Virtual Bytes
+\Process(sqlservr*)\Private Bytes
+\Process(sqlservr*)\Working Set
+\Process(sqlservr*)\ID Process
 \Memory\Available MBytes
 \LogicalDisk(*)\Avg. Disk sec/Read
 \LogicalDisk(*)\Avg. Disk sec/Write
@@ -99,7 +114,7 @@ A counter file keeps the output small. One counter path per line, passed with `-
 \SQLServer:Plan Cache(*)\Cache Object Counts
 ```
 
-`LogicalDisk` carries an instance index, so the path needs an instance or a wildcard. On a named instance the SQL Server objects are `MSSQL$<InstanceName>:*` rather than `SQLServer:*`.
+`LogicalDisk` carries an instance index, so the path needs an instance or a wildcard. `sqlservr*` captures every SQL Server process on the host — `sqlservr`, `sqlservr#1`, and so on — with its `ID Process`, which PM15 needs to tell them apart; match it to `SELECT SERVERPROPERTY('ProcessID');` from the instance under review. On a named instance the SQL Server objects are `MSSQL$<InstanceName>:*` rather than `SQLServer:*`.
 
 The engine-side counters alone, without Perfmon:
 
@@ -145,6 +160,7 @@ Without `cpu_count`, report PM1-PM3 as NOT ASSESSED rather than guessing - `% Pr
 | PM12 - Batch request shift | +/- 50% against the stated baseline | - |
 | PM13 - Attention rate | > 0 sustained | - |
 | PM14 - Collection gaps | any interval > 3 x the nominal sample interval | window shorter than 5 minutes |
+| PM15 - Multiple sqlservr processes | more than one `Process(sqlservr*)` instance and no `ID Process` to match | - |
 
 **Where these come from.** PM7 reuses the latency thresholds already used by `/sqldiskio-review` (Z-checks) so the two skills cannot disagree about the same disk; `0.020 s` in a Perfmon CSV and `20 ms` in `sys.dm_io_virtual_file_stats` are the same number. PM1-PM3 are scaled by `cpu_count` because `Process\% Processor Time` on Windows runs from 0 to 100 x the number of logical processors rather than 0 to 100. The remaining cut-offs are interpretive, not published: Microsoft documents what each counter measures and says of recompiles only that "generally, you want the recompiles to be low", so PM9 and PM10 are expressed as a **ratio against batch throughput** - arithmetic the capture supports - rather than as an absolute rate that would be an invented number. Treat every threshold here as a prompt to look, and prefer a baseline from the same server over any of them.
 
@@ -154,7 +170,7 @@ Without `cpu_count`, report PM1-PM3 as NOT ASSESSED rather than guessing - `% Pr
 
 ### PM1 - SQL Server Process CPU Saturated
 
-- **Trigger:** `Process(sqlservr)\% Processor Time` sustained at or above 60 x `cpu_count` across the majority of the sample window
+- **Trigger:** `Process(sqlservr)\% Processor Time` sustained at or above 60 x `cpu_count` across the majority of the sample window, or any single run at or above 80 x `cpu_count`. *Sustained* means a run of at least 3 consecutive samples at or above the threshold; report each run with its start, end, sample count and peak rather than only the window's maximum and average, because an average hides a 20-minute saturation inside a quiet hour and a maximum cannot tell one spike from an episode.
 - **Severity:** Warning at 60 x `cpu_count`; Critical at 80 x `cpu_count`
 - **Fix:** Read the scale first. `Process\% Processor Time` is the sum across logical processors, so on a 24-core host the ceiling is 2400 and a value of 1800 is 75% of the machine, not an error. Sustained is the operative word - a backup window or an index rebuild at 90% is expected, and a single spike is not a finding. Once confirmed, this check has done its job: it establishes that SQL Server is the consumer, and the question moves inside the engine. Hand off to `/sqlwait-review` for the signal-wait ratio (V10) and `SOS_SCHEDULER_YIELD` (V7), and to `/sqlplan-review` or `/sqlquerystore-review` for the statements responsible. Two things to rule out before accepting that the workload simply needs more CPU: a scheduler count below the OS CPU count, because an edition cap or an affinity mask means the engine cannot use what the counter says exists (`/sqldbconfig-review` B34), and spinlock contention, whose CPU never appears as a wait type (`/sqlwait-review` V45).
 
@@ -236,6 +252,12 @@ Without `cpu_count`, report PM1-PM3 as NOT ASSESSED rather than guessing - `% Pr
 - **Severity:** Warning on gaps; Critical when the window is too short to support any other finding
 - **Fix:** Run this check first and report it before any other finding, because it decides whether the rest of the analysis is trustworthy. Two distinct problems share the symptom. A **short window** cannot support a sustained-value judgement at all: PM1, PM3 and PM7 are all defined on sustained behaviour, and a 90-second capture can only show a moment. Say so rather than grading a spike. A **gap** in an otherwise regular series means the collector itself was starved - the machine was too busy to run a sampling thread on time - which is itself a finding about the host, and one that tends to coincide with the worst part of the incident, so the capture is missing precisely the period of interest. Where gaps cluster, treat the surrounding values as a floor on severity rather than a measurement. Re-capture with a window that brackets the problem and an interval matched to what is being measured: a 15-second interval cannot show a 2-second stall, and rate counters are averages across the interval, so a long interval flattens exactly the spikes being hunted.
 
+
+### PM15 - More Than One sqlservr Process: Attribution Ambiguous
+
+- **Trigger:** The capture contains more than one `Process` instance for SQL Server - `sqlservr` alongside `sqlservr#1`, `sqlservr#2` - and no `\Process(sqlservr*)\ID Process` counter, or no `SERVERPROPERTY('ProcessID')` for the instance under review, to say which is which
+- **Severity:** Warning; and PM1, PM2, PM5 and the process half of PM6 are NOT ASSESSED for the instance until it is resolved
+- **Fix:** Perfmon names process instances by executable name, so a host running two SQL Server instances shows `sqlservr` and `sqlservr#1`, and which is which is not stable: Microsoft documents that because PDH matches processes only by instance name, when one same-named process exits another moves into its slot and a formatted counter can mix samples from two processes. A CPU or memory finding against `Process(sqlservr)` can therefore describe the wrong instance, or blend two. Resolve it with the process ID: capture `\Process(sqlservr*)\ID Process` with the other counters and match it to `SELECT SERVERPROPERTY('ProcessID');`, which Microsoft documents as "useful in identifying which Sqlservr.exe belongs to this instance". Where an `ID Process` value changes during the window, a restart or slot shift happened - split the analysis at that point. On Windows 11 and later the `Process V2` counterset includes the process ID in the instance name and avoids the slot problem; use it where available. PM2's residual is unaffected, because it subtracts every SQL Server process from the host total, but say so in the report. The process-ID match follows `microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeCpuUsage` (MIT).
 ---
 
 ## Version-Aware Check Suppression

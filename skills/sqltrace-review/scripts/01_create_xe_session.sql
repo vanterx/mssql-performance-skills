@@ -17,6 +17,17 @@
 
   After capture, paste the output of 02_read_ring_buffer.sql or
   03_read_file_target.sql into Claude and run: /sqltrace-review
+
+  CHANGES SERVER STATE — this is a setup script, not a read-only capture:
+    Drops any existing [WorkloadCapture] session, then creates and starts a new
+    one. STARTUP_STATE = OFF, so it does not survive a restart, but it keeps
+    running until stopped. statement-level completed events are among the
+    higher-overhead events to leave running (sqldbconfig-review B38), so run
+    the Teardown section at the end of this file when the capture is done.
+
+  Requires: ALTER ANY EVENT SESSION; on SQL Server 2022 and later,
+    CREATE ANY EVENT SESSION, DROP ANY EVENT SESSION and ALTER ANY EVENT
+    SESSION cover the individual statements.
 ================================================================================
 */
 
@@ -110,4 +121,19 @@ ADD TARGET package0.event_file
     (SET filename = N'WorkloadCapture',   -- SQL Server appends path + .xel
          max_file_size = 500,             -- MB per file
          max_rollover_files = 5)
+*/
+
+/* ============================================================================
+   Teardown — run when the capture is done
+   ============================================================================
+   Read the ring buffer first (02_read_ring_buffer.sql): stopping the session
+   discards ring_buffer contents. An event_file target keeps its .xel files
+   after the session is dropped.
+*/
+/*
+IF EXISTS (SELECT 1 FROM sys.dm_xe_sessions WHERE name = N'WorkloadCapture')
+    ALTER EVENT SESSION [WorkloadCapture] ON SERVER STATE = STOP;
+IF EXISTS (SELECT 1 FROM sys.server_event_sessions WHERE name = N'WorkloadCapture')
+    DROP EVENT SESSION [WorkloadCapture] ON SERVER;
+GO
 */

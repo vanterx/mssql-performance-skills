@@ -8,7 +8,7 @@ you need:
 
 - A detailed explanation of a specific check including log excerpts and
   multiple fix options ranked by impact
-- The full Quick Reference table for all 24 checks at a glance
+- The full Quick Reference table for all 25 checks at a glance
 
 Load a reference file when:
 
@@ -26,7 +26,7 @@ fix options, or log excerpt examples. Also when the user asks "explain check UX"
 or "what does this finding mean?"
 
 **What it covers:** The full five-part explanation (What it means / How to
-spot it / Example / Fix options / Related checks) for all 24 checks plus the
+spot it / Example / Fix options / Related checks) for all 25 checks plus the
 Quick Reference table.
 
 ## Scripts

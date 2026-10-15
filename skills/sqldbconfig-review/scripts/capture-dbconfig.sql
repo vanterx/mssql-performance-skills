@@ -1,7 +1,11 @@
 -- sqldbconfig-review capture script
 -- Run on the target SQL Server instance and paste the output into /sqldbconfig-review
--- Requires VIEW SERVER STATE and VIEW DATABASE STATE permissions
 -- Compatible with SQL Server 2012+ (some columns require 2016 SP2+ -- see notes inline)
+-- Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+--   PERFORMANCE STATE (SQL Server 2022 and later), which also covers VIEW
+--   DATABASE STATE, plus VIEW ANY DEFINITION (or CREATE DATABASE / ALTER ANY
+--   DATABASE) for every row of sys.master_files. Section 9 (running SQL
+--   Traces, B38) also needs ALTER TRACE and is skipped without it.
 
 PRINT '-- 1. Instance configuration (sys.configurations)';
 /* sys.configurations rather than EXEC sp_configure: with "show advanced
@@ -100,3 +104,36 @@ SELECT
 FROM sys.master_files
 WHERE database_id = 2
 GROUP BY type_desc;
+
+PRINT '';
+PRINT '-- 8. Running Extended Events sessions and their events (B38)';
+SELECT
+    s.name           AS session_name,
+    e.event_name,
+    e.event_predicate
+FROM sys.dm_xe_sessions AS s
+JOIN sys.dm_xe_session_events AS e
+    ON s.address = e.event_session_address
+ORDER BY s.name, e.event_name;
+
+PRINT '';
+PRINT '-- 9. Running SQL Traces and their events (B38) - needs ALTER TRACE; returns nothing without it';
+IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER TRACE') = 1
+    SELECT
+        t.id             AS trace_id,
+        t.is_default,
+        t.path,
+        t.start_time,
+        t.event_count,
+        te.trace_event_id,
+        te.name          AS trace_event_name
+    FROM sys.traces AS t
+    CROSS APPLY sys.fn_trace_geteventinfo(t.id) AS e
+    JOIN sys.trace_events AS te
+        ON te.trace_event_id = e.eventid
+    WHERE t.status = 1
+    GROUP BY t.id, t.is_default, t.path, t.start_time, t.event_count,
+             te.trace_event_id, te.name
+    ORDER BY t.id, te.trace_event_id;
+ELSE
+    PRINT '-- ALTER TRACE not held: SQL Trace section skipped';

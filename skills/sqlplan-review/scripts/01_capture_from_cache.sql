@@ -15,6 +15,9 @@
     b) Save as a .sqlplan file and reference by path: /sqlplan-review path/to/file.sqlplan
 
   To save as file from SSMS: right-click the XML hyperlink → Save As → .sqlplan
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 
