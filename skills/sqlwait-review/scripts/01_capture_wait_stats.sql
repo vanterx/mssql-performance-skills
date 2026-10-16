@@ -39,6 +39,8 @@ SELECT TOP 30
     CAST(100.0 * signal_wait_time_ms
          / NULLIF(wait_time_ms, 0) AS decimal(5,2))                AS pct_signal  /* CPU queue pressure */
 FROM sys.dm_os_wait_stats
+/* Benign background / idle waits, based on the Paul Randal / SQLskills
+   exclusion list (sqlskills.com/help/waits/). */
 WHERE wait_type NOT IN (
     'AZURE_IMDS_VERSIONS', 'BMPALLOCATION', 'BMPBUILD', 'BMPREPARTITION',
     'BROKER_EVENTHANDLER', 'BROKER_RECEIVE_WAITFOR', 'BROKER_TASK_STOP',
@@ -235,6 +237,8 @@ SELECT
     signal_wait_time_ms
 INTO #waits_before
 FROM sys.dm_os_wait_stats
+/* Benign background / idle waits, based on the Paul Randal / SQLskills
+   exclusion list (sqlskills.com/help/waits/). */
 WHERE wait_type NOT IN (
     'AZURE_IMDS_VERSIONS', 'BMPALLOCATION', 'BMPBUILD', 'BMPREPARTITION',
     'BROKER_EVENTHANDLER', 'BROKER_RECEIVE_WAITFOR', 'BROKER_TASK_STOP',

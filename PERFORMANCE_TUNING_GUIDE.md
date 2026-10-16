@@ -224,7 +224,7 @@ Or paste the raw `<deadlock>` XML directly.
 
 **Use: `/sqlwait-review`**
 
-Run the wait statistics capture query and paste the results. The skill applies 45 checks (V1–V45) based on the Waits and Queues methodology. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V40 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V41–V44 cover SQL 2019/2022 IQP/PSP/ADR feature waits and TempDB metadata contention; V45 covers spinlock contention, whose CPU cost never appears as a wait type.
+Run the wait statistics capture query and paste the results. The skill applies 45 checks (V1–V45) based on the Waits and Queues methodology as practised by Paul Randal (SQLskills) and Brent Ozar's First Responder Kit. V1–V18 and V27–V29 identify the dominant bottleneck in a single snapshot; V19–V26 perform trend analysis when 3+ time windows are provided; V30–V40 cover modern feature wait types (In-Memory OLTP, Columnstore, Query Store, Transaction/DTC, Service Broker, Full Text Search, Parallel Redo); V41–V44 cover SQL 2019/2022 IQP/PSP/ADR feature waits and TempDB metadata contention; V45 covers spinlock contention, whose CPU cost never appears as a wait type.
 
 **Step 1 — Capture wait statistics (choose one)**
 

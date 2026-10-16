@@ -162,7 +162,7 @@ Once connected, the following are available in any conversation:
 For non-Claude LLMs, use `SKILL.md` alone (not `references/check-explanations.md`) — it contains every trigger and threshold in a compact form. For large `.sqlplan` XML, ask the LLM to extract key fields first.
 
 > **Not sure which skill to use?** See [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) for symptom-based routing.
-> **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
+> **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
 
 ---
 
@@ -344,7 +344,7 @@ Use the full pipeline for a slow query you're actively tuning, or jump to the re
 
 ## sqlwait-review
 
-Analyze `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output to identify the dominant server bottleneck. Applies **45 checks** (V1–V45) based on the Waits and Queues methodology. **Single-snapshot mode (V1–V18, V27–V29)** covers physical I/O, lock waits, parallelism (CXPACKET/HT*), memory grant queuing, log I/O, CPU pressure, thread exhaustion, TempDB contention, non-page latch contention, log space exhaustion, client/network waits, HA synchronization, OS-level calls, poison/throttle waits (IO_RETRY, LOG_RATE_GOVERNOR, SE_REPL_*), PAGELATCH on user databases (insert hotspots), backup I/O, and cumulative skew detection. **Trend mode (V19–V26)** activates automatically when 3+ time-stamped snapshots are provided — detecting worsening trends, spikes, peak periods, emerging bottlenecks, and correlated wait types. **Modern feature checks (V30–V36)** cover In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, and Parallel Redo (Always On secondary). **Memory and I/O detail checks (V37–V40)** cover forced memory grants, grant timeouts, stolen memory percentage, and file-level I/O latency — requires optional DMV capture queries. **SQL 2019/2022 feature waits (V41–V44)** cover PSP selector wait, IQP DOP Feedback adjustment wait, ADR PVS cleanup worker wait, and TempDB memory-optimized metadata contention. **Spinlock contention (V45)** covers the CPU burned spinning on a spinlock, which never appears as a wait type — requires a `sys.dm_os_spinlock_stats` snapshot pair.
+Analyze `sys.dm_os_wait_stats` or `sys.dm_exec_requests` output to identify the dominant server bottleneck. Applies **45 checks** (V1–V45) based on the Waits and Queues methodology as practised by Paul Randal (SQLskills) and Brent Ozar's First Responder Kit. **Single-snapshot mode (V1–V18, V27–V29)** covers physical I/O, lock waits, parallelism (CXPACKET/HT*), memory grant queuing, log I/O, CPU pressure, thread exhaustion, TempDB contention, non-page latch contention, log space exhaustion, client/network waits, HA synchronization, OS-level calls, poison/throttle waits (IO_RETRY, LOG_RATE_GOVERNOR, SE_REPL_*), PAGELATCH on user databases (insert hotspots), backup I/O, and cumulative skew detection. **Trend mode (V19–V26)** activates automatically when 3+ time-stamped snapshots are provided — detecting worsening trends, spikes, peak periods, emerging bottlenecks, and correlated wait types. **Modern feature checks (V30–V36)** cover In-Memory OLTP (XTP*), Columnstore, Query Store (QDS*), Transaction/DTC, Service Broker, Full Text Search, and Parallel Redo (Always On secondary). **Memory and I/O detail checks (V37–V40)** cover forced memory grants, grant timeouts, stolen memory percentage, and file-level I/O latency — requires optional DMV capture queries. **SQL 2019/2022 feature waits (V41–V44)** cover PSP selector wait, IQP DOP Feedback adjustment wait, ADR PVS cleanup worker wait, and TempDB memory-optimized metadata contention. **Spinlock contention (V45)** covers the CPU burned spinning on a spinlock, which never appears as a wait type — requires a `sys.dm_os_spinlock_stats` snapshot pair.
 
 ### Triggers
 
@@ -1838,7 +1838,7 @@ Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom de
 
 **Strictly offline.** The orchestrator never contacts a SQL Server. It only reads files you provide and emits scripts you run yourself. Air-gap compatible; no connection strings; no consent prompts.
 
-> **New user?** Read [`skills/mssql-performance-review/HOW_TO_USE.md`](skills/mssql-performance-review/HOW_TO_USE.md) — a 989-line guide covering installation, every input mode, every flag, three worked end-to-end examples, output interpretation, follow-up Q&A patterns, cost management, domain memory setup, the capture-bundle workflow, the baseline-diff verification loop, troubleshooting, and the offline trust model.
+> **New user?** Read [`skills/mssql-performance-review/HOW_TO_USE.md`](skills/mssql-performance-review/HOW_TO_USE.md) — a guide covering installation, every input mode, every flag, three worked end-to-end examples, output interpretation, follow-up Q&A patterns, domain memory setup, the capture-bundle workflow, the baseline-diff verification loop, troubleshooting, and the offline trust model.
 
 **Triggers:** `/mssql-performance-review`, `/mssql-perf-review`, `/mssql-full-review`, `/sql-triage`
 

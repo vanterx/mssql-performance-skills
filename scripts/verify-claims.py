@@ -10,7 +10,7 @@ elapsed across threads (and a worked example computed 59,650 ms from two
 concurrent threads), and a fourth copy of the idle-wait exclusion list drifted
 out of sync with the other three.
 
-This script holds five checks, numbered to continue verify-docs.sh:
+This script holds seven checks, numbered to continue verify-docs.sh:
 
   50  duplicated literal lists are byte-identical across every copy
   51  claims Microsoft does not document carry their Unverified label
@@ -18,11 +18,12 @@ This script holds five checks, numbered to continue verify-docs.sh:
   53  specific claims that were wrong once stay fixed
   54  the untrusted-artifact-content rule is present and identical everywhere
   55  shipped scripts state their permissions; capture scripts are read-only
+  56  relative Markdown links resolve to a file that exists
 
 Scope and honest limits
 -----------------------
-Checks 50, 52, 54 and 55 are derived from repository content, so they cannot
-rot.
+Checks 50, 52, 54, 55 and 56 are derived from repository content, so they
+cannot rot.
 Check 51 enforces the mandatory MS Learn validation policy in the one direction
 that is mechanical. Check 53 is a regression guard for known-wrong statements,
 not a correctness proof - it would not have caught any of the three defects
@@ -132,6 +133,19 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
         "asserts": re.compile(r"\|\s*`IO`\s"),
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
+    {
+        # Community procedure, not Microsoft documentation; restored after #15.
+        "name": "sp_QuickieStore regression parameters",
+        "asserts": re.compile(r"@regression_baseline_(?:start|end)_date"),
+        "marker": re.compile(r"unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        # sp_Blitz's poison-wait HAVING clause. Learn documents the wait types,
+        # not this threshold; the credit was restored after #15 removed it.
+        "name": "sp_Blitz proportional poison-wait threshold",
+        "asserts": re.compile(r"5,?000\s*(?:×|\*|x)\s*hours", re.I),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
 )
 
 # ---------------------------------------------------------------------------
@@ -174,6 +188,13 @@ CLAIM_SENTINELS: Sequence[Dict[str, object]] = (
         "kind": "must_not",
         "pattern": re.compile(r"all 0 checks"),
         "why": "a dispatcher skill states no count rather than claiming zero",
+    },
+    {
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"always\s+(?:client|application)[- ]side"
+                              r"|(?:client|application)[- ]side\s+bottleneck,\s+always", re.I),
+        "why": "ASYNC_NETWORK_IO can be the network path too (Learn lists NIC, drivers, firewalls)",
     },
 )
 
@@ -402,6 +423,51 @@ def rel_matches(pattern: str, rel: str) -> bool:
     return rel == pattern
 
 
+# Check 56: relative Markdown links. Scans every Markdown file in the repo, not
+# only skills/, because the dangling links it was added for lived in README.md,
+# MCP_SERVER_DETAILS.md and .claude/docs/. Local-only folders (gitignored) and
+# dependency trees are skipped. Links inside fenced code blocks and inline code
+# are ignored, as are URLs, mailto: and in-page anchors.
+LINK_SKIP_DIRS = frozenset({".git", "node_modules", "dist", "backlog", "backup",
+                            "docs", "output"})
+LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
+FENCE_RE = re.compile(r"^(```|~~~).*?^\1", re.S | re.M)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
+
+def dangling_links() -> Tuple[int, List[str]]:
+    problems: List[str] = []
+    scanned = 0
+    for dirpath, dirnames, filenames in os.walk("."):
+        top = os.path.normpath(dirpath).split(os.sep)[0]
+        dirnames[:] = [d for d in dirnames
+                       if d not in LINK_SKIP_DIRS or (dirpath != "." and top == ".claude"
+                                                      and d == "docs")]
+        for name in filenames:
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            scanned += 1
+            text = INLINE_CODE_RE.sub("", FENCE_RE.sub("", text))
+            for match in LINK_RE.finditer(text):
+                target = match.group(1)
+                if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) or target.startswith("#"):
+                    continue
+                file_part = target.split("#", 1)[0]
+                if not file_part:
+                    continue
+                resolved = os.path.normpath(os.path.join(dirpath, file_part))
+                if not os.path.exists(resolved):
+                    rel = os.path.normpath(path).replace(os.sep, "/")
+                    problems.append("{}: link target '{}' does not exist".format(rel, target))
+    return scanned, problems
+
+
 def main() -> int:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(root)
@@ -616,6 +682,14 @@ def main() -> int:
                              "Teardown".format(len(scripts),
                                                sum(1 for r in scripts if r.endswith(".sql")) - setup_count,
                                                setup_count))
+
+    # --- Check 56: relative Markdown links -------------------------------
+    scanned, link_problems = dangling_links()
+    if link_problems:
+        for message in link_problems:
+            record("FAIL", "56", message)
+    else:
+        record("PASS", "56", "relative links in {} Markdown files all resolve".format(scanned))
 
     for status, check, message in records:
         print("{}\t{}\t{}".format(status, check, message))
