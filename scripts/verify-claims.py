@@ -133,6 +133,13 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
         "asserts": re.compile(r"\|\s*`IO`\s"),
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
+    {
+        # sp_Blitz's poison-wait HAVING clause. Learn documents the wait types,
+        # not this threshold; the credit was restored after #15 removed it.
+        "name": "sp_Blitz proportional poison-wait threshold",
+        "asserts": re.compile(r"5,?000\s*(?:×|\*|x)\s*hours", re.I),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
 )
 
 # ---------------------------------------------------------------------------
@@ -175,6 +182,13 @@ CLAIM_SENTINELS: Sequence[Dict[str, object]] = (
         "kind": "must_not",
         "pattern": re.compile(r"all 0 checks"),
         "why": "a dispatcher skill states no count rather than claiming zero",
+    },
+    {
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"always\s+(?:client|application)[- ]side"
+                              r"|(?:client|application)[- ]side\s+bottleneck,\s+always", re.I),
+        "why": "ASYNC_NETWORK_IO can be the network path too (Learn lists NIC, drivers, firewalls)",
     },
 )
 
