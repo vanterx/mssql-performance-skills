@@ -162,7 +162,7 @@ Once connected, the following are available in any conversation:
 For non-Claude LLMs, use `SKILL.md` alone (not `references/check-explanations.md`) — it contains every trigger and threshold in a compact form. For large `.sqlplan` XML, ask the LLM to extract key fields first.
 
 > **Not sure which skill to use?** See [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) for symptom-based routing.
-> **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
+> **Which checks apply to your SQL Server version?** See [VERSION_COMPATIBILITY.md](skills/VERSION_COMPATIBILITY.md) — skill-level support matrix from SQL 2008 R2 through SQL 2022 and Azure SQL.
 
 ---
 
@@ -1838,7 +1838,7 @@ Agentic offline orchestrator. Routes mixed SQL Server artifacts (or a symptom de
 
 **Strictly offline.** The orchestrator never contacts a SQL Server. It only reads files you provide and emits scripts you run yourself. Air-gap compatible; no connection strings; no consent prompts.
 
-> **New user?** Read [`skills/mssql-performance-review/HOW_TO_USE.md`](skills/mssql-performance-review/HOW_TO_USE.md) — a 989-line guide covering installation, every input mode, every flag, three worked end-to-end examples, output interpretation, follow-up Q&A patterns, cost management, domain memory setup, the capture-bundle workflow, the baseline-diff verification loop, troubleshooting, and the offline trust model.
+> **New user?** Read [`skills/mssql-performance-review/HOW_TO_USE.md`](skills/mssql-performance-review/HOW_TO_USE.md) — a guide covering installation, every input mode, every flag, three worked end-to-end examples, output interpretation, follow-up Q&A patterns, domain memory setup, the capture-bundle workflow, the baseline-diff verification loop, troubleshooting, and the offline trust model.
 
 **Triggers:** `/mssql-performance-review`, `/mssql-perf-review`, `/mssql-full-review`, `/sql-triage`
 
