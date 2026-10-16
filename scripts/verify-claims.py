@@ -134,6 +134,12 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
     {
+        # Community procedure, not Microsoft documentation; restored after #15.
+        "name": "sp_QuickieStore regression parameters",
+        "asserts": re.compile(r"@regression_baseline_(?:start|end)_date"),
+        "marker": re.compile(r"unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
         # sp_Blitz's poison-wait HAVING clause. Learn documents the wait types,
         # not this threshold; the credit was restored after #15 removed it.
         "name": "sp_Blitz proportional poison-wait threshold",

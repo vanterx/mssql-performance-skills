@@ -1,6 +1,14 @@
 # Plan — Restore References Removed from the Repository
 
-Status: **Proposed** (not yet implemented).
+Status: **Implemented** on branch `ccr-642c296e-io8aa4`.
+
+| Item | Landed as |
+|------|-----------|
+| B, C | Audit report and plan restored to `.claude/docs/audits/` as historical snapshots; `ms-learn-validation.md` link repointed; README stale line fixed; 13 further pre-existing broken links fixed (`MCP_SERVER_DETAILS.md`, README, `horrible-analysis.md`); new Check 56 (relative Markdown links resolve) in `verify-claims.py` |
+| A1 | All `sqlwait-review` credits restored after checking each against its source (SQLskills wait library, `sp_Blitz` / `sp_BlitzFirst` source). The ASYNC_NETWORK_IO "always client-side" claim contradicted MS Learn and is now qualified. New `references/community-practices.md`. The optional V11 named-monitor item was skipped (naming products there adds no evidence) |
+| A2 | sp_QuickieStore credit and tip restored. Its parameter names could not be checked (source unreachable from the session), so they carry the Unverified label. The DMV line now names `sys.query_store_query`, the view that holds `query_hash` (verified on MS Learn) |
+| A3 | Plan Explorer credit restored; the PR #65 Erik Darling source is credited for S37, S38, N73 and the N2/N10/N35 refinements |
+| A4 | Check 51 entries for the sp_Blitz threshold and the sp_QuickieStore parameters; Check 53 sentinel against "always client-side" |
 
 ## How this list was built
 
