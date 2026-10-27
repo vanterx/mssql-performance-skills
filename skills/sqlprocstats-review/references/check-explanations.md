@@ -286,6 +286,7 @@ scales with something a parameter controls (a scalar UDF over a long string, an 
 not with the plan's access path. `RECOMPILE` will not move it; find the expensive statement
 first.
 
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Fix option 1: recompile per execution
 CREATE PROCEDURE dbo.usp_SearchCustomers @Status nvarchar(20)

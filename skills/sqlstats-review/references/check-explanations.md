@@ -570,6 +570,7 @@ Temp table logical reads (620,000) ≥ 5× base table reads (84,210 × 5 = 421,0
 
 **Fix options**
 1. Add a covering index to the temp table immediately after the INSERT:
+   <!-- lint-tsql: skip fragment: uses ... to elide code -->
    ```sql
    INSERT INTO #StagingData (OrderId, CustomerId, Total) SELECT ...;
    CREATE NONCLUSTERED INDEX IX_Staging_CustomerId ON #StagingData (CustomerId);

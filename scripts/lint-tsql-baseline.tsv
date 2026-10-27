@@ -1,0 +1,41 @@
+# Known-broken T-SQL blocks in Markdown -- read by scripts/lint-tsql.ps1 -Baseline.
+#
+# Format: <hash><TAB><repo-relative path><TAB><note>
+#   hash  first 12 hex digits of SHA-256 over the block's text (LF line endings)
+#
+# Every line here is a real or suspected defect in a documented recipe: SQL a
+# reader would copy that SQL Server's own parser rejects. They are listed rather
+# than fixed in the change that introduced the gate because each fix changes a
+# technical claim, and CLAUDE.md requires each claim to be validated against
+# Microsoft Learn first. "MS Learn:" notes are already confirmed there;
+# "suspected:" notes are the parser's finding plus a likely cause, not yet
+# confirmed.
+#
+# This file is meant to shrink to empty:
+#   - Fixing a block changes its hash, so it drops out of this list and must
+#     then parse. Delete its line in the same commit.
+#   - A line whose block now parses, moved, or was deleted fails the gate as a
+#     stale entry, so nothing lingers here once fixed.
+#   - Do not add lines to silence a new failure. A deliberate fragment gets an
+#     in-document  <!-- lint-tsql: skip <reason> -->  marker; a new defect gets
+#     fixed. `lint-tsql.ps1 -EmitBaseline` prints candidate lines, but each one
+#     needs a human-written note.
+09c3bf7dd0f6	skills/sqlag-review/references/check-explanations.md	suspected: XE predicate uses IN; predicates are built from pred_compare operators with AND/OR/NOT -- rewrite as an OR chain
+d89196f45752	skills/sqldeadlock-review/examples/deadlock-analysis.md	suspected: EXEC parameter value is an expression (CAST(...)); EXEC accepts only constants or variables -- assign to a variable first
+4b0d1d5ab9a5	skills/sqldiskio-review/references/check-explanations.md	suspected: ALTER DATABASE MODIFY FILE SIZE takes a literal, not a variable -- build the statement with dynamic SQL
+59ad3d5df3b8	skills/sqlencryption-review/examples/encryption-audit-analysis.md	suspected: ENCRYPTION BY DATABASE MASTER KEY is not an ALTER CERTIFICATE ... WITH PRIVATE KEY option; omit ENCRYPTION BY to protect the key with the DMK
+b0c23bb78b17	skills/sqlencryption-review/references/howto-agent-jobs.md	suspected: BACKUP CERTIFICATE TO FILE / PRIVATE KEY FILE given variables; verify against MS Learn, likely needs dynamic SQL
+7824e7b437c8	skills/sqlencryption-review/references/howto-crypto-shredding.md	suspected: column_master_key_definition_name is not a CREATE COLUMN ENCRYPTION KEY argument; the documented argument is COLUMN_MASTER_KEY = name
+509825323d76	skills/sqlencryption-review/references/howto-dynamic-data-masking.md	missing GO: CREATE FUNCTION must be the only statement in its batch, so the CREATE SECURITY POLICY after it fails (Msg 111)
+3efc4c8b39e7	skills/sqlencryption-review/references/howto-key-rotation.md	suspected: CREATE COLUMN MASTER KEY ... FROM PROVIDER = is not the documented form; it is WITH (KEY_STORE_PROVIDER_NAME = ..., KEY_PATH = ...)
+b4f608d5b38f	skills/sqlerrorlog-review/references/check-explanations.md	suspected: SEEDING_MODE is a replica option (ALTER AVAILABILITY GROUP ... MODIFY REPLICA ... WITH (SEEDING_MODE = AUTOMATIC)), not ALTER DATABASE SET HADR
+4886e5ef0f1c	skills/sqlplan-review/references/check-explanations.md	MS Learn: resource pools take MIN_MEMORY_PERCENT / MAX_MEMORY_PERCENT; MAX_MEMORY_GRANT_PERCENT is not a pool option (grant percent is a workload group setting)
+32e9a620437d	skills/sqlplan-review/references/check-explanations.md	MS Learn: resource pools take MIN_MEMORY_PERCENT / MAX_MEMORY_PERCENT; MAX_MEMORY_GRANT_PERCENT is not a pool option (grant percent is a workload group setting)
+f8f4c8a09851	skills/sqlplan-review/references/check-explanations.md	MS Learn: resource pools take MIN_MEMORY_PERCENT / MAX_MEMORY_PERCENT; MIN_MEMORY_GRANT_PERCENT is not a pool option
+c9f5fffb7951	skills/sqlplan-review/references/check-explanations.md	MS Learn: DISABLE_OPTIMIZER_ROWGOAL is a USE HINT name -- OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))
+050b92f9fe03	skills/sqlplan-review/references/check-explanations.md	MS Learn: DISABLE_OPTIMIZER_ROWGOAL is a USE HINT name -- OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))
+24dcfdd81999	skills/sqlprocstats-review/examples/proc_stats_output-analysis.md	missing GO: ALTER PROCEDURE must be the first statement in its batch, after the CREATE TYPE (Msg 111)
+ed939b1a0f14	skills/sqlprocstats-review/references/check-explanations.md	missing GO: CREATE PROCEDURE must be the first statement in its batch, after the CREATE TYPE (Msg 111)
+7f6ba1dc014f	skills/sqlquerystore-review/examples/qs-top-consumers-analysis.md	MS Learn: retention is CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = n), not a bare STALE_QUERY_THRESHOLD_DAYS option
+301ef24a3cfd	skills/tsql-review/references/check-explanations.md	missing GO: CREATE OR ALTER FUNCTION must be the only statement in its batch, so the SELECT after it fails (Msg 111)
+f2b3879945f8	skills/tsql-review/references/check-explanations.md	missing GO: CREATE FUNCTION must be the only statement in its batch, so the SELECT after it fails (Msg 111)

@@ -35,6 +35,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 - **Observed:** `encryption_algorithm_desc = 'NONE, AES'` (SUPPORTED/negotiable — `NONE` in the list) with `is_encryption_enabled = 1` on `Hadr_endpoint_FIN` — allows plaintext if the remote endpoint does not enforce encryption
 - **Impact:** A misconfigured remote replica or a man-in-the-middle scenario could negotiate a plaintext connection, exposing unencrypted transaction log data in transit (including financial data in PayrollDB and GeneralLedger).
 - **Fix:**
+  <!-- lint-tsql: skip parser-gap: ALTER ENDPOINT without ROLE; ROLE is optional on ALTER (MS Learn: specify only the parameters to change), ScriptDom requires it -->
   ```sql
   ALTER ENDPOINT [Hadr_endpoint_FIN]
     FOR DATABASE_MIRRORING (ENCRYPTION = REQUIRED ALGORITHM AES);
@@ -45,6 +46,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 - **Observed:** `failure_condition_level = 1` on FinanceAG
 - **Impact:** Level 1 triggers automatic failover only when the SQL Server service goes offline entirely. Resource pressure failures (out-of-memory, scheduler non-yielding) do not trigger failover at this level. A SQL Server instance that is alive but unresponsive will not fail over automatically.
 - **Fix:**
+  <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP SET (FAILURE_CONDITION_LEVEL) is documented on MS Learn; ScriptDom rejects it -->
   ```sql
   ALTER AVAILABILITY GROUP [FinanceAG] SET (FAILURE_CONDITION_LEVEL = 3);
   ```
@@ -64,6 +66,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 - **Observed:** `automated_backup_preference_desc = 'SECONDARY_ONLY'` AND all replicas (SQLPROD01, SQLPROD02, SQLDR01) have `backup_priority = 50`
 - **Impact:** When all replicas have equal backup priority and the preference is SECONDARY_ONLY, `sys.fn_hadr_backup_is_preferred_replica()` uses a non-deterministic tiebreaker. Both SQLPROD02 and SQLDR01 may attempt backups simultaneously, fragmenting the log chain and producing duplicate backup files.
 - **Fix:**
+  <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP MODIFY REPLICA options are documented on MS Learn; ScriptDom rejects them -->
   ```sql
   -- Prefer SQLPROD02 for backups; use SQLDR01 only if SQLPROD02 unavailable
   ALTER AVAILABILITY GROUP [FinanceAG]
@@ -76,6 +79,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 - **Observed:** `secondary_role_allow_connections_desc = 'ALL'` on SQLPROD02\FINANCEDB and SQLDR01\FINANCEDB (secondary role), AND `read_only_routing_url IS NULL` on both replicas
 - **Impact:** `ApplicationIntent=ReadOnly` connections via the listener will not be redirected to a readable secondary even if a routing list is configured — the listener has nowhere to route them.
 - **Fix:**
+  <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP MODIFY REPLICA options are documented on MS Learn; ScriptDom rejects them -->
   ```sql
   ALTER AVAILABILITY GROUP [FinanceAG]
     MODIFY REPLICA ON N'SQLPROD02\FINANCEDB'
@@ -101,6 +105,7 @@ multi-subnet listener, SECONDARY_ONLY backup preference, SUPPORTED endpoint encr
 - **Observed:** No `READ_ONLY_ROUTING_LIST` appears to be configured (dependent on F15 fix being applied first)
 - **Impact:** Even after setting `READ_ONLY_ROUTING_URL` (W5), ApplicationIntent=ReadOnly connections will land on the primary until the routing list is also configured on each replica.
 - **Fix:** After applying the W5 fix, configure routing lists:
+  <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP MODIFY REPLICA options are documented on MS Learn; ScriptDom rejects them -->
   ```sql
   ALTER AVAILABILITY GROUP [FinanceAG]
     MODIFY REPLICA ON N'SQLPROD01\FINANCEDB'

@@ -33,6 +33,7 @@ WITH (ONLINE = ON, SORT_IN_TEMPDB = ON);
 
 ### [I2] dbo.Orders — Implicit Conversion Fix (schema/query change) `[derived: D2]`
 
+<!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
 ```sql
 -- Fix the @StartDate parameter type to match the Orders.CreatedDate column type
 -- If CreatedDate is DATE:

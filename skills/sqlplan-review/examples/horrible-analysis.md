@@ -57,6 +57,7 @@
 - **Observed:** Predicate: `CONVERT_IMPLICIT(datetime, [Orders].[CreatedDate]) >= @StartDate`. The column is wrapped in an implicit conversion.
 - **Impact:** When the column is wrapped in any function or conversion, no index seek is possible — SQL Server must convert every stored value and then compare. This forces a full index scan of 9,999,999 rows instead of a date-range seek that would return a small fraction of that. This is a primary driver of the cardinality explosion in the Orders/Payments branch.
 - **Fix:** Ensure `@StartDate` is declared with the same type as `dbo.Orders.CreatedDate`. Never wrap the column — cast the parameter instead:
+  <!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
   ```sql
   -- If CreatedDate is DATE and @StartDate is DATETIME:
   WHERE o.CreatedDate >= CAST(@StartDate AS DATE)
@@ -115,6 +116,7 @@
 - **Observed:** `ParameterCompiledValue="'1900-01-01'"` vs `ParameterRuntimeValue="'2025-01-01'"`. The plan was compiled against a date 125 years in the past.
 - **Impact:** A plan compiled for `CreatedDate >= '1900-01-01'` expects essentially all rows in Orders. A plan compiled for `'2025-01-01'` should expect only recent rows. The optimizer built the entire plan — join strategy, memory grant, DOP decisions — for the wrong population. This is the root cause of all N21 mismatch findings.
 - **Fix options in priority order:**
+  <!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
   ```sql
   -- Option 1: Recompile per execution (optimal plan every time; acceptable if query runs < few times/sec)
   OPTION (RECOMPILE)
@@ -144,6 +146,7 @@ CREATE NONCLUSTERED INDEX [IX_Users_Email]
 > **Warning:** This index will **not** help with `LIKE '%gmail.com'` (leading wildcard forces a scan regardless). The optimizer's 99.999% impact assumes an equality seek. Fix the predicate (W5) before creating this index — otherwise it wastes storage and maintenance overhead with no query benefit.
 
 ### Recommended Additional Indexes (not in XML — implied by analysis)
+<!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
 ```sql
 -- Eliminates the Key Lookup (W3) and converts Index Scan to Seek (W4):
 CREATE NONCLUSTERED INDEX [IX_Orders_CreatedDate_UserId]

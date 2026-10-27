@@ -69,6 +69,7 @@ WITH (
 
 The CEK is the symmetric key that encrypts the column data. It is stored inside SQL Server, protected (wrapped) by the CMK.
 
+<!-- lint-tsql: skip fragment: binary literal elided as 0x... -->
 ```sql
 CREATE COLUMN ENCRYPTION KEY [CEK_Data]
 WITH VALUES (

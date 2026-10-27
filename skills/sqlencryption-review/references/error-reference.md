@@ -75,6 +75,7 @@ Cannot find the certificate, because it does not exist or you do not have permis
    FROM sys.certificates WHERE name = '<cert_name>';
    ```
 2. Grant permission if missing:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    GRANT VIEW DEFINITION ON CERTIFICATE :: <cert_name> TO <login>;
    ```
@@ -99,6 +100,7 @@ Cannot find the cryptographic provider '<provider_name>'.
    FROM sys.cryptographic_providers;
    ```
 2. Re-register the provider if missing:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    CREATE CRYPTOGRAPHIC PROVIDER <provider_name>
    FROM FILE = '<path_to_dll>';
@@ -172,6 +174,7 @@ SQL Server Audit '<audit_name>' could not start. Check the SQL Server error log.
 3. Ensure the destination folder is on a local drive (not a mapped network drive).
 4. If using an audit filter on Always Encrypted columns, move the filter to the application layer; encrypted-column values are not available server-side for filtering.
 5. Restart the audit:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    ALTER SERVER AUDIT <audit_name> WITH (STATE = ON);
    ```
@@ -196,6 +199,7 @@ The EKM provider key is not found.
    JOIN sys.asymmetric_keys k ON c.credential_id = CAST(k.sid AS uniqueidentifier);
    ```
 2. For Azure Key Vault, verify the key exists in the vault and the SQL Server credential matches the latest version. Rotate the credential if the key was replaced:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    ALTER CRYPTOGRAPHIC PROVIDER <provider_name> DISABLE;
    ALTER CRYPTOGRAPHIC PROVIDER <provider_name> ENABLE;

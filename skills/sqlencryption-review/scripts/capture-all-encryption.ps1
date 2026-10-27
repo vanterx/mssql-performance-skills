@@ -34,7 +34,7 @@ function Write-TimestampedFile {
 }
 
 function Invoke-CaptureQuery {
-    param([string]$Query, [string]$Label)
+    param([string]$Query)
     try {
         if (Get-Command -Name Invoke-SqlCmd -ErrorAction SilentlyContinue) {
             $result = Invoke-SqlCmd -ServerInstance $ServerInstance -Database $Database -Query $Query -ErrorAction Stop -ConnectionTimeout 15 -QueryTimeout 120 | Out-String
@@ -300,8 +300,8 @@ Write-Host ""
 foreach ($q in $queries) {
     $label = $q.Label
     Write-Host "  $label"
-    $content = Invoke-CaptureQuery -Query $q.SQL -Label $label
-    $filePath = Write-TimestampedFile -FileName $q.File -Content $content
+    $content = Invoke-CaptureQuery -Query $q.SQL
+    $null = Write-TimestampedFile -FileName $q.File -Content $content
     if ($content -match "^ERROR:") {
         $errors += $label
     } else {

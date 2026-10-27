@@ -39,10 +39,9 @@ $schannelPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANN
 $tlsVersions = @("TLS 1.0", "TLS 1.1", "TLS 1.2", "TLS 1.3")
 
 try {
-    $protocolKeys = Get-ChildItem -Path $schannelPath -ErrorAction Stop | Where-Object { $_.PSChildName -match "^TLS " }
+    $null = Get-ChildItem -Path $schannelPath -ErrorAction Stop
 } catch {
     Write-Finding -Text "Cannot read SCHANNEL registry: $($_.Exception.Message)" -Severity "FAIL"
-    $protocolKeys = @()
 }
 
 foreach ($version in $tlsVersions) {
@@ -62,8 +61,8 @@ foreach ($version in $tlsVersions) {
         $clientDisabled = (Get-ItemProperty -Path $clientKey -Name "DisabledByDefault" -ErrorAction SilentlyContinue).DisabledByDefault
     }
 
-    $serverStatus = if ($serverEnabled -eq $null) { "not configured" } elseif ($serverEnabled -eq 1 -and $serverDisabled -eq 0) { "ENABLED" } elseif ($serverEnabled -eq 0 -and $serverDisabled -eq 1) { "disabled" } else { "Enabled=$serverEnabled, DisabledByDefault=$serverDisabled" }
-    $clientStatus = if ($clientEnabled -eq $null) { "not configured" } elseif ($clientEnabled -eq 1 -and $clientDisabled -eq 0) { "ENABLED" } elseif ($clientEnabled -eq 0 -and $clientDisabled -eq 1) { "disabled" } else { "Enabled=$clientEnabled, DisabledByDefault=$clientDisabled" }
+    $serverStatus = if ($null -eq $serverEnabled) { "not configured" } elseif ($serverEnabled -eq 1 -and $serverDisabled -eq 0) { "ENABLED" } elseif ($serverEnabled -eq 0 -and $serverDisabled -eq 1) { "disabled" } else { "Enabled=$serverEnabled, DisabledByDefault=$serverDisabled" }
+    $clientStatus = if ($null -eq $clientEnabled) { "not configured" } elseif ($clientEnabled -eq 1 -and $clientDisabled -eq 0) { "ENABLED" } elseif ($clientEnabled -eq 0 -and $clientDisabled -eq 1) { "disabled" } else { "Enabled=$clientEnabled, DisabledByDefault=$clientDisabled" }
 
     $severity = "INFO"
     if ($version -in @("TLS 1.0", "TLS 1.1")) {
@@ -181,7 +180,7 @@ Write-Host "--- TLS Connectivity Test ---" -ForegroundColor Yellow
 try {
     $tcpClient = New-Object System.Net.Sockets.TcpClient
     $tcpClient.Connect($ComputerName, $Port)
-    $stream = $tcpClient.GetStream()
+    $null = $tcpClient.GetStream()
     Write-Finding -Text "TCP connection to ${ComputerName}:${Port} succeeded" -Severity "INFO"
 
     $tcpClient.Close()
@@ -193,32 +192,22 @@ try {
 Write-Host ""
 Write-Host "--- External Tool Suggestions ---" -ForegroundColor Yellow
 
-$opensslFound = $false
-$nmapFound = $false
-
-try {
-    $null = Get-Command openssl.exe -ErrorAction Stop
-    $opensslFound = $true
-} catch {}
-
-try {
-    $null = Get-Command nmap.exe -ErrorAction Stop
-    $nmapFound = $true
-} catch {}
+$opensslFound = [bool](Get-Command openssl.exe -ErrorAction SilentlyContinue)
+$nmapFound    = [bool](Get-Command nmap.exe -ErrorAction SilentlyContinue)
 
 if ($opensslFound) {
-    Write-Finding -Text "openssl.exe found on PATH — verify with:" -Severity "RECOMMEND"
+    Write-Finding -Text "openssl.exe found on PATH - verify with:" -Severity "RECOMMEND"
     Write-Host "         openssl s_client -connect ${ComputerName}:${Port} -tls1_2" -ForegroundColor DarkCyan
     Write-Host "         openssl s_client -connect ${ComputerName}:${Port} -tls1_3" -ForegroundColor DarkCyan
 } else {
-    Write-Finding -Text "openssl.exe not on PATH — install OpenSSL for external TLS verification" -Severity "RECOMMEND"
+    Write-Finding -Text "openssl.exe not on PATH - install OpenSSL for external TLS verification" -Severity "RECOMMEND"
 }
 
 if ($nmapFound) {
-    Write-Finding -Text "nmap.exe found on PATH — verify with:" -Severity "RECOMMEND"
+    Write-Finding -Text "nmap.exe found on PATH - verify with:" -Severity "RECOMMEND"
     Write-Host "         nmap --script ssl-enum-ciphers -p ${Port} ${ComputerName}" -ForegroundColor DarkCyan
 } else {
-    Write-Finding -Text "nmap.exe not on PATH — install Nmap for cipher suite enumeration" -Severity "RECOMMEND"
+    Write-Finding -Text "nmap.exe not on PATH - install Nmap for cipher suite enumeration" -Severity "RECOMMEND"
 }
 
 Write-Host ""

@@ -776,6 +776,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feature_desc = 'CE Feedback';
 1. Cross-reference with runtime stats to confirm the adjustment improved actual elapsed time and logical reads
 2. If runtime stats improved, no action is required — CE Feedback is working as designed
 3. If a regression occurred after a CE Feedback adjustment, disable for the specific query:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    EXEC sys.sp_query_store_set_hints
        @query_id = <id>,
@@ -803,6 +804,7 @@ SELECT * FROM sys.query_store_plan_feedback WHERE feature_desc = 'DOP Feedback';
 1. Verify elapsed time improved after DOP was reduced: compare `avg_duration_ms` before and after the feedback rows appeared
 2. If elapsed time improved, DOP Feedback is working correctly — no action needed
 3. If elapsed time regressed after DOP reduction, disable for the specific query:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    EXEC sys.sp_query_store_set_hints
        @query_id = <id>,
@@ -832,6 +834,7 @@ HAVING COUNT(*) >= 3;
 
 **Fix options:**
 1. Pin a specific grant percent to stop the oscillation:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    EXEC sys.sp_query_store_set_hints
        @query_id = <id>,
@@ -864,6 +867,7 @@ SELECT COUNT(*) FROM sys.dm_hadr_availability_replica_states;
 
 **Fix options:**
 1. Enable Query Store on secondary replicas:
+   <!-- lint-tsql: skip parser-gap: ALTER DATABASE ... FOR SECONDARY SET QUERY_STORE is documented on MS Learn; ScriptDom rejects it -->
    ```sql
    ALTER DATABASE [YourDatabase] SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);
    ALTER DATABASE [YourDatabase] FOR SECONDARY SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);
@@ -896,12 +900,14 @@ WHERE qh.query_hint_failure_count > 0
 
 **Fix options:**
 1. For a nonzero `query_hint_failure_count`: remove the hint and re-apply with corrected syntax:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    EXEC sys.sp_query_store_clear_hints @query_id = <id>;
    EXEC sys.sp_query_store_set_hints @query_id = <id>,
         @query_hints = N'OPTION(RECOMPILE)';  -- or valid hint
    ```
 2. For orphaned hints (no matching `query_id`): remove them:
+   <!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
    ```sql
    EXEC sys.sp_query_store_clear_hints @query_id = <orphaned_id>;
    ```

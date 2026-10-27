@@ -900,8 +900,23 @@ AccountNotDelegated : True   # This user's credentials cannot be delegated
 
 **Fix options:**
 1. If delegation is intentional for this user: `Set-ADUser jsmith -AccountNotDelegated $false`
-2. If the user must remain delegation-sensitive, use RBCD on the target — RBCD uses S4U2Proxy which does not require the user's ticket to be forwardable
-3. Review security policy — `AccountNotDelegated` is sometimes set on privileged accounts intentionally
+2. If the user must remain delegation-sensitive, **no delegation model will carry their identity to the second hop** — RBCD included. Switching to RBCD (K24) is a common suggestion and it does not work on a patched domain:
+   - The flag sets *DelegationNotAllowed* on the account, which stops the KDC issuing forwardable tickets for that user ([MS-SFU] §3.2.1, §3.2.5.1.2).
+   - In the RBCD path, "if the service ticket in the additional-tickets field is not set to forwardable, then the KDC MUST return KRB-ERR-BADOPTION with STATUS_ACCOUNT_RESTRICTION" ([MS-SFU] §3.2.5.2.3).
+   - That rule is the CVE-2020-16996 fix. Microsoft describes it as unifying "the logic for Resource-Based Constrained Delegation (RBCD) with the original constrained delegation", and DCs have enforced it by default since the March 9, 2021 update ([KB4577252](https://support.microsoft.com/en-us/topic/managing-deployment-of-rbcd-protected-user-changes-for-cve-2020-16996-9a59a49f-20b9-a292-f205-da9da0ff24d3)).
+
+   RBCD only appears to work for such a user where a DC is unpatched, or has the KDC registry value `NonForwardableDelegation` set to `1`. Both leave CVE-2020-16996 open, so treat either as a finding, never as a fix. The real choices are to clear the flag for this user (option 1) or to have the second hop run under a fixed service identity rather than the user's (for example, a linked-server login mapping).
+3. Review security policy before removing the flag — on privileged accounts it is deliberate hardening, not a misconfiguration. Microsoft recommends it for Domain Admins, Enterprise Admins, and service accounts with elevated privileges: with it set, an attacker who compromises a delegation-trusted service cannot impersonate that account onward. It does not affect the account's ability to sign in or its permissions; it restricts only delegation. Keep it on privileged accounts, and remove it only from the specific end users whose queries must traverse the second hop. To set it on a privileged account that lacks it:
+
+```powershell
+# Mark a privileged admin account "Account is sensitive and cannot be delegated"
+Set-ADAccountControl -Identity "AdminUserName" -AccountNotDelegated $true
+
+# Confirm
+Get-ADUser "AdminUserName" -Properties AccountNotDelegated | Select-Object SamAccountName, AccountNotDelegated
+```
+
+  This is the same flag as the **Account is sensitive and cannot be delegated** check box in Active Directory Administrative Center, and the `NOT_DELEGATED` (`0x100000`) bit of `userAccountControl`. `Set-ADAccountControl` does not work against a read-only domain controller or a global catalog port.
 
 **Related checks:** K27, K21
 

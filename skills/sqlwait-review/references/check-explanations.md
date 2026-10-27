@@ -1419,6 +1419,7 @@ ORDER BY waiters DESC;
 
 **Fix options**
 1. Enable TempDB memory-optimized metadata (requires restart):
+   <!-- lint-tsql: skip parser-gap: ALTER SERVER CONFIGURATION SET MEMORY_OPTIMIZED TEMPDB_METADATA is documented on MS Learn; ScriptDom rejects it -->
    ```sql
    ALTER SERVER CONFIGURATION
    SET MEMORY_OPTIMIZED TEMPDB_METADATA = ON;

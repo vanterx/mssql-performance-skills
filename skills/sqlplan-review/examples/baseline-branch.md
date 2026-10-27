@@ -119,6 +119,7 @@ CREATE NONCLUSTERED INDEX [IX_Users_Email]
 
 ### Recommended Additional Indexes
 
+<!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
 ```sql
 -- Addresses W7 (Key Lookup Explosion): covering index to eliminate 5M Key Lookups
 -- Replace col1, col2, ... with actual columns referenced in SELECT/JOIN

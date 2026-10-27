@@ -10,7 +10,7 @@ Provides twenty-nine slash-command skills — twenty-five specialised review ski
 
 - **Format:** Markdown + YAML frontmatter
 - **Runtime:** Claude Code skill loader (reads `SKILL.md` files from `~/.claude/skills/`)
-- **No build system, no tests, no dependencies**
+- **No build system, no tests, no runtime dependencies** — skills are Markdown. Dev-only lint tooling (ruff, PSScriptAnalyzer, ScriptDom) gates the repo's scripts and the T-SQL in its docs; see *Linting* under Development Constraints
 
 ## Key Files
 
@@ -170,6 +170,18 @@ Provides twenty-nine slash-command skills — twenty-five specialised review ski
 | [skills/mssql-performance-review/scripts/README.md](skills/mssql-performance-review/scripts/README.md) | Redaction script usage: options, categories replaced and kept, why consistent tokens, limits |
 | [skills/sqlplan-review/scripts/README.md](skills/sqlplan-review/scripts/README.md) | Script usage guide: extractor invocation for both runtimes, why a tool rather than reading the XML, digest-section-to-check mapping, hardening notes, and the three capture scripts |
 
+### Lint tooling (dev-only)
+
+| File | Purpose |
+|------|---------|
+| [scripts/lint-scripts.sh](scripts/lint-scripts.sh) | Single entry point: runs the three gates below over git-tracked and untracked-unignored files. `--strict` makes a missing linter a FAIL (CI); without it a missing linter is a WARN and is skipped |
+| [scripts/lint-tsql.ps1](scripts/lint-tsql.ps1) | T-SQL syntax gate: parses every `.sql` file and every ` ```sql ` block in every `.md` file with ScriptDom (`TSql170Parser`). Fetches the pinned ScriptDom package from nuget.org once, verifies its SHA-256 before loading, caches it in `.lint-cache/`. Honours `<!-- lint-tsql: skip <reason> -->` markers and `-Baseline` |
+| [scripts/lint-tsql-baseline.tsv](scripts/lint-tsql-baseline.tsv) | Known-broken T-SQL blocks in docs, keyed by content hash — real or suspected recipe defects awaiting a validated fix. Shrink-only: a fixed, moved, or deleted block's entry fails the gate as stale |
+| [scripts/lint-powershell.ps1](scripts/lint-powershell.ps1) | PowerShell gate: PSScriptAnalyzer with the repo settings, every severity including ParseError |
+| [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) | PSScriptAnalyzer rule exclusions, each with its reason |
+| [ruff.toml](ruff.toml) | ruff rules for every `.py` in the repo — no file list, so new scripts are covered automatically. `target-version = "py38"` enforces the repo-wide Python 3.8 floor: newer syntax is a hard error |
+| [.github/workflows/lint.yml](.github/workflows/lint.yml) | CI: installs pinned ruff and PSScriptAnalyzer, runs `lint-scripts.sh --strict` on every PR |
+
 ## Installing Skills
 
 **Option 1: Plugin Marketplace (recommended)**
@@ -237,7 +249,7 @@ All new and modified skills must conform to the Anthropic skill-creator best pra
 Every change must be made on a new branch — never commit directly to `main`. Before starting work, create a branch (e.g. `git checkout -b <type>/<short-description>`), commit there, and open a PR to merge into `main`. This keeps `main` clean and ensures all changes go through review. Branch names follow the commit `<type>` vocabulary (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`).
 
 ### Before committing
-Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too.
+Always run `bash scripts/verify-docs.sh` — it checks documentation invariants and exits non-zero on any failure. The PostToolUse hook in `.claude/settings.json` runs it automatically after Write/Edit, but run it manually before `git commit` too. If the change touches code or T-SQL, also run `bash scripts/lint-scripts.sh` — see *Linting* below.
 
 Checks 1–49 verify **structure** (counts, ranges, file presence, table rows). Checks 50–56 verify **claims, cross-skill content, shipped scripts and links** and are delegated to [scripts/verify-claims.py](scripts/verify-claims.py), which `verify-docs.sh` invokes once so all seven run against content read in a single pass:
 
@@ -263,6 +275,23 @@ Always credit the person, tool or document a check, threshold, formula, quote or
 - **Check before crediting.** Confirm every quote, formula or parameter name against the original source before attributing it. If the source can't be reached, keep the credit but label the specific claim unverified.
 - **A community credit does not replace Microsoft Learn validation.** Community sources are credited for method and emphasis. Thresholds, DMV columns, syntax and version claims still follow Microsoft Learn, and anything Learn does not document carries the `Unverified against Microsoft Learn` label (Check 51).
 - **Credit work adapted from other repositories or skills** in the commit message and in the skill itself. #65 used Erik Darling's `query-plan-analysis` skill without crediting it at first.
+
+### Linting
+Also run `bash scripts/lint-scripts.sh` before committing a change to any `.py`, `.ps1`, `.sql`, or to a ` ```sql ` block in any `.md`. CI runs it with `--strict` on every PR (`.github/workflows/lint.yml`). Local prerequisites: `pip install ruff`, `Install-PSResource PSScriptAnalyzer -Scope CurrentUser`, and PowerShell 7 (`pwsh`), which also loads ScriptDom — no .NET SDK needed.
+
+**Python scripts: standard library only, Python 3.8+.** Shipped scripts run on whatever interpreter a DBA's jump box has, with no pip step. Any new `.py` is linted automatically — there is no list to register it in — and `ruff.toml`'s `target-version = "py38"` makes 3.9+ syntax a hard error. A script that genuinely needs a newer Python opts in by name under `[per-file-target-version]` in `ruff.toml` and documents its floor in its own docstring.
+
+**T-SQL in Markdown is linted too.** Every ` ```sql ` block must parse as a T-SQL batch. A block that is correct as documentation but not runnable gets a marker on the line directly before its fence, and the reason is mandatory — a bare `skip` fails the gate:
+
+```markdown
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
+```
+
+Use one of three reason kinds: `fragment:` (clauses, `...` elisions, `<placeholders>`, side-by-side alternatives), `parser-gap:` (syntax Microsoft Learn documents but ScriptDom rejects — name the construct, and confirm it on MS Learn first), or `removed-syntax:` (deliberately shows syntax SQL Server no longer accepts). Never use a marker to silence a block that is actually wrong.
+
+**Real defects go in `scripts/lint-tsql-baseline.tsv`, which only shrinks.** Fixing a block changes its hash, so it drops out of the baseline and must then parse; delete its line in the same commit, or the gate fails on a stale entry. Do not add entries to get a new failure past the gate — fix it. `lint-tsql.ps1 -EmitBaseline` prints candidate lines, but each needs a human-written note.
+
+ScriptDom is Microsoft's T-SQL parser library, not the engine's parser: it has real grammar gaps (several `ALTER AVAILABILITY GROUP` replica and listener options, `ALTER ENDPOINT` without `ROLE`, `SET ENCRYPTION SUSPEND`), which is why `parser-gap:` exists. It checks syntax only — a wrong column name or an option that is valid syntax in the wrong statement still parses.
 
 ### Dollar signs in SKILL.md files
 Never write `$` immediately followed by a digit or `[` inside SKILL.md files. The skill loader performs shell-style variable expansion on the entire file content, so `$0` expands to the input file path argument, `$1`/`$15` expand to empty strings, and `$[...]` is parsed as deprecated bash arithmetic. This bites SQL Server content in practice — named instances (`MSSQL$SQL2019`), shell snippets, and currency literals in T-SQL examples. Rephrase with a placeholder (`MSSQL$<InstanceName>`) or drop the symbol (`Amount > 1500.00`). Dollar signs followed by a letter are safe: PowerShell variables (`$true`), instance placeholders, and JSON paths (`'$.path'`) all pass. Enforced by verify-docs.sh Check 5; see [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md) §10.

@@ -587,6 +587,7 @@ request_session_id  resource_type  request_mode  request_status
 
 **Example (problem + fix):**
 
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Problem: whole transaction at SERIALIZABLE for one race condition
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -724,6 +725,7 @@ session_id  database_name  transaction_begin_time  transaction_duration_s  sessi
 
 **Example (problem + fix):**
 
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Problem: validation, remote call, and logging all inside the transaction
 BEGIN TRAN;

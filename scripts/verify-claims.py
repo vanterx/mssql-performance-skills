@@ -52,7 +52,7 @@ Standard library only.
 import os
 import re
 import sys
-from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from typing import Dict, FrozenSet, List, Sequence, Tuple
 
 SCAN_DIRS = ("skills",)
 SCAN_EXTS = (".md", ".sql", ".ps1")
@@ -188,6 +188,24 @@ CLAIM_SENTINELS: Sequence[Dict[str, object]] = (
         "kind": "must_not",
         "pattern": re.compile(r"all 0 checks"),
         "why": "a dispatcher skill states no count rather than claiming zero",
+    },
+    {
+        "path": "skills/sqlspn-review/SKILL.md",
+        "kind": "must_not",
+        "pattern": re.compile(
+            r"different ticket requirements than classic KCD"
+            r"|does not require the user's ticket to be forwardable", re.I),
+        "why": "K26 offered RBCD as a workaround for AccountNotDelegated; since "
+               "CVE-2020-16996 enforcement RBCD rejects non-forwardable tickets too",
+    },
+    {
+        "path": "skills/sqlspn-review/references/check-explanations.md",
+        "kind": "must_not",
+        "pattern": re.compile(
+            r"different ticket requirements than classic KCD"
+            r"|does not require the user's ticket to be forwardable", re.I),
+        "why": "K26 offered RBCD as a workaround for AccountNotDelegated; since "
+               "CVE-2020-16996 enforcement RBCD rejects non-forwardable tickets too",
     },
     {
         "path": "*",

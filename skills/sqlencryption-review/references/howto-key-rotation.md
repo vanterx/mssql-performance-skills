@@ -78,6 +78,7 @@ On the secondary, import the primary's new public key (`create certificate ... f
 
 Rotate one replica at a time to avoid failover.
 
+<!-- lint-tsql: skip parser-gap: ALTER ENDPOINT without ROLE; ROLE is optional on ALTER (MS Learn: specify only the parameters to change), ScriptDom requires it -->
 ```sql
 -- On each replica
 create certificate AG_Cert_v2
@@ -152,6 +153,7 @@ After all CEKs reference the new CMK, update application connection strings to u
 
 Rotates the key that encrypts column data (the CMK stays the same).
 
+<!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
 ```sql
 -- 1. Create a new CEK under the existing CMK (encrypted_value from client)
 create column encryption key CEK_SSN_v2

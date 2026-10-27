@@ -758,6 +758,7 @@ WHERE group_id = (SELECT group_id FROM sys.availability_groups WHERE name = N'Sa
 ```
 
 **Example (problem + fix)**
+<!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP ADD/REMOVE LISTENER is documented on MS Learn; ScriptDom rejects it -->
 ```sql
 -- Add a listener:
 ALTER AVAILABILITY GROUP [SalesAG]

@@ -119,6 +119,7 @@
   referencing the primary by server name will need to be updated or the application will
   fail to connect to the new primary.
 - **Fix:** Create an AG listener with a static IP on the same subnet:
+  <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP ADD/REMOVE LISTENER is documented on MS Learn; ScriptDom rejects it -->
   ```sql
   ALTER AVAILABILITY GROUP [SalesAG]
   ADD LISTENER N'salesag-listener' (

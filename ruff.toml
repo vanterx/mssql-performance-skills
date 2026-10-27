@@ -1,0 +1,50 @@
+# Python lint configuration -- applies to EVERY *.py file in the repo.
+#
+# There is deliberately no file list here. scripts/lint-scripts.sh lints every
+# .py file git knows about (tracked, or new and not ignored), and ruff applies
+# this file to anything beneath the repo root -- so a script added anywhere is
+# covered the moment it exists, and a bare `ruff check` or an editor's ruff
+# extension sees the same rules as CI. Ignored paths (backup/, node_modules/)
+# are skipped because ruff respects .gitignore.
+
+# Policy for every Python script in this repo: standard library only, and it
+# runs on Python 3.8+. Shipped scripts are run by an on-call DBA on whatever
+# interpreter a jump box happens to have, with no pip install step.
+#
+# target-version enforces that floor two ways:
+#   - syntax newer than 3.8 is a hard error (e.g. a `match` statement), so a
+#     script that quietly needs a newer Python fails here, not on the jump box;
+#   - ruff will not "modernise" code into 3.9+ forms (typing.List -> list[...],
+#     Optional[X] -> X | None) that would raise the floor without anyone noticing.
+target-version = "py38"
+
+# A script that genuinely needs a newer Python opts in by name, so the exception
+# is visible in review -- and must document its floor in its own docstring:
+# [per-file-target-version]
+# "skills/<skill>/scripts/<script>.py" = "py311"
+
+line-length = 100
+
+[lint]
+# Correctness over style. Families left out on purpose, each measured against
+# this repo rather than assumed:
+#   UP   pyupgrade rewrites 80 .format() calls to f-strings -- churn, no defect found
+#   ISC  flags long operator messages that are deliberately wrapped across lines
+#   RUF  RUF005 prefers [*list(range(32)), ...] to list concatenation -- less readable
+#   SIM  SIM105 contextlib.suppress over try/except/pass -- a readability toss-up
+# Add a family only once the repo is clean under it.
+select = [
+    "E4",   # pycodestyle: imports
+    "E7",   # pycodestyle: statements, incl. E702 (two on one line) and E741 (names l, O, I)
+    "E9",   # pycodestyle: syntax and IO errors
+    "F",    # pyflakes: undefined names, unused imports, broken f-strings
+    "B",    # flake8-bugbear: mutable defaults, loop-variable capture, broad raises
+    "PLE",  # pylint errors only -- never pylint's style or refactor opinions
+    "PIE",  # flake8-pie: unnecessary pass, duplicate class fields
+    "RET",  # flake8-return: unreachable or inconsistent returns
+]
+
+# `ruff format` is deliberately not part of the gate. The existing scripts were
+# not written black-style -- verify-claims.py hand-aligns its registry tables so
+# the data reads as a table -- and reformatting would be a large diff that makes
+# that data harder to review. Run `ruff format` by hand on a new file if wanted.

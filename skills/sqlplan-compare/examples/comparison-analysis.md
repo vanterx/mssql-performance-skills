@@ -67,6 +67,7 @@ A single change caused the entire regression: **the `@status` parameter type cha
 
 ## Recommended Fix
 
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Step 1: Confirm the Status column type
 SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH

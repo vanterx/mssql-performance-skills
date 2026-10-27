@@ -23,6 +23,9 @@ output/
 skill-inventory.md
 
 
+# Lint tool cache (ScriptDom assembly fetched by scripts/lint-tsql.ps1)
+.lint-cache/
+
 # Python bytecode
 __pycache__/
 *.pyc

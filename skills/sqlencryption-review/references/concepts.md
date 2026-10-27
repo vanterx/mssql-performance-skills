@@ -559,6 +559,7 @@ Starting with SQL Server 2016, TempDB is automatically encrypted when **any** us
 
 SQL Server 2019 introduced the ability to suspend and resume the TDE encryption scan:
 
+<!-- lint-tsql: skip parser-gap: ALTER DATABASE SET ENCRYPTION SUSPEND/RESUME is documented on MS Learn; ScriptDom rejects it -->
 ```sql
 -- Pause the scan (e.g., during peak hours)
 ALTER DATABASE MyDB SET ENCRYPTION SUSPEND;
