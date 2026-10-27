@@ -1025,7 +1025,7 @@ WHERE name NOT LIKE '##%'
 ```
 
 **Fix options**
-- For `ENCRYPTED_BY_PASSWORD`: `ALTER CERTIFICATE [cert] WITH PRIVATE KEY (DECRYPTION BY PASSWORD = 'pwd', ENCRYPTION BY DATABASE MASTER KEY)`
+- For `ENCRYPTED_BY_PASSWORD`: `ALTER CERTIFICATE [cert] WITH PRIVATE KEY (DECRYPTION BY PASSWORD = 'pwd')` — giving only the current password moves the private key's protection to the database master key; there is no `ENCRYPTION BY DATABASE MASTER KEY` clause
 - For `NO_PRIVATE_KEY`: restore from BACKUP CERTIFICATE output; if no backup exists, the cert is permanently limited to public-key operations
 
 **Related checks:** A44–A46 (DMK must exist), A37 (cert backup)

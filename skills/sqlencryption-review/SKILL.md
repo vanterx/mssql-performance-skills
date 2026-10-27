@@ -452,7 +452,7 @@ For T-SQL source-level checks (A18, A19, A43), scan provided SQL modules in `sys
 ### A31 — Certificate private key not protected by DMK
 - **Trigger:** `sys.certificates` WHERE `pvt_key_encryption_type_desc = 'ENCRYPTED_BY_PASSWORD'` (password-only, DMK not used) OR `pvt_key_encryption_type_desc = 'NO_PRIVATE_KEY'` (key was stripped or never imported)
 - **Severity:** Warning for password-only (password must appear in T-SQL code to use the cert at runtime); Critical for NO_PRIVATE_KEY (cert cannot sign or decrypt — effectively a public-key-only stub, useless for TDE/CLE/Service Broker)
-- **Fix:** For password-only: `ALTER CERTIFICATE [cert] WITH PRIVATE KEY (DECRYPTION BY PASSWORD = 'old_pwd', ENCRYPTION BY DATABASE MASTER KEY)` — verify the DMK exists and is open; for missing private key, restore cert from BACKUP CERTIFICATE output
+- **Fix:** For password-only: `ALTER CERTIFICATE [cert] WITH PRIVATE KEY (DECRYPTION BY PASSWORD = 'old_pwd')` — giving only the current password moves the private key's protection to the database master key (there is no `ENCRYPTION BY DATABASE MASTER KEY` clause); verify the DMK exists and is open; for missing private key, restore cert from BACKUP CERTIFICATE output
 
 ### A32 — Service Broker endpoint certificate not rotated in over 2 years
 - **Trigger:** `sys.endpoints` WHERE `type_desc = 'SERVICE_BROKER'` AND `connection_auth_desc = 'CERTIFICATE'` joined to `sys.certificates` WHERE `create_date < DATEADD(YEAR, -2, GETDATE())`
