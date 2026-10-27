@@ -368,31 +368,39 @@ def self_test() -> int:
         out = Redactor(Mapper()).redact_document(text)
         for s in must:
             if s not in out:
-                print("FAIL {}: expected {!r} in {!r}".format(i, s, out)); failures += 1
+                print("FAIL {}: expected {!r} in {!r}".format(i, s, out))
+                failures += 1
         for s in must_not:
             if s in out:
-                print("FAIL {}: {!r} still present in {!r}".format(i, s, out)); failures += 1
+                print("FAIL {}: {!r} still present in {!r}".format(i, s, out))
+                failures += 1
     m = Mapper()
     out = Redactor(m).redact_document(TABLE_TEST)
     for s in ("HOST_01\tUSER_01", "OrderService"):
         if s not in out:
-            print("FAIL table: expected {!r} in {!r}".format(s, out)); failures += 1
+            print("FAIL table: expected {!r} in {!r}".format(s, out))
+            failures += 1
     if out.count("HOST_01") != 2:
-        print("FAIL table: host not tokenised consistently: {!r}".format(out)); failures += 1
+        print("FAIL table: host not tokenised consistently: {!r}".format(out))
+        failures += 1
     out = Redactor(Mapper()).redact_document(FIXED_TEST)
     lines = out.split("\n")
     if "WKS-FIN-14" in out or "APP-NODE-02" in out or "svc_orders" in out:
-        print("FAIL fixed: value left in {!r}".format(out)); failures += 1
+        print("FAIL fixed: value left in {!r}".format(out))
+        failures += 1
     if lines[2].index("OrderEntry") != FIXED_TEST.split("\n")[2].index("OrderEntry"):
-        print("FAIL fixed: column alignment changed: {!r}".format(lines[2])); failures += 1
+        print("FAIL fixed: column alignment changed: {!r}".format(lines[2]))
+        failures += 1
     if " sa" not in lines[3]:
-        print("FAIL fixed: built-in login sa should be kept: {!r}".format(lines[3])); failures += 1
+        print("FAIL fixed: built-in login sa should be kept: {!r}".format(lines[3]))
+        failures += 1
     # consistency across documents sharing a mapper
     shared = Mapper()
     a = Redactor(shared).redact_document('hostname="APPSRV07"')
     b = Redactor(shared).redact_document("\\\\APPSRV07\\share\\x")
     if "HOST_01" not in a or "HOST_01" not in b:
-        print("FAIL consistency: {!r} / {!r}".format(a, b)); failures += 1
+        print("FAIL consistency: {!r} / {!r}".format(a, b))
+        failures += 1
     print("self-test: {} failure(s)".format(failures))
     return 1 if failures else 0
 
