@@ -20,6 +20,9 @@
 
   Adjust @start_date / @end_date to your observation window.
   Default: last 7 days.
+
+  Requires: VIEW DATABASE STATE in the target database (SQL Server 2019 and
+  earlier) or VIEW DATABASE PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 

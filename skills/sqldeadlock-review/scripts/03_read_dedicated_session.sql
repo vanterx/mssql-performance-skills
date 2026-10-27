@@ -5,6 +5,9 @@
 ================================================================================
   Reads from the DeadlockAndBlocking session created by 02_create_dedicated_xe_session.sql.
   Paste the deadlock_xml column value into /sqldeadlock-review.
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 

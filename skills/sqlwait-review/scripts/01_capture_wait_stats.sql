@@ -16,6 +16,10 @@
   For differential analysis (measures waits over a specific time window):
     Run Section A (before snapshot) → wait the desired interval → run Section B.
     The diff shows only what accumulated during that window, ignoring history.
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later), plus VIEW ANY DEFINITION for
+  every row of sys.master_files.
 ================================================================================
 */
 
@@ -35,6 +39,8 @@ SELECT TOP 30
     CAST(100.0 * signal_wait_time_ms
          / NULLIF(wait_time_ms, 0) AS decimal(5,2))                AS pct_signal  /* CPU queue pressure */
 FROM sys.dm_os_wait_stats
+/* Benign background / idle waits, based on the Paul Randal / SQLskills
+   exclusion list (sqlskills.com/help/waits/). */
 WHERE wait_type NOT IN (
     'AZURE_IMDS_VERSIONS', 'BMPALLOCATION', 'BMPBUILD', 'BMPREPARTITION',
     'BROKER_EVENTHANDLER', 'BROKER_RECEIVE_WAITFOR', 'BROKER_TASK_STOP',
@@ -231,6 +237,8 @@ SELECT
     signal_wait_time_ms
 INTO #waits_before
 FROM sys.dm_os_wait_stats
+/* Benign background / idle waits, based on the Paul Randal / SQLskills
+   exclusion list (sqlskills.com/help/waits/). */
 WHERE wait_type NOT IN (
     'AZURE_IMDS_VERSIONS', 'BMPALLOCATION', 'BMPBUILD', 'BMPREPARTITION',
     'BROKER_EVENTHANDLER', 'BROKER_RECEIVE_WAITFOR', 'BROKER_TASK_STOP',

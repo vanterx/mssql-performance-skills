@@ -8,6 +8,9 @@
 
   All duration values are in microseconds (matches XE convention).
   The sqltrace-review skill handles both microsecond and millisecond inputs.
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later).
 ================================================================================
 */
 

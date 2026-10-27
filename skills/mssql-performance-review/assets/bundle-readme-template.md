@@ -11,7 +11,7 @@ Hypotheses being probed:
 
 ## What this is
 
-This bundle is a self-contained set of read-only SQL scripts and a paste-back template. The orchestrator generated it because the original input did not contain enough information to confirm or refute the hypotheses above.
+This bundle is a self-contained set of read-only SQL scripts and a paste-back template. Each script states the permission it needs on its `Requires:` line; run them under a dedicated login that holds those permissions (usually `VIEW SERVER STATE`, or `VIEW SERVER PERFORMANCE STATE` on SQL Server 2022 and later) rather than `sa` or another `sysadmin` login. The orchestrator generated it because the original input did not contain enough information to confirm or refute the hypotheses above.
 
 **The orchestrator will not contact your SQL Server.** You run these scripts yourself (SSMS, sqlcmd, your tool of choice) and paste the results back into `PASTE-RESULTS-HERE.md`.
 

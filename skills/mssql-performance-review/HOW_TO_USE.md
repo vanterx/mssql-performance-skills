@@ -135,6 +135,23 @@ The orchestrator generates a [capture bundle](#11-capture-bundle-workflow) — a
 
 You get a full report.
 
+### Questions to ask
+
+The orchestrator answers questions as well as commands. Give it the artifacts and ask what you actually want to know; each question below names the skill that does most of the work, so you can also go straight to it.
+
+| Question | Main skills |
+|----------|-------------|
+| What is the dominant bottleneck on this server, and which queries consume the most CPU — including any with parameter-sensitive plans? | `sqlwait-review`, `sqlquerystore-review`, `sqlprocstats-review`, `sqltrace-review` |
+| Is the slow I/O caused by the storage or by SQL Server reading too much? | `sqldiskio-review`, `sqlperfmon-review`, `sqlwait-review`, then `sqlstats-review` or `sqlplan-review` on the top reader |
+| Who is the head blocker, what is it doing, and why does it hold its locks so long? | `sqlblocking-review`, then `sqlplan-review` on the head blocker's statement |
+| Which queries were waiting rather than running, and on what? | Wait-bound query attribution (trace batches joined to `sys.dm_exec_requests` snapshots) |
+| What changed between the fast run and the slow run? | `sqlworkload-compare` for two periods, `sqlplan-compare` for one query's two plans |
+| Why did the availability group fail over at 02:14? | `sqlerrorlog-review` → `sqlclusterlog-review` → `sqlhadr-review` |
+| Do these captures cover the incident at all? | Capture coverage pre-flight (runs before every review) |
+| Give me a prioritised summary: what to fix first, how risky it is, and how to undo it. | The orchestrator's Consolidated Fix Priority |
+
+The question shapes which hypotheses rank first; it does not limit the checks that run. Anything the artifacts cannot answer comes back as a Missing Artifacts row naming the capture script and the SQL LogScout scenario that would supply it.
+
 ---
 
 ## 5. The four input modes
@@ -449,9 +466,17 @@ After your wait period: `/mssql-performance-review --baseline ./state/<this-run>
 
 ### 8.10 Missing Artifacts
 
-What the orchestrator would have run if you'd provided more data. Each entry cites the suggested capture script:
+What the orchestrator would have run if you'd provided more data. Each row cites the suggested capture script and the SQL LogScout scenario that collects the same data, for teams that already run LogScout:
 
-> - [ ] Query Store output for `query_hash` of `usp_GetOrders` — would confirm plan instability over time (capture: `skills/sqlquerystore-review/scripts/01_capture_queries.sql`)
+| Artifact | Would resolve | Capture script | SQL LogScout scenario |
+|----------|---------------|----------------|-----------------------|
+| Query Store output for `usp_GetOrders` | Plan instability over time | `skills/sqlquerystore-review/scripts/01_capture_queries.sql` | `GeneralPerf`, `DetailedPerf` or `LightPerf` |
+
+A dash in the scenario column means no LogScout scenario collects it (SPN output, encryption audit, configuration catalog, SSRS logs).
+
+### 8.10a Capture Coverage
+
+Before dispatching, the orchestrator tabulates each artifact's start, end, duration and sample count, and flags artifacts that miss the incident window, do not overlap each other, stopped far short of the planned length, or hold implausibly few events. A cross-artifact confirmation is not counted between two artifacts that never overlapped. When everything lines up you get one line: `Coverage: all artifacts cover <start>–<end>`.
 
 ### 8.11 Passed Checks
 
@@ -843,6 +868,15 @@ The orchestrator is strictly offline. Here is exactly what it does and doesn't d
 ### Data in artifacts
 
 Your artifacts may contain sensitive data — query text, parameter values, login names, server names. The orchestrator processes this data in-memory during the review and writes evidence records into `./state/<run-id>/`. Review the output before sharing.
+
+To strip identifying values before an artifact leaves your machine, run [`scripts/redact_artifact.py`](scripts/README.md) on it first (Python 3.8+, standard library only). It replaces host names, logins, IP addresses, SIDs, GUIDs, email addresses and card-like numbers with consistent tokens: `SQLPROD01` becomes `HOST_01` in every file processed with the same `--map`, so the orchestrator can still see that the host in the ERRORLOG is the blocker in the DMV output. Query text, object names and the instance part of a named instance are kept. It is pattern matching, so read the output before you share it, and keep the `--map` file local — it holds the original values.
+
+```bash
+python scripts/redact_artifact.py errorlog.txt --map incident.map.json -o errorlog.redacted.txt
+python scripts/redact_artifact.py blocking.txt --map incident.map.json -o blocking.redacted.txt
+```
+
+Every report opens with a one-line notice that it is AI-generated and that each Critical finding should be confirmed against the rows it cites before you act on it.
 
 Capture bundles in `./captures/<run-id>/` contain the `.sql` scripts (no data); paste-back files contain DMV output you pasted (potentially sensitive). Both are local to your machine.
 

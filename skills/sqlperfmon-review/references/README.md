@@ -11,7 +11,7 @@ you need:
 - The counter-reading fundamentals that change conclusions: the per-core scale
   of `Process\% Processor Time`, why rate counters cannot show short spikes,
   how `_Total` hides an outlier, and which counters the DMV cannot supply
-- The full Quick Reference table for all 14 checks at a glance
+- The full Quick Reference table for all 15 checks at a glance
 
 Load a reference file when:
 
@@ -33,5 +33,5 @@ check PM7" or "what does this finding mean?"
 **What it covers:** A "Before You Start: How to Read a Counter" section
 covering the four facts that most often cause a Perfmon capture to be
 misread, then the full five-part explanation (What it means / How to spot it /
-Why it's a problem / Fix options / Related checks) for all 14 checks plus the
+Why it's a problem / Fix options / Related checks) for all 15 checks plus the
 Quick Reference table.

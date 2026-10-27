@@ -1,4 +1,4 @@
-# sqlperfmon-review — Check Explanations (PM1–PM14)
+# sqlperfmon-review — Check Explanations (PM1–PM15)
 
 Plain-English explanation of every check in `sqlperfmon-review`, with counter paths, worked arithmetic, and fix recipes. `SKILL.md` carries the triggers and thresholds this skill acts on; this file is background and on-demand detail.
 
@@ -9,7 +9,7 @@ Plain-English explanation of every check in `sqlperfmon-review`, with counter pa
 - [PM4–PM6 — Memory](#pm4pm6--memory)
 - [PM7–PM8 — Storage](#pm7pm8--storage)
 - [PM9–PM12 — Compilation and Workload](#pm9pm12--compilation-and-workload)
-- [PM13–PM14 — Client Behaviour and Collection Integrity](#pm13pm14--client-behaviour-and-collection-integrity)
+- [PM13–PM15 — Client Behaviour and Collection Integrity](#pm13pm15--client-behaviour-and-collection-integrity)
 - [Quick Reference Table](#quick-reference-table)
 
 ---
@@ -51,6 +51,25 @@ Worked arithmetic on a 24-logical-processor host:
 | `Process(sqlservr)\% Processor Time` average | 1,840 | 1840 / 24 = **76.7% of the machine** |
 | `Processor(_Total)\% Processor Time` average | 81 | Total host load 81%, so SQL Server accounts for nearly all of it |
 | Samples above 60 × 24 = 1,440 | 92% of window | Sustained, not a spike |
+
+**Report runs, not just the average.** A run is three or more consecutive samples at or above
+the threshold. On the same host with 15-second samples:
+
+| Run | Start | End | Samples | Peak | Reading |
+|-----|-------|-----|---------|------|---------|
+| 1 | 09:12:00 | 09:31:45 | 80 | 2,302 (95.9%) | Critical — 20 minutes at or above 80 × 24 = 1,920 |
+| 2 | 10:04:30 | 10:05:15 | 4 | 1,610 (67.1%) | Warning-level run, short |
+
+The window average for the hour could read 55% and pass. The runs show a 20-minute
+saturation, and that is what the user felt. The same run detection is used by
+`microsoft/SqlNexus` `DiagnosticAnalyzer.AnalyzeCpuUsage` (3 or more consecutive samples
+above 70%).
+
+**No Perfmon capture?** `RING_BUFFER_SCHEDULER_MONITOR` rows in `sys.dm_os_ring_buffers` hold
+roughly the last few hours of SQL Server vs. idle CPU at about one sample a minute — enough for
+PM1 and PM2, nothing else. The record layout is unverified against Microsoft Learn (the ring
+buffer type is undocumented), so treat it as a fallback and say so; the query is in the
+skill's Input section.
 
 **Why it's a problem:** Not inherently — a database server using its processors is a database server doing its job. The finding is diagnostic rather than remedial: it settles the attribution question, and it stops the next hour being spent on the wrong layer. The value is in what it rules out, which is that something other than SQL Server is eating the machine.
 
@@ -409,7 +428,7 @@ Microsoft's only characterisation of the counter is that "high batch requests me
 
 ---
 
-## PM13–PM14 — Client Behaviour and Collection Integrity
+## PM13–PM15 — Client Behaviour and Collection Integrity
 
 ### PM13 — Client Cancellation (Attention) Rate Elevated
 
@@ -458,6 +477,52 @@ The second is easy to miss and changes the conclusion: where gaps cluster, the s
 
 ---
 
+### PM15 — More Than One sqlservr Process: Attribution Ambiguous
+
+**What it means:** Two or more SQL Server instances run on the host, so the capture holds several
+`Process` instances for SQL Server and nothing in the counter names says which one is the
+instance you are reviewing.
+
+**How to spot it:**
+
+```
+\Process(sqlservr)\% Processor Time      1,420
+\Process(sqlservr#1)\% Processor Time      310
+\Process(sqlservr)\ID Process            5,812
+\Process(sqlservr#1)\ID Process          9,044
+```
+
+```sql
+SELECT SERVERPROPERTY('ProcessID');   -- on the instance under review: 9044
+```
+
+The instance under review is `sqlservr#1`, at 310 — not the 1,420 a quick read of
+`Process(sqlservr)` would have attributed to it.
+
+**Why it's a problem:** Perfmon names process instances by executable name, and the order is not
+stable. Microsoft documents that PDH matches processes only by instance name, so when one
+same-named process exits, another moves into its slot and a formatted counter can combine samples
+from two different processes. Every per-process finding — PM1, PM2's attribution, PM5, PM6's
+process half — can describe the wrong instance or a blend of two.
+
+**Fix options:**
+1. **Capture `\Process(sqlservr*)\ID Process`** with the other counters (the skill's counter list
+   and `capture-perfmon.ps1` now do) and match it to `SERVERPROPERTY('ProcessID')`.
+2. **Split the window where an `ID Process` value changes** — a restart or a slot shift happened
+   there.
+3. **Use the `Process V2` counterset on Windows 11 and later**, which puts the process ID in the
+   instance name and avoids the slot problem.
+4. **Report what is unaffected.** PM2's residual subtracts every SQL Server process from the host
+   total, so it still holds; the per-instance findings do not until the match is made.
+
+**Related checks:** PM1, PM2, PM5, PM14
+
+**Source note:** the process-ID match follows `microsoft/SqlNexus`
+`DiagnosticAnalyzer.AnalyzeCpuUsage` (MIT), which finds the right `sqlservr` instance by
+matching `ID Process` to the instance's `ProcessID`.
+
+---
+
 ## Quick Reference Table
 
 | Check | Category | Trigger | Severity |
@@ -476,3 +541,4 @@ The second is easy to miss and changes the conclusion: where gaps cluster, the s
 | PM12 | Workload | Batch requests ±50% against the stated baseline | Warning |
 | PM13 | Client | `SQL Attention rate` sustained above zero | Warning |
 | PM14 | Capture | Gap > 3 × interval, or window < 5 minutes | Warning / Critical |
+| PM15 | Capture | More than one `sqlservr` process and no `ID Process` match | Warning |

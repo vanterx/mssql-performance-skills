@@ -1,6 +1,13 @@
 -- capture-security-facts.sql
 -- Run on the SOURCE instance to collect facts needed by /sqlmigration-security-review (J1-J15).
 -- Native T-SQL only -- no third-party tooling required.
+-- Requires: VIEW ANY DEFINITION (covers sys.credentials and per-database
+--   principal metadata), ALTER ANY LOGIN or, on SQL Server 2022 and later,
+--   VIEW SERVER SECURITY DEFINITION to see every row of sys.sql_logins and
+--   sys.server_principals, VIEW SERVER STATE (VIEW SERVER SECURITY STATE on
+--   SQL Server 2022 and later) for sys.dm_database_encryption_keys, and
+--   SELECT on msdb.dbo.sysproxies. sysadmin covers all of it; use a
+--   dedicated login rather than sa.
 
 -- Query 1: Server-level logins and their SIDs
 -- is_policy_checked / is_expiration_checked exist only on sys.sql_logins,

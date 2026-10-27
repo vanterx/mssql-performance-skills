@@ -1,5 +1,7 @@
 # SQL Server Performance Review — Unified Report
 
+> AI-generated analysis of the supplied artifacts. It can be wrong: confirm each Critical finding against the cited rows before acting.
+
 ## Summary
 
 - Files analyzed: 4 (`slow-proc.sql`, `slow-proc.sqlplan`, `stats-iotime.txt`, `wait-stats.txt`)

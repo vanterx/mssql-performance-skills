@@ -14,6 +14,8 @@
     Writes     — logical writes
 
   After running, paste the result set into /sqltrace-review.
+
+  Requires: ALTER TRACE (sys.fn_trace_gettable).
 ================================================================================
 */
 

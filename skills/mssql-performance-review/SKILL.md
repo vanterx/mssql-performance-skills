@@ -12,7 +12,7 @@ triggers:
 
 ## Purpose
 
-A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 18 specialised review skills, then synthesises their findings into one consolidated report.
+A dispatch skill that turns a mixed pile of SQL Server artifacts (or a symptom description) into a single, evidence-backed performance review. It does not redefine any checks — it routes work to the 28 specialised review skills, then synthesises their findings into one consolidated report.
 
 The orchestrator is **strictly offline**: it reads files the user provides, generates capture-script bundles when artifacts are missing, and emits analysis reports. It never opens a connection to a SQL Server. All execution against the database is the user's action.
 
@@ -67,6 +67,8 @@ Accept any of:
 - Inline content blocks pasted into chat (one block per artifact, with type hint)
 - A natural-language symptom description ("CPU is high on prod since 09:00, no recent deploy")
 
+Artifacts that carry host names, logins, IP addresses or other identifying values can be redacted first with `scripts/redact_artifact.py` (Python standard library only, run by the user on their own machine). It replaces each value with a consistent token — `SQLPROD01` becomes `HOST_01` in every file processed with the same `--map` — so correlations across artifacts survive. When an input carries such tokens, treat equal tokens as the same entity and refer to them by token; do not try to recover the original value. Usage and limits: `scripts/README.md`.
+
 The orchestrator first classifies each input, then routes per the dispatch table below. When the input is symptom-only and no artifacts are available, the orchestrator describes which captures would resolve the hypothesis and (in tier 3) generates a capture bundle the user can run.
 
 ## Artifact Classification
@@ -95,7 +97,27 @@ Content-based, not extension-reliant:
 | `sp_configure` name/value pairs, `sys.databases` settings columns (`is_auto_shrink_on`, `compatibility_level`), `sys.configurations` output | sqldbconfig-review |
 | `Final result:` / `Exit code (Decimal):` / `Detailed results:` blocks, `Setup Bootstrap` paths, `ConfigurationFile.ini` parameters, MSI `Return value 3` | sqlbootstraplog-review |
 | `ReportServerService_<timestamp>.log` trace lines, `<RStrace>` / `<Service>` config sections from `ReportingServicesService.exe.config` / `RSReportServer.config`, `ExecutionLog3` columns, "Report Server Windows Service" Event Log entries | ssrstracelog-review |
+| `\\<host>\Process(sqlservr)\% Processor Time`-style counter paths as CSV column headers (a `relog` export), `Processor(_Total)`, `LogicalDisk(*)`, `Memory\Available MBytes` columns | sqlperfmon-review |
+| Two captures of the same workload labelled by period or server (baseline/current, before/after, Monday/Tuesday), `capture-workload-windows.sql` output with `baseline_*` and `current_*` columns, or a request to compare two periods | sqlworkload-compare |
 | Ambiguous `.txt` | Inspect first 100 lines, pick the highest-priority match; ask the user if still ambiguous |
+
+## Capture Coverage Pre-flight
+
+Before dispatching, tabulate what each time-bearing artifact actually covers. Several rules below — the same-window peer in Finding Severity, Wait-Bound Query Attribution, the baseline diff — assume the artifacts describe the same period. That assumption is checked here, not taken on trust.
+
+| Artifact | Start | End | Duration | Samples / events | Overlaps incident window | Overlaps other artifacts |
+|----------|-------|-----|----------|------------------|--------------------------|--------------------------|
+
+Read the bounds from the artifact itself: first and last timestamp in a trace, ERRORLOG or CLUSTER.LOG; the first and last sample in a Perfmon CSV; `interval_start`/`interval_end` in Query Store output; the capture timestamp of a DMV snapshot (a single point, duration zero). Cumulative DMV output with no timestamp — `sys.dm_os_wait_stats`, `sys.dm_io_virtual_file_stats`, `sys.dm_exec_procedure_stats` — covers "since the counters were last cleared or the instance started"; say so in the Start column rather than inventing one.
+
+Flag, as Info findings in the report, with the artifact named:
+
+- **Outside the incident window** — an artifact whose span does not include the time the user gave for the symptom. Its findings still stand, but none of them can confirm the incident's cause.
+- **No overlap between artifacts** — two artifacts used together (a trace and a wait capture, a plan and a Perfmon log) whose spans do not intersect. Do not raise severity on a cross-artifact peer between them (Finding Severity rule 2); state that the peer was not counted and why.
+- **Far shorter than planned** — a capture that ran for well under the period the user asked for or the capture bundle specified (for example 3 minutes of a planned 30). A collector that stopped early often stopped at the moment of interest.
+- **Implausibly low volume** — a trace or event file with very few events for its span on a server the user describes as busy, or a Perfmon log with gaps between samples. These usually mean a filter, a dropped-event buffer, or a collector that stalled, not a quiet server.
+
+When every artifact overlaps the incident window and each other, record one line — "Coverage: all artifacts cover <start>–<end>" — and continue. This pre-flight follows the capture-integrity query in `microsoft/SqlNexus` `AI/Skills/scenario-utility-diagnostics.md` (MIT), which checks the same gaps before any analysis is trusted.
 
 ## Hypothesis Generation
 
@@ -114,8 +136,11 @@ Example hypotheses:
 | AG configuration review | sys.availability_groups / sys.availability_replicas / sys.database_mirroring_endpoints output present, or user asks about AG setup, backup failures on secondary, listener routing, endpoint certificate | sqlag-review |
 | Kerberos auth fail | NTLM fallback, login burst, setspn output present | sqlspn-review → sqlerrorlog-review (login burst correlation) |
 | Workload regression | Two plans for same query, dates differ, durations diverge | sqlplan-compare → sqlplan-review on both |
+| Period regression | Two workload captures from different periods or servers; "it was fast last week", "slow since the upgrade" | sqlworkload-compare → sqlplan-compare on its top regression → sqldbconfig-review on configuration differences |
 
 Record hypotheses with initial confidence (HIGH / MEDIUM / LOW). Confidence updates as probes complete.
+
+Every MEDIUM or LOW carries its reason in parentheses, naming what is missing or thin: `MEDIUM (no Query Store data)`, `LOW (2 samples)`, `MEDIUM (wait capture and trace do not overlap)`. A bare MEDIUM tells the reader nothing about what would raise it; the reason doubles as the next capture to ask for. HIGH needs no reason beyond the evidence already cited. The convention follows rule 14 of `microsoft/SqlNexus` `.github/agents/sql-nexus-diagnostic.agent.md` (MIT).
 
 ## Dispatch — DAG-Driven
 
@@ -207,6 +232,25 @@ Full bundle layout, curation rules per hypothesis class, manifest schema, and re
 
 Bundle README and PASTE-RESULTS-HERE.md are filled in from templates at `assets/bundle-readme-template.md` and `assets/paste-results-template.md`. Always include the trust note: "The orchestrator will not contact your SQL Server."
 
+### SQL LogScout scenario per missing artifact
+
+Many users already run [SQL LogScout](https://github.com/microsoft/SQL_LogScout) for Microsoft support cases. Each Missing Artifacts row names the LogScout scenario that collects the artifact, alongside the bundle script, so the user can choose either route. Scenario names are those Microsoft Learn's troubleshooting articles document:
+
+| Missing artifact | SQL LogScout scenario |
+|------------------|-----------------------|
+| Wait and blocking snapshots, running requests, Perfmon counters, batch-level XE trace, Query Store data | `GeneralPerf`, `DetailedPerf` or `LightPerf` |
+| Memory clerks, `DBCC MEMORYSTATUS` | `Memory` |
+| AG DMVs, cluster log, `AlwaysOn_health` and SQLDIAG XEL files | `AlwaysOn` |
+| Repeated plans of a query that keeps consuming CPU (needs at least 60 seconds of CPU on the query) | `NeverEndingQuery` |
+| Setup and patch logs | `Setup` |
+| Backup and restore diagnostics | `BackupRestore` |
+| Network capture for connection failures | `NetworkTrace` |
+| Replication, CDC and change tracking metadata | `Replication` |
+| Storage-level I/O diagnostics | `IO` — Unverified against Microsoft Learn: the scenario exists in the LogScout README but no Learn article names it |
+| SPN and delegation output, encryption audit, configuration catalog, SSRS logs | — (no scenario; use the bundle script) |
+
+Microsoft Learn lists the three performance scenarios together without saying which items each one leaves out; when the difference matters, name all three and point to the scenario list in the LogScout README. LogScout output is an archive of files rather than a pasted block: route each file by content through Artifact Classification as usual.
+
 ## Verification Checklist and Baseline-Diff Feedback
 
 Every report ends with a Verification — After Deploying Fixes section that turns the per-recommendation `verification` field into an actionable post-deploy checklist. The user re-captures after deploying fixes and returns with `--baseline ./state/<this-run>/state.json` to compare.
@@ -263,7 +307,7 @@ Every recommended fix carries the following fields. The full rubric is in `refer
 | Side effects | Storage impact, lock duration, write overhead, other queries affected |
 | Rollback | The exact T-SQL or steps to undo the change |
 | Verification | Which capture to re-run after deployment and the expected metric change |
-| Confidence | HIGH / MEDIUM / LOW, inherited from the underlying finding |
+| Confidence | HIGH / MEDIUM / LOW, inherited from the underlying finding, with the reason for anything below HIGH |
 
 Recommendations without explicit rollback are rejected — "just do this" is not acceptable output.
 
@@ -277,6 +321,21 @@ Risk grades the fix; this grades the finding. A specialised skill reads one arti
 4. **Never cap** THREADPOOL, poison waits, corruption, dumps, data-loss risk, or security and availability findings. They stand alone at full severity.
 
 Full tables, including the co-firing peer list, are in `references/risk-rubric.md`.
+
+## Wait-Bound Query Attribution
+
+When the input holds both completed-batch events from a trace (`sqltrace-review` input with `SPID`, `StartTime`, `EndTime`, `CPU`, `Duration`) and one or more `sys.dm_exec_requests` snapshots with `session_id`, `wait_type` and a capture time, join them. A request row belongs to a batch when the session matches and the snapshot time falls between the batch's start and end. Count only rows where `status` is `suspended` and `wait_type` is not NULL; a `running` or `runnable` row is evidence of work or of a CPU queue, not of a resource wait.
+
+For each batch that matched, compute CPU ÷ duration in the same unit — `sqltrace-review`'s Input section gives the per-event-class and per-version units, and trace `Duration` is often recorded in microseconds while `CPU` is in milliseconds. A ratio below 0.8 marks the batch **wait-bound**: at least a fifth of its elapsed time was spent waiting, not working. Name the wait type it was seen on in the snapshots, with the snapshot count when it was seen more than once.
+
+Report the result as a Cross-Cutting Finding, not a new check, and rank the batches by wait time (duration minus CPU). The value is routing: a wait-bound batch on `LCK_M_*` belongs to `sqlblocking-review`, one on `PAGEIOLATCH_*` to `sqldiskio-review` and `sqlwait-review`, one on `RESOURCE_SEMAPHORE` to `sqlmemory-review` — and tuning its plan for CPU addresses the wrong time.
+
+Two limits to state when they apply:
+
+- A parallel batch can show CPU above its duration, because CPU sums across threads, while still waiting on some threads. A ratio at or above 0.8 does not prove a parallel batch was not waiting.
+- Snapshots sample. A batch with no matching snapshot is "not observed waiting", not "never waited". Report the number of batches that matched no snapshot.
+
+The method follows the wait-heavy query analysis in `microsoft/SqlNexus` `SqlNexus.McpServer/DiagnosticAnalyzer.cs` (`GetWaitHeavyQueries`, MIT), with one correction: that query divides CPU by Duration without converting units, while its own output treats Duration as microseconds. Convert both to milliseconds first, or nearly every batch reads as wait-bound.
 
 ## Adversarial Root Cause Check
 
@@ -326,9 +385,11 @@ The reference files are progressive disclosure — keep SKILL.md compact; load d
 ```
 ## SQL Server Performance Review — Unified Report
 
+> AI-generated analysis of the supplied artifacts. It can be wrong: confirm each Critical finding against the cited rows before acting.
+
 ### Summary
 - Files analyzed: N
-- Skills applied: M (of 15 available)
+- Skills applied: M (of 28 available)
 - Hypotheses considered: H (primary + adversarial alternatives)
 - Findings: X Critical, Y Warnings, Z Info
 - Primary bottleneck: [single sentence stating the root cause]
@@ -356,7 +417,7 @@ The reference files are progressive disclosure — keep SKILL.md compact; load d
   - [source artifact]: [observed value] vs threshold [threshold value]
   - [source artifact]: [observed value] vs threshold [threshold value]
   - [source artifact]: [observed value] vs threshold [threshold value]
-- Confidence: HIGH/MEDIUM/LOW
+- Confidence: HIGH, or MEDIUM/LOW (reason — what is missing or thin)
 - Impact: [one-sentence runtime effect]
 
 #### Warnings
@@ -391,8 +452,13 @@ Each conflict explicit with both sides cited. Empty section if no conflicts dete
 |------|--------|--------|--------|------|--------------|----------|--------------|------------|----------|
 | 1 | [exact T-SQL or config change] | [time] | [window] | Low/Med/High | [list] | [exact rollback T-SQL] | [capture to re-run and expected delta] | HIGH/MED/LOW | [C1, W2, ...] |
 
+### Capture Coverage
+[Pre-flight table, or "Coverage: all artifacts cover <start>–<end>"]
+
 ### Missing Artifacts
-- [ ] [artifact name] — would resolve [hypothesis name] (capture: [skill/scripts/...sql])
+| Artifact | Would resolve | Capture script | SQL LogScout scenario |
+|----------|---------------|----------------|-----------------------|
+| [artifact name] | [hypothesis name] | `skills/<name>/scripts/...sql` | [scenario, or — when none collects it] |
 
 ### Passed Checks
 [Per-skill list of evaluated-but-not-fired checks. Confirms analytical coverage was thorough.]

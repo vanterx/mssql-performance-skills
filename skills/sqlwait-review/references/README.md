@@ -27,3 +27,17 @@ or "what does this finding mean?"
 **What it covers:** The full five-part explanation (What it means / How to
 spot it / Example / Fix options / Related checks) for all 45 checks plus the
 Quick Reference table.
+
+### community-practices.md
+
+**When to load:** When the user asks where a threshold or rule comes from; when
+they are working from `sp_BlitzFirst` or `sp_Blitz` output and need it mapped
+onto these checks; or when a widely repeated piece of advice ("CXPACKET means
+lower MAXDOP", "SOS_SCHEDULER_YIELD means CPU pressure", "ASYNC_NETWORK_IO is
+always the client") needs qualifying.
+
+**What it covers:** The Waits and Queues method as practised by Paul Randal
+(SQLskills) and Brent Ozar's First Responder Kit, a tooling map, the
+practitioner rules the V-checks encode, where that advice needs qualifying,
+and the source list. Community sources are cited for method — thresholds and
+syntax in `SKILL.md` follow Microsoft Learn.

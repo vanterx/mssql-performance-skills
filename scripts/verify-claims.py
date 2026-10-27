@@ -10,18 +10,20 @@ elapsed across threads (and a worked example computed 59,650 ms from two
 concurrent threads), and a fourth copy of the idle-wait exclusion list drifted
 out of sync with the other three.
 
-This script holds five checks, numbered to continue verify-docs.sh:
+This script holds seven checks, numbered to continue verify-docs.sh:
 
   50  duplicated literal lists are byte-identical across every copy
   51  claims Microsoft does not document carry their Unverified label
   52  fixed-width example tables keep their columns aligned
   53  specific claims that were wrong once stay fixed
   54  the untrusted-artifact-content rule is present and identical everywhere
+  55  shipped scripts state their permissions; capture scripts are read-only
+  56  relative Markdown links resolve to a file that exists
 
 Scope and honest limits
 -----------------------
-Checks 50, 52 and 54 are derived from repository content, so they cannot
-rot.
+Checks 50, 52, 54, 55 and 56 are derived from repository content, so they
+cannot rot.
 Check 51 enforces the mandatory MS Learn validation policy in the one direction
 that is mechanical. Check 53 is a regression guard for known-wrong statements,
 not a correctness proof - it would not have caught any of the three defects
@@ -53,7 +55,7 @@ import sys
 from typing import Dict, FrozenSet, List, Sequence, Tuple
 
 SCAN_DIRS = ("skills",)
-SCAN_EXTS = (".md", ".sql")
+SCAN_EXTS = (".md", ".sql", ".ps1")
 
 # ---------------------------------------------------------------------------
 # Check 50 registry: literal lists that exist in more than one file.
@@ -109,6 +111,39 @@ UNVERIFIED_CLAIMS: Sequence[Dict[str, object]] = (
     {
         "name": "per-thread elapsed/CPU aggregation rule",
         "asserts": re.compile(r"`?MAX`?\s+for\s+elapsed", re.I),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        # sys.dm_os_ring_buffers is documented; this ring buffer type's record
+        # layout is not, and Microsoft says undocumented types are unsupported.
+        "name": "SQL Nexus 20,000 spins/ms/CPU spinlock cue",
+        "asserts": re.compile(r"20,000 spins per millisecond", re.I),
+        "marker": re.compile(r"unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        "name": "RING_BUFFER_SCHEDULER_MONITOR record layout",
+        "asserts": re.compile(r"ProcessUtilization|SystemIdle"),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        # Learn names GeneralPerf, DetailedPerf, LightPerf, Memory, AlwaysOn,
+        # NeverEndingQuery, Setup, BackupRestore, NetworkTrace and Replication;
+        # no Learn article names the IO scenario.
+        "name": "SQL LogScout IO scenario",
+        "asserts": re.compile(r"\|\s*`IO`\s"),
+        "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        # Community procedure, not Microsoft documentation; restored after #15.
+        "name": "sp_QuickieStore regression parameters",
+        "asserts": re.compile(r"@regression_baseline_(?:start|end)_date"),
+        "marker": re.compile(r"unverified\s+against\s+Microsoft\s+Learn", re.I),
+    },
+    {
+        # sp_Blitz's poison-wait HAVING clause. Learn documents the wait types,
+        # not this threshold; the credit was restored after #15 removed it.
+        "name": "sp_Blitz proportional poison-wait threshold",
+        "asserts": re.compile(r"5,?000\s*(?:×|\*|x)\s*hours", re.I),
         "marker": re.compile(r"Unverified\s+against\s+Microsoft\s+Learn", re.I),
     },
 )
@@ -172,7 +207,124 @@ CLAIM_SENTINELS: Sequence[Dict[str, object]] = (
         "why": "K26 offered RBCD as a workaround for AccountNotDelegated; since "
                "CVE-2020-16996 enforcement RBCD rejects non-forwardable tickets too",
     },
+    {
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"always\s+(?:client|application)[- ]side"
+                              r"|(?:client|application)[- ]side\s+bottleneck,\s+always", re.I),
+        "why": "ASYNC_NETWORK_IO can be the network path too (Learn lists NIC, drivers, firewalls)",
+    },
 )
+
+# ---------------------------------------------------------------------------
+# Check 55: shipped scripts.
+#
+# The orchestrator's capture bundle promises read-only scripts, and the user
+# runs them on a production server. Before this check, one shipped setup
+# script changed two sp_configure values and left an XE session with
+# STARTUP_STATE = ON behind, with no way back documented.
+#
+# Two classes, told apart by file name:
+#   capture  - every .sql under skills/*/scripts/ not named *_create_*. After
+#              comments and string literals are removed, none of the
+#              CAPTURE_FORBIDDEN patterns may match.
+#   setup    - *_create_*.sql. Must say CHANGES SERVER STATE and carry a
+#              Teardown section.
+# Every .sql and .ps1 under skills/*/scripts/ must carry a "Requires:" line
+# in its header naming the permission it needs.
+#
+# This is a regex check over stripped text, not a T-SQL parser: dynamic SQL
+# built from string fragments, for one, is invisible to it. It catches the
+# plain cases, which are the ones a reviewer is most likely to miss.
+# ---------------------------------------------------------------------------
+SCRIPT_RE = re.compile(r"^skills/[^/]+/scripts/[^/]+" + chr(92) + ".(sql|ps1)$")
+SETUP_SCRIPT_RE = re.compile(r"_create_[^/]*" + chr(92) + ".sql$")
+REQUIRES_WINDOW = 6000  # characters from the top of the file
+CAPTURE_FORBIDDEN: Sequence[Tuple[str, "re.Pattern[str]"]] = (
+    # The (?!INTO\b) / (?!FROM\b) guards stop the optional keyword group from
+    # backtracking so that the keyword itself is read as the table name.
+    ("INSERT into a permanent table", re.compile(r"\bINSERT\s+(?:INTO\s+)?(?!INTO\b)(?![#@])[\w\[]", re.I)),
+    ("UPDATE of a permanent table", re.compile(r"\bUPDATE\s+(?!STATISTICS\b)(?![#@])[\w\[\].]+\s+SET\b", re.I)),
+    ("DELETE from a permanent table", re.compile(r"\bDELETE\s+(?:FROM\s+)?(?!FROM\b)(?![#@])[\w\[]", re.I)),
+    ("MERGE", re.compile(r"\bMERGE\s+(?:INTO\s+)?(?!INTO\b)(?![#@])[\w\[]", re.I)),
+    ("TRUNCATE of a permanent table", re.compile(r"\bTRUNCATE\s+TABLE\s+(?!#)", re.I)),
+    ("SELECT INTO a permanent table", re.compile(r"\bINTO\s+(?![#@])(?:\[?\w+\]?\.){0,2}\[?\w+\]?\s+FROM\b", re.I)),
+    ("DDL on a permanent object", re.compile(
+        r"\b(?:CREATE|ALTER|DROP)\s+(?:TABLE|INDEX|PROC|PROCEDURE|FUNCTION|VIEW|TRIGGER|EVENT\s+SESSION|"
+        r"DATABASE|LOGIN|USER|ROLE|SCHEMA|STATISTICS|ENDPOINT|CERTIFICATE|CREDENTIAL|AVAILABILITY\s+GROUP)\b"
+        r"(?!\s+(?:IF\s+EXISTS\s+)?#)", re.I)),
+    ("server configuration change", re.compile(r"\bRECONFIGURE\b|\bsp_configure\b[^;]*,", re.I)),
+    ("ALTER SERVER CONFIGURATION", re.compile(r"\bALTER\s+SERVER\s+CONFIGURATION\b", re.I)),
+    ("DBCC outside the read-only allowlist", re.compile(
+        r"\bDBCC\s+(?!(?:TRACESTATUS|SQLPERF|LOGINFO|INPUTBUFFER|OUTPUTBUFFER|SHOW_STATISTICS|"
+        r"OPENTRAN|USEROPTIONS|PROCCACHE|MEMORYSTATUS)\b)\w+", re.I)),
+    ("state-changing system procedure", re.compile(
+        r"\bsp_(?:query_store_(?:force_plan|unforce_plan|remove_query|remove_plan|reset_exec_stats|flush_db)|"
+        r"trace_(?:create|setevent|setfilter|setstatus)|addextendedproperty|rename|"
+        r"(?:add|drop)(?:srv)?rolemember|altermessage|addmessage|update_job|start_job|stop_job)\b", re.I)),
+    ("KILL / SHUTDOWN", re.compile(r"\b(?:KILL|SHUTDOWN)\b(?!_)", re.I)),
+    ("permission change", re.compile(r"\b(?:GRANT|REVOKE|DENY)\s+\w", re.I)),
+    ("BACKUP / RESTORE", re.compile(r"\b(?:BACKUP|RESTORE)\s+(?:DATABASE|LOG)\b", re.I)),
+    ("xp_cmdshell", re.compile(r"\bxp_cmdshell\b", re.I)),
+)
+
+
+def strip_sql(text: str) -> str:
+    """
+    Blank out comments and string literals, keeping newlines so line numbers
+    survive. Handles nested /* */ (T-SQL allows nesting), -- line comments,
+    and '...' literals with doubled quotes. Bracketed identifiers are kept.
+    """
+    out: List[str] = []
+    i, n, depth = 0, len(text), 0
+    while i < n:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if depth:
+            if ch == "/" and nxt == "*":
+                depth += 1
+                out.append("  ")
+                i += 2
+            elif ch == "*" and nxt == "/":
+                depth -= 1
+                out.append("  ")
+                i += 2
+            else:
+                out.append(ch if ch == chr(10) else " ")
+                i += 1
+            continue
+        if ch == "/" and nxt == "*":
+            depth = 1
+            out.append("  ")
+            i += 2
+        elif ch == "-" and nxt == "-":
+            while i < n and text[i] != chr(10):
+                out.append(" ")
+                i += 1
+        elif ch == "'":
+            out.append("'")
+            i += 1
+            while i < n:
+                if text[i] == "'" and i + 1 < n and text[i + 1] == "'":
+                    out.append("  ")
+                    i += 2
+                elif text[i] == "'":
+                    out.append("'")
+                    i += 1
+                    break
+                else:
+                    out.append(text[i] if text[i] == chr(10) else " ")
+                    i += 1
+        elif ch == "[":
+            j = text.find("]", i)
+            j = n - 1 if j < 0 else j
+            out.append(text[i:j + 1])
+            i = j + 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
 
 # ---------------------------------------------------------------------------
 # Check 52: fixed-width ASCII tables inside fenced code blocks.
@@ -287,6 +439,51 @@ def rel_matches(pattern: str, rel: str) -> bool:
     if pattern.startswith("*/"):
         return rel.endswith(pattern[1:])
     return rel == pattern
+
+
+# Check 56: relative Markdown links. Scans every Markdown file in the repo, not
+# only skills/, because the dangling links it was added for lived in README.md,
+# MCP_SERVER_DETAILS.md and .claude/docs/. Local-only folders (gitignored) and
+# dependency trees are skipped. Links inside fenced code blocks and inline code
+# are ignored, as are URLs, mailto: and in-page anchors.
+LINK_SKIP_DIRS = frozenset({".git", "node_modules", "dist", "backlog", "backup",
+                            "docs", "output"})
+LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
+FENCE_RE = re.compile(r"^(```|~~~).*?^\1", re.S | re.M)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
+
+def dangling_links() -> Tuple[int, List[str]]:
+    problems: List[str] = []
+    scanned = 0
+    for dirpath, dirnames, filenames in os.walk("."):
+        top = os.path.normpath(dirpath).split(os.sep)[0]
+        dirnames[:] = [d for d in dirnames
+                       if d not in LINK_SKIP_DIRS or (dirpath != "." and top == ".claude"
+                                                      and d == "docs")]
+        for name in filenames:
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            scanned += 1
+            text = INLINE_CODE_RE.sub("", FENCE_RE.sub("", text))
+            for match in LINK_RE.finditer(text):
+                target = match.group(1)
+                if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) or target.startswith("#"):
+                    continue
+                file_part = target.split("#", 1)[0]
+                if not file_part:
+                    continue
+                resolved = os.path.normpath(os.path.join(dirpath, file_part))
+                if not os.path.exists(resolved):
+                    rel = os.path.normpath(path).replace(os.sep, "/")
+                    problems.append("{}: link target '{}' does not exist".format(rel, target))
+    return scanned, problems
 
 
 def main() -> int:
@@ -463,6 +660,54 @@ def main() -> int:
         if not missing and not misplaced and len(blocks) == 1:
             record("PASS", "54", "untrusted-artifact-content rule present, identical and "
                                  "correctly placed in all {} skills".format(len(skill_files)))
+
+    # --- Check 55: shipped scripts ---------------------------------------
+    scripts = sorted(rel for rel in contents if SCRIPT_RE.match(rel))
+    script_problems: List[str] = []
+    setup_count = 0
+    for rel in scripts:
+        text = contents[rel]
+        if not re.search(r"Requires:", text[:REQUIRES_WINDOW]):
+            script_problems.append("{}: no 'Requires:' line in the header - state the "
+                                   "permission the script needs".format(rel))
+        if not rel.endswith(".sql"):
+            continue
+        if SETUP_SCRIPT_RE.search(rel):
+            setup_count += 1
+            if "CHANGES SERVER STATE" not in text:
+                script_problems.append("{}: setup script does not say CHANGES SERVER STATE "
+                                       "in its header".format(rel))
+            if not re.search(r"\bTeardown\b", text):
+                script_problems.append("{}: setup script has no Teardown section".format(rel))
+            continue
+        stripped = strip_sql(text)
+        for label, pattern in CAPTURE_FORBIDDEN:
+            for match in pattern.finditer(stripped):
+                line = stripped[: match.start()].count(chr(10)) + 1
+                script_problems.append("{}:{}: {} in a capture script ({!r}) - capture "
+                                       "scripts must be read-only; rename to *_create_* "
+                                       "with a header and Teardown if it must change "
+                                       "state".format(rel, line, label,
+                                                      match.group(0).strip()[:40]))
+    if not scripts:
+        record("FAIL", "55", "no skills/*/scripts/*.sql or *.ps1 files found")
+    elif script_problems:
+        for message in script_problems:
+            record("FAIL", "55", message)
+    else:
+        record("PASS", "55", "{} scripts state their permissions; {} capture scripts are "
+                             "read-only; {} setup scripts carry a change header and "
+                             "Teardown".format(len(scripts),
+                                               sum(1 for r in scripts if r.endswith(".sql")) - setup_count,
+                                               setup_count))
+
+    # --- Check 56: relative Markdown links -------------------------------
+    scanned, link_problems = dangling_links()
+    if link_problems:
+        for message in link_problems:
+            record("FAIL", "56", message)
+    else:
+        record("PASS", "56", "relative links in {} Markdown files all resolve".format(scanned))
 
     for status, check, message in records:
         print("{}\t{}\t{}".format(status, check, message))

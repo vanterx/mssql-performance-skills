@@ -22,7 +22,7 @@ A detailed guide to every check the analyser applies to `sys.dm_os_wait_stats` a
 
 When SQL Server cannot immediately continue executing a thread — because it needs a page from disk, a lock held by another session, CPU time, or memory — the thread enters a **wait state**. SQL Server records each wait in `sys.dm_os_wait_stats`, accumulating the counts and durations since the last restart.
 
-The **Waits and Queues** methodology (pioneered by Microsoft's SQL Server team) treats wait statistics as the primary diagnostic signal: find the biggest waits, understand their root cause, fix it.
+The **Waits and Queues** methodology (introduced in Microsoft's *Performance Tuning Using Waits and Queues* whitepaper and developed into modern practice by Paul Randal of SQLskills and Brent Ozar's First Responder Kit — see [community-practices.md](community-practices.md)) treats wait statistics as the primary diagnostic signal: find the biggest waits, understand their root cause, fix it.
 
 ### The three wait time components
 
@@ -137,7 +137,7 @@ UPDATE dbo.Orders SET Status = 'Processing' WHERE CustomerId = 42;
 `CXPACKET` records the control thread waiting for parallel worker threads to finish their portion of a parallel query. `CXCONSUMER` (SQL Server 2016 SP2 / 2017 CU3+) records consumer threads waiting for data from producer threads — this is the more benign component of parallelism waits. `HTBUILD`, `HTDELETE`, `HTMEMO`, `HTREINIT`, and `HTREPARTITION` are **batch-mode hash build/repartition waits** — they appear on queries using batch mode execution (columnstore indexes, batch mode on rowstore SQL 2019+) and represent threads synchronizing at hash build or repartition phases. Treat HT* the same as CXPACKET: investigate skew before adjusting MAXDOP.
 
 **Critical misconception to avoid**
-The most common mistake DBA teams make with CXPACKET is reducing MAXDOP reflexively. The SQL Server team and the broader community explicitly warn against this. CXPACKET is *expected* for parallel queries — it does not indicate a problem by itself. The question to ask is: **is the work evenly distributed across threads?** If yes, CXPACKET is fine. If one thread does 90% of the work while others wait, *that* is the problem.
+The most common mistake DBA teams make with CXPACKET is reducing MAXDOP reflexively. Paul Randal (SQLskills) and the SQL Server team explicitly warn against this. CXPACKET is *expected* for parallel queries — it does not indicate a problem by itself. The question to ask is: **is the work evenly distributed across threads?** If yes, CXPACKET is fine. If one thread does 90% of the work while others wait, *that* is the problem.
 
 **CXCONSUMER (SQL 2016 SP2 / 2017 CU3+)**
 CXCONSUMER was introduced to separate the benign consumer-side wait from CXPACKET. After this split, CXPACKET became more actionable — it now specifically represents producer thread waits. CXCONSUMER is generally ignorable.
@@ -254,8 +254,8 @@ WRITELOG   182,140        1,820,000     22.1%
 **What it means**
 `ASYNC_NETWORK_IO` occurs when SQL Server has query results ready in its output buffer but the client application is not consuming them fast enough. SQL Server is waiting for the application to acknowledge the data and ask for more.
 
-**Critical point**
-`ASYNC_NETWORK_IO` is never indicative of a problem with SQL Server. This is an application-side bottleneck, always. Do not tune SQL Server queries or indexes to fix this wait. Do not flag it as a SQL Server performance problem. The investigation must focus on the client application and network.
+**Critical point (Paul Randal, SQLskills)**
+*"This wait type is never indicative of a problem with SQL Server."* The bottleneck is outside SQL Server — usually the client application or the machine it runs on. The network path is the less common cause: Microsoft Learn lists NIC and filter drivers, firewalls and routers, and SQLskills suggests comparing ping time between the two servers with the average wait time. Do not tune SQL Server queries or indexes to fix this wait. Do not flag it as a SQL Server performance problem. The investigation must focus on the client application and network.
 
 **Why it appears in the top waits**
 On busy systems with many concurrent queries, even small per-query ASYNC_NETWORK_IO accumulates to a large total. It can appear in the top 5 without indicating any actionable SQL Server issue.
@@ -290,7 +290,7 @@ ASYNC_NETWORK_IO   48,291         4,210,500     52.1%
 **What it means**
 SQL Server uses cooperative scheduling — threads voluntarily yield the CPU after a 4 ms quantum. `SOS_SCHEDULER_YIELD` fires when a thread completes its quantum and yields. This is normal behavior; high accumulated wait time here means threads are burning through many quanta, not that they are blocked.
 
-**Two common misconceptions**
+**Two common misconceptions (Paul Randal, SQLskills)**
 
 **Misconception 1: SOS_SCHEDULER_YIELD means CPU pressure.**
 Not necessarily. The most common cause is queries doing large in-memory page scans — for example, a missing index forcing a full table scan that repeatedly accesses buffer pool pages. The thread stays RUNNABLE (never suspends) and burns through quantum after quantum scanning in-memory pages. Add the missing index and the wait disappears — no CPU was actually the bottleneck.
@@ -554,7 +554,7 @@ ORDER BY wait_time_ms DESC;
 A thread needs to write a log record but no space is available in the transaction log file. The thread suspends and waits for log space to be freed (via checkpoint reuse in SIMPLE recovery, or log backup truncation in FULL/BULK_LOGGED recovery).
 
 **Why it matters**
-This is very unusual to see as a top wait type, and when it appears it indicates a serious configuration problem. All DML on the affected database blocks until log space is freed. This is a database-wide hang, not a single query problem.
+Paul Randal (SQLskills) notes this is very unusual to see, and even more unusual as a top wait type; when it appears it indicates a serious configuration problem. All DML on the affected database blocks until log space is freed. This is a database-wide hang, not a single query problem.
 
 **How to spot it**
 ```
@@ -610,7 +610,7 @@ The top-5 table immediately orients the analysis: is this server I/O bound, CPU 
 ### V18 — Poison / Throttle Waits
 
 **What it means**
-A small set of wait types that, when present in non-trivial amounts, always indicate a severe problem. These are known as "poison waits" in the SQL Server community — unlike most wait types that exist on a spectrum of severity, these are almost always emergencies.
+A small set of wait types that, when present in non-trivial amounts, always indicate a severe problem. Brent Ozar's First Responder Kit (`sp_Blitz`) calls these "poison waits" — unlike most wait types that exist on a spectrum of severity, these are almost always emergencies.
 
 **Why it matters**
 These waits indicate SQL Server is being actively throttled, experiencing I/O hardware failures, or a secondary replica is so far behind that the primary is being held back. Normal performance analysis tools often miss them because they don't appear in the top waits until the situation is severe.
@@ -630,8 +630,8 @@ These waits indicate SQL Server is being actively throttled, experiencing I/O ha
 | `SE_REPL_COMMIT_ACK` | Waiting for synchronous secondary commit ack | Secondary I/O or network latency |
 | `SE_REPL_SLOW_SECONDARY_THROTTLE` | Primary throttled due to slow secondary | Reduce redo lag or switch to async commit |
 
-**Threshold**
-Flag as Critical when: `SUM(wait_time_ms) > 60,000` AND `SUM(wait_time_ms) > (5000 × hours_since_startup)`. The proportional component prevents false alarms on freshly restarted servers.
+**Threshold (Brent Ozar methodology)**
+Flag as Critical when: `SUM(wait_time_ms) > 60,000` AND `SUM(wait_time_ms) > (5000 × hours_since_startup)`. The proportional component prevents false alarms on freshly restarted servers. This is the `HAVING` clause of `sp_Blitz`'s poison-wait check, which measures hours since startup from `tempdb`'s `create_date` — a community heuristic, unverified against Microsoft Learn.
 
 **Azure SQL relevance**
 `LOG_RATE_GOVERNOR` and `POOL_LOG_RATE_GOVERNOR` are especially common in Azure SQL, where each service tier enforces a maximum log generation rate (e.g., 25 MB/s on General Purpose). Applications that generate log faster than the tier allows are throttled here. Fix: reduce DML volume, upgrade the service tier, or batch writes.

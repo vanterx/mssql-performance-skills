@@ -64,7 +64,7 @@
 ### Warnings
 
 **[W1] Parameter Sniffing Signal — GetMonthlyReport** (X14)
-- Observed: `dbo.GetMonthlyReport` — `@month = '2025-04'`: 284,906 ms vs `@month = '2025-03'`: 4,800 ms. Variance: **284,906 / 4,800 = 59×**
+- Observed: `dbo.GetMonthlyReport` — `@month = '2025-04'`: 284,906 ms vs `@month = '2025-03'`: 4,800 ms. Variance: **284,906 / 4,800 = 59×**. Reads: 2,568,900 vs 48,210 = **53×**, so this is plan-shape variance — the April run did 53 times the logical work, which a wait would not explain. Two executions only, so the sample is small.
 - Impact: The same stored procedure takes 59× longer for April vs March. The plan cached for one month's data distribution is wrong for another — classic parameter sniffing. Every April execution suffers until the plan is evicted or recompiled.
 - Fix: Add `OPTION (RECOMPILE)` to the heavy query inside `dbo.GetMonthlyReport`. Alternative: `OPTION (OPTIMIZE FOR (@month = '2025-04'))` to pin the plan for the high-volume month. Run `/sqlplan-compare` on the fast and slow plans to confirm the plan difference.
 

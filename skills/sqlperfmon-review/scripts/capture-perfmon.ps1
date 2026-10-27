@@ -13,12 +13,16 @@ Two modes.
                   LogScout capture, or a colleague) to CSV. No Administrator needed, and nothing
                   is created on the server.
 
-Both modes emit the counter set the 14 PM checks read, including the per-volume LogicalDisk
+Both modes emit the counter set the 15 PM checks read, including the per-volume LogicalDisk
 instances. The _Total instance alone is not sufficient: PM8 exists because a single hot volume
 disappears into the average, so the wildcard instance is deliberate.
 
 Collection is read-only with respect to SQL Server. logman writes a counter log to -OutputPath and
 touches nothing inside the instance.
+
+Requires: local Administrator for -Mode Collect (logman creates, starts, stops and deletes a data
+collector set). -Mode Convert needs only read access to the .blg and write access to -OutputPath.
+No SQL Server permission is needed in either mode.
 
 .PARAMETER Mode
 Collect (default) or Convert.
@@ -92,11 +96,13 @@ $counters = @(
     # Host CPU - PM1, PM2, PM3. Not available from sys.dm_os_performance_counters.
     '\Processor(_Total)\% Processor Time'
     '\Processor(_Total)\% Privileged Time'
-    '\Process(sqlservr)\% Processor Time'
+    # sqlservr* captures every SQL Server process on the host; ID Process tells them apart (PM15).
+    '\Process(sqlservr*)\% Processor Time'
+    '\Process(sqlservr*)\ID Process'
     # Host memory - PM5, PM6.
-    '\Process(sqlservr)\Virtual Bytes'
-    '\Process(sqlservr)\Private Bytes'
-    '\Process(sqlservr)\Working Set'
+    '\Process(sqlservr*)\Virtual Bytes'
+    '\Process(sqlservr*)\Private Bytes'
+    '\Process(sqlservr*)\Working Set'
     '\Memory\Available MBytes'
     # Per-volume storage - PM7, PM8. The wildcard instance is required: _Total alone hides a
     # single hot volume, which is exactly what PM8 reports.

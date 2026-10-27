@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ARTIFACT_SKILL_MAP, registerTools } from "../tools.js";
+import { ARTIFACT_SKILL_MAP, ARTIFACT_TYPES, registerTools } from "../tools.js";
 import type { SkillMeta } from "../skill-loader.js";
 
 const ALL_SKILL_NAMES = [
@@ -29,6 +29,7 @@ const ALL_SKILL_NAMES = [
   "sqlstats-review",
   "sqltrace-review",
   "sqlwait-review",
+  "sqlworkload-compare",
   "ssrstracelog-review",
   "tsql-review",
 ] as const;
@@ -52,6 +53,17 @@ describe("ARTIFACT_SKILL_MAP", () => {
     const reachable = new Set(Object.values(ARTIFACT_SKILL_MAP).flat());
     for (const skill of specialised) {
       expect(reachable, `${skill} must be reachable via at least one artifact type`).toContain(skill);
+    }
+  });
+
+  it("routes workloadcompare to sqlworkload-compare", () => {
+    expect(ARTIFACT_SKILL_MAP["workloadcompare"]).toEqual(["sqlworkload-compare"]);
+  });
+
+  it("route_artifact enum accepts exactly the map's artifact types", () => {
+    expect([...ARTIFACT_TYPES].sort()).toEqual(Object.keys(ARTIFACT_SKILL_MAP).sort());
+    for (const t of ["blocking", "perfmon", "workloadcompare"]) {
+      expect(ARTIFACT_TYPES).toContain(t);
     }
   });
 
@@ -274,6 +286,21 @@ describe("registerTools — get_reference", () => {
 });
 
 describe("registerTools — route_artifact", () => {
+  it("registered schema accepts every mapped type and rejects an unknown one", () => {
+    const skills = makeSkills(ALL_SKILL_NAMES);
+    let schema: Record<string, { safeParse: (v: unknown) => { success: boolean } }> | undefined;
+    const mockServer = {
+      tool: vi.fn((name: string, _d: unknown, s: unknown) => {
+        if (name === "route_artifact") schema = s as typeof schema;
+      }),
+    };
+    registerTools(mockServer as never, skills);
+    for (const t of Object.keys(ARTIFACT_SKILL_MAP)) {
+      expect(schema!.artifact_type.safeParse(t).success, `${t} rejected by the schema`).toBe(true);
+    }
+    expect(schema!.artifact_type.safeParse("not-a-type").success).toBe(false);
+  });
+
   it("returns correct skill metadata for tsql artifact type", async () => {
     const skills = makeSkills(ALL_SKILL_NAMES);
     const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();

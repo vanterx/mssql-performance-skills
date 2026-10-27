@@ -17,6 +17,10 @@
     B — Deadlock count by hour (to identify frequency patterns)
     C — Read from file target if ring buffer was overwritten (requires
         configuring system_health to write to file — see notes)
+
+  Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or VIEW SERVER
+  PERFORMANCE STATE (SQL Server 2022 and later). Section C's
+  sys.fn_xe_file_target_read_file needs the same permission.
 ================================================================================
 */
 

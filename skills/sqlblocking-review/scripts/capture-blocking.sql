@@ -11,7 +11,7 @@
     chain that is making progress from one that is stuck, and they are what
     BL7 (chronic head blocker) compares.
 
-    Permissions: VIEW SERVER STATE (SQL Server 2019 and earlier) or
+    Requires: VIEW SERVER STATE (SQL Server 2019 and earlier) or
     VIEW SERVER PERFORMANCE STATE (SQL Server 2022 and later). On Azure SQL
     Database, sections 1-4 work with VIEW DATABASE STATE; section 5's
     sys.configurations query does not apply.

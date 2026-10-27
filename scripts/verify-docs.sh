@@ -677,6 +677,7 @@ declare -A P2S=(
     [G]="ssrstracelog-review"
     [BL]="sqlblocking-review"
     [PM]="sqlperfmon-review"
+    [WC]="sqlworkload-compare"
 )
 while IFS='|' read -r _ id _rest; do
     id="${id// /}"
@@ -1028,10 +1029,10 @@ if [ -n "$guide_total" ] && [ "$guide_sum" != "$guide_total" ]; then
 fi
 [ "$check49_ok" -eq 1 ] && pass "Check ID Reference rows match SKILL.md and sum to $guide_total"
 # ---------------------------------------------------------------------------
-# Checks 50-53: claim-level invariants (scripts/verify-claims.py)
+# Checks 50-56: claim-level invariants (scripts/verify-claims.py)
 # ---------------------------------------------------------------------------
 # Everything above verifies STRUCTURE - counts, ranges, file presence. These
-# four verify the technical CLAIMS, which were previously unguarded: a correct
+# verify the technical CLAIMS, which were previously unguarded: a correct
 # statement could be silently undone by a later edit, and three defects in one
 # session were caught only by review.
 #
@@ -1039,13 +1040,16 @@ fi
 #   51  claims Microsoft does not document carry their Unverified label
 #   52  fixed-width example tables keep their columns aligned
 #   53  specific claims that were wrong once stay fixed
+#   54  the untrusted-artifact-content rule is present and identical everywhere
+#   55  shipped scripts state their permissions; capture scripts are read-only
+#   56  relative Markdown links resolve to a file that exists
 #
-# Delegated to Python rather than written as greps for one reason: all four run
+# Delegated to Python rather than written as greps for one reason: they all run
 # against content read in a SINGLE pass. This script is already minutes-slow on
 # Windows because of many small grep invocations, and the gate only works if it
 # is actually run.
 echo ""
-echo "[50-54] Claim-level and cross-skill content invariants"
+echo "[50-56] Claim-level, cross-skill content, shipped-script and link invariants"
 # Probe each candidate rather than trusting `command -v`. On Windows, python3
 # usually resolves to the Microsoft Store App Execution Alias stub, which exists
 # on PATH, is not Python, and exits 49 with an install prompt. Existence is not
@@ -1059,7 +1063,7 @@ for candidate in python3 python py; do
     fi
 done
 if [ -z "$PYBIN" ]; then
-    warn "no working python found — claim-level checks 50-54 SKIPPED (structure checks above still ran)"
+    warn "no working python found — claim-level checks 50-56 SKIPPED (structure checks above still ran)"
 else
     claims_out=$("$PYBIN" scripts/verify-claims.py 2>&1)
     claims_rc=$?
