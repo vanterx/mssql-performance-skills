@@ -62,6 +62,7 @@ The native, SID-preserving alternative is the documented `sp_help_revlogin` scri
 statements that specify a password rather than a hashed password and SID.
 
 **Example:**
+<!-- lint-tsql: skip fragment: binary literal elided as 0x... -->
 ```sql
 -- Problem (causes new SID, will orphan every database user):
 CREATE LOGIN [AppUser] WITH PASSWORD = 'TempPass123!';

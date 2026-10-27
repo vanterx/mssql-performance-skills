@@ -30,6 +30,7 @@ When `[I1] Parameter Sniffing` fires, use this template for the fix block:
 - **Impact:** [how this explains the N21 estimate errors above — reference the
   specific cardinality collapse ratios from the W1 table]
 - **Fix options:**
+<!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
 ```sql
 -- Option 1: Recompile per execution (best for infrequently-called queries)
 OPTION (RECOMPILE)

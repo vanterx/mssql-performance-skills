@@ -144,6 +144,7 @@ FROM sys.database_mirroring_endpoints;
 ```
 
 **Example:**
+<!-- lint-tsql: skip parser-gap: ALTER ENDPOINT without ROLE; ROLE is optional on ALTER (MS Learn: specify only the parameters to change), ScriptDom requires it -->
 ```sql
 -- Problem: is_encryption_enabled = 1, encryption_algorithm_desc = 'NONE, AES' (SUPPORTED/negotiable)
 -- Fix: Enforce AES on all replicas (change all replicas before enforcement takes effect)
@@ -437,6 +438,7 @@ WHERE secondary_role_allow_connections_desc IN ('READ_ONLY', 'ALL')
 ```
 
 **Example:**
+<!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP MODIFY REPLICA options are documented on MS Learn; ScriptDom rejects them -->
 ```sql
 -- Fix: Set the routing URL on each readable secondary
 -- Format: TCP://FQDN:sql_port (NOT the endpoint port 5022)
@@ -476,6 +478,7 @@ still hit the primary, the routing list is missing. Confirm via:
 
 **Fix options:**
 1. Set routing list on each replica (for when it acts as primary):
+   <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP MODIFY REPLICA options are documented on MS Learn; ScriptDom rejects them -->
    ```sql
    ALTER AVAILABILITY GROUP [ProdAG]
      MODIFY REPLICA ON N'SQLPROD01'
@@ -692,6 +695,7 @@ FROM sys.database_mirroring_endpoints;
 
 **Fix options:**
 1. Create self-signed certificates on each replica, exchange public keys, and switch to certificate auth:
+   <!-- lint-tsql: skip parser-gap: ALTER ENDPOINT without ROLE; ROLE is optional on ALTER (MS Learn: specify only the parameters to change), ScriptDom requires it -->
    ```sql
    -- On each replica: create certificate, back it up, copy .cer to partners
    CREATE CERTIFICATE [hadr_cert] WITH SUBJECT = 'HADR Endpoint Certificate',
@@ -750,6 +754,7 @@ SELECT encryption_algorithm_desc FROM sys.database_mirroring_endpoints;
 
 **Fix options:**
 1. Rotate to AES on all replicas simultaneously (or in a maintenance window):
+   <!-- lint-tsql: skip parser-gap: ALTER ENDPOINT without ROLE; ROLE is optional on ALTER (MS Learn: specify only the parameters to change), ScriptDom requires it -->
    ```sql
    ALTER ENDPOINT [Hadr_endpoint]
      FOR DATABASE_MIRRORING (ENCRYPTION = REQUIRED ALGORITHM AES);
@@ -995,6 +1000,7 @@ WHERE is_conformant = 0;
 1. In Failover Cluster Manager, verify the AG listener IP resource matches the IP shown in `sys.availability_group_listener_ip_addresses`
 2. If they differ: drop the listener in SQL and recreate it to match the cluster resource, or repair the cluster resource to match the SQL definition
 3. Drop and recreate:
+   <!-- lint-tsql: skip parser-gap: ALTER AVAILABILITY GROUP ADD/REMOVE LISTENER is documented on MS Learn; ScriptDom rejects it -->
    ```sql
    ALTER AVAILABILITY GROUP [ag] REMOVE LISTENER N'listener';
    ALTER AVAILABILITY GROUP [ag] ADD LISTENER N'listener'

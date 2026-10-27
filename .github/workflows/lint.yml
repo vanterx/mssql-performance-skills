@@ -1,0 +1,65 @@
+name: lint
+
+# Lints the repo's code and the T-SQL in its documentation, via
+# scripts/lint-scripts.sh --strict:
+#   *.py          ruff              (ruff.toml)
+#   *.ps1         PSScriptAnalyzer  (PSScriptAnalyzerSettings.psd1)
+#   *.sql + *.md  ScriptDom parse   (scripts/lint-tsql.ps1, known defects in
+#                                    scripts/lint-tsql-baseline.tsv)
+# --strict turns "linter not installed" into a failure, so a broken install
+# step cannot pass the gate by skipping it.
+#
+# Unlike validate.yml, this job DOES execute PR content: the lint scripts are
+# PowerShell and Bash from the PR's own head, and a PR can change them. That is
+# acceptable only because of the trigger and permissions below -- a plain
+# `pull_request` trigger (never `pull_request_target`), a read-only token, and
+# no secrets -- so the worst a hostile PR can do is fail or fake-pass its own
+# check, which review of the PR diff catches. Keep it that way.
+#
+# Tool versions are pinned so a new upstream rule cannot fail an unrelated PR.
+# Bump them deliberately, in their own PR, after re-running the gate locally.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUFF_VERSION: "0.17.3"
+  PSSA_VERSION: "1.25.0"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: python -m pip install "ruff==${RUFF_VERSION}"
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -RequiredVersion $env:PSSA_VERSION -Scope CurrentUser -Force
+
+      # lint-tsql.ps1 downloads its pinned ScriptDom package once and verifies
+      # its SHA-256 before loading it. Caching .lint-cache/ keyed on that script
+      # skips the download; a version bump changes the script, so the key too.
+      - uses: actions/cache@v4
+        with:
+          path: .lint-cache
+          key: lint-cache-${{ hashFiles('scripts/lint-tsql.ps1') }}
+
+      - name: Run lint-scripts.sh
+        run: bash scripts/lint-scripts.sh --strict

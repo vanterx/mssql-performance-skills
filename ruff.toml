@@ -1,0 +1,42 @@
+# Python lint configuration -- applied by scripts/lint-scripts.sh and
+# .github/workflows/lint.yml.
+#
+# Two Python files are in scope:
+#   scripts/verify-claims.py                       claim-level doc invariants (checks 50-54)
+#   skills/sqlplan-review/scripts/extract_plan.py  .sqlplan digest extractor
+#
+# Both are standard-library only by design: an on-call DBA runs the extractor on
+# whatever interpreter a jump box happens to have, with no pip install step.
+
+# extract_plan.py documents a Python 3.8 floor (its module docstring and
+# skills/sqlplan-review/scripts/README.md). Pinning target-version is what stops
+# ruff "modernising" typing.List to list[...] (3.9+) or Optional[X] to X | None
+# (3.10+) and silently raising that floor. Do not raise this without updating
+# both places that document the floor.
+target-version = "py38"
+
+line-length = 100
+
+[lint]
+# Correctness over style. Families left out on purpose, each measured against
+# this repo rather than assumed:
+#   UP   pyupgrade rewrites 80 .format() calls to f-strings -- churn, no defect found
+#   ISC  flags long operator messages that are deliberately wrapped across lines
+#   RUF  RUF005 prefers [*list(range(32)), ...] to list concatenation -- less readable
+#   SIM  SIM105 contextlib.suppress over try/except/pass -- a readability toss-up
+# Add a family only once the repo is clean under it.
+select = [
+    "E4",   # pycodestyle: imports
+    "E7",   # pycodestyle: statements, including E741 ambiguous names (l, O, I)
+    "E9",   # pycodestyle: syntax and IO errors
+    "F",    # pyflakes: undefined names, unused imports, broken f-strings
+    "B",    # flake8-bugbear: mutable defaults, loop-variable capture, broad raises
+    "PLE",  # pylint errors only -- never pylint's style or refactor opinions
+    "PIE",  # flake8-pie: unnecessary pass, duplicate class fields
+    "RET",  # flake8-return: unreachable or inconsistent returns
+]
+
+# `ruff format` is deliberately not part of the gate. Neither file was written
+# black-style -- verify-claims.py hand-aligns its registry tables so the data
+# reads as a table -- and reformatting would be a large diff that makes that data
+# harder to review. Run `ruff format` by hand if a file is ever rewritten.

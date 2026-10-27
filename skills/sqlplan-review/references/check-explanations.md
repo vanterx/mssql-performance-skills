@@ -199,12 +199,14 @@ UPDATE STATISTICS dbo.Orders WITH FULLSCAN
 ```
 
 2. **Force recompile** — builds plan with actual runtime parameter values:
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Append to the query or stored procedure:
 OPTION (RECOMPILE)
 ```
 
 3. **Hint a typical value** — builds plan for a representative value:
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 OPTION (OPTIMIZE FOR (@CutoffDate = '2023-01-01'))
 ```
@@ -243,6 +245,7 @@ CREATE INDEX IX_Orders_Customer_Date ON dbo.Orders (CustomerId, OrderDate)
 ```
 
 2. **Filter earlier to reduce row count** — push WHERE conditions earlier in the plan:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Before: SELECT * FROM BigTable b JOIN SmallTable s ... WHERE b.Status = 'A'
 -- After: put Status filter in a CTE/subquery processed before the join
@@ -313,6 +316,7 @@ The plan you get may have a cost 10× or 100× higher than the optimal plan. You
 **Fix options**
 
 1. **Break the query into pieces with temp tables** — the optimizer solves each piece separately:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Instead of one 15-table query, do:
 SELECT a.*, b.value INTO #step1
@@ -386,6 +390,7 @@ If this query runs frequently (say, 10 times/second), and each execution must re
 **Fix options**
 
 1. **Use stored procedures** — compiled once, plan cached and reused across all connections:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Instead of:
 EXEC sp_executesql N'SELECT ... FROM t1 JOIN t2 ...'
@@ -452,6 +457,7 @@ A parallel query with 43% efficiency is consuming 8 CPU cores but only getting t
 **Fix options**
 1. **Investigate thread skew (N27)** — look for a low-cardinality distribution key.
 2. **Reduce DOP** — if parallel is barely faster, sometimes serial is actually better:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 SELECT ... OPTION (MAXDOP 2)  -- try different values
 ```
@@ -486,6 +492,7 @@ In a parallel query, the total elapsed time was more than twice the total CPU ti
 ```
 
 **How to investigate further**
+<!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
 ```sql
 -- Check current waits:
 SELECT session_id, wait_type, wait_time_ms
@@ -546,6 +553,7 @@ ALTER DATABASE YourDB SET COMPATIBILITY_LEVEL = 150  -- SQL Server 2019
 ```
 
 2. **Use a hint to enable the new CE without changing compat level**:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 SELECT ... OPTION (USE HINT('FORCE_DEFAULT_CARDINALITY_ESTIMATION'))
 ```
@@ -1011,6 +1019,7 @@ Each unique combination of parameter count produces a different plan cache entry
 
 **How it happens**  
 ORMs and data-access layers often generate queries like:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 SELECT * FROM Products WHERE ProductId IN (@p1, @p2, @p3, ... @p200)
 ```
@@ -1019,6 +1028,7 @@ Each distinct set of values (different count or different values) produces a new
 **Fix options**
 
 1. **Table-Valued Parameter** — pass the ID list as a single structured parameter:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Define type once:
 CREATE TYPE dbo.IdList AS TABLE (Id INT NOT NULL PRIMARY KEY)
@@ -1089,6 +1099,7 @@ Interleaved execution is a net positive — this check surfaces it so you can:
 2. Verify the real row count is feeding correctly into the plan (check `EstimateRows` on operators after the MSTVF)
 
 **How to check if it's been suppressed**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- This hint disables interleaved execution — watch for it in query text:
 OPTION (USE HINT('DISABLE_INTERLEAVED_EXECUTION_TVF'))
@@ -1234,6 +1245,7 @@ INCLUDE (Total, Status)  -- columns referenced elsewhere in the query
 A function is being applied to a **column** (not a parameter) in a WHERE clause. This makes the predicate **non-sargable** (not Search ARGument ABLE) — SQL Server cannot use an index to locate matching rows and must read every row.
 
 **The sargable vs non-sargable distinction:**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- NON-sargable (function wraps the column):
 WHERE YEAR(OrderDate) = 2024        -- can't seek on YEAR(OrderDate)
@@ -1427,6 +1439,7 @@ A predicate (WHERE clause or join condition) contains an implicit data type conv
 - **N8**: The conversion is happening but seeks may still work — typically the parameter is being converted, not the column
 
 **Example**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Column is INT, parameter is BIGINT (a "safe" implicit conversion):
 WHERE OrderId = @bigintParam
@@ -1450,6 +1463,7 @@ A B-tree index orders data by value. A `LIKE 'Smith%'` search can seek to the fi
 **Fix options**
 
 1. **Full-text search** — for suffix/contains patterns:
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Create a full-text index first:
 CREATE FULLTEXT INDEX ON dbo.Users (Email) KEY INDEX PK_Users
@@ -1458,6 +1472,7 @@ WHERE CONTAINS(Email, '"gmail.com"')
 ```
 
 2. **Reverse the string** — store and index a reversed version:
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Add a computed column with the reversed value:
 ALTER TABLE dbo.Users ADD EmailReversed AS REVERSE(Email) PERSISTED
@@ -1735,6 +1750,7 @@ JOIN dbo.OrderDetails d ON o.OrderId = d.OrderId
 The optimizer reduced its row estimates for this operator because the query has a `TOP`, `EXISTS`, `IN`, or `FAST N` clause. The optimizer detected it only needs to return N rows and chose a plan optimized for stopping early.
 
 **When it's beneficial**  
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- "Does any order exist from 2024?" — only need 1 matching row:
 IF EXISTS (SELECT 1 FROM dbo.Orders WHERE OrderDate >= '2024-01-01')
@@ -1997,6 +2013,7 @@ FROM dbo.Orders
 3. **No batch mode** — prevents ColumnStore batch processing (N19)
 
 **How to rewrite as an inline TVF**
+<!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
 ```sql
 -- Original scalar UDF:
 CREATE FUNCTION dbo.GetCustomerDiscount(@customerId INT)
@@ -2194,6 +2211,7 @@ If your data is highly skewed — some values are very common (few rows) and oth
 
 **Alternative approaches**  
 Instead of UNKNOWN, which covers all values equally poorly, target specific problematic executions:
+<!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
 ```sql
 -- Option 1: Plan for a typical value:
 OPTION (OPTIMIZE FOR (@id = 12345))
@@ -2475,6 +2493,7 @@ An implicit type conversion is present in the plan, and it's specifically flagge
 A histogram for an INT column stores INT values. If your parameter is BIGINT, the optimizer can't directly look up BIGINT values in the INT histogram — it has to fall back to using the overall column density (average selectivity), which may be wildly inaccurate for specific values.
 
 **Example**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Column: OrderId INT  |  Parameter: @id BIGINT
 WHERE OrderId = @id
@@ -2547,6 +2566,7 @@ Check for S5 (compile timeout) or S7 (high compile CPU) alongside N44 — these 
 
 **Fix**  
 Break the query into stages:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- 12-table query → split into 3 stages of 4 tables each
 SELECT ... INTO #stage1 FROM t1 JOIN t2 JOIN t3 JOIN t4
@@ -2648,6 +2668,7 @@ The window function uses `RANGE UNBOUNDED PRECEDING` (which is the default when 
 
 **RANGE vs ROWS — what's the difference?**
 
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- ROWS: processes exactly the physical rows you specify
 SUM(Amount) OVER (ORDER BY OrderDate ROWS UNBOUNDED PRECEDING)
@@ -2666,6 +2687,7 @@ If your ORDER BY column has no duplicate values (e.g., a unique timestamp or ide
 If your ORDER BY column has duplicates and you need all ties to receive the same cumulative total, `RANGE` is semantically required.
 
 **Fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Change RANGE (implicit default) to ROWS:
 SUM(SaleAmount) OVER (
@@ -2704,6 +2726,7 @@ When a query mixes memory-optimized and disk-based tables, SQL Server cannot use
 
 **Fix**  
 Separate the workloads:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Instead of joining directly:
 SELECT m.*, d.*
@@ -2939,6 +2962,7 @@ Additionally, each distinct set of literal values produces a separate plan cache
 
 **Fix**  
 Replace the literal IN list with a table-valued parameter or temp table:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Instead of:
 SELECT * FROM dbo.Products WHERE ProductId IN (1, 2, 3, ... 200)
@@ -3027,6 +3051,7 @@ The ordinal allows ordering the results, which was not possible before (STRING_S
 1. **For small lists (< 20 values)** — use a literal IN list or a VALUES table (avoid STRING_SPLIT entirely)
 
 2. **For medium lists (20–1,000 values)** — use a temp table with statistics:
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Parse in application code, insert into #temp:
 INSERT #split_values (Value) VALUES ('a'),('b'),('c'),...
@@ -3477,6 +3502,7 @@ If the table has 24 partitions and all 24 were accessed, elimination failed.
 4. Dynamic partition key (variable not yet evaluated at parse time)
 
 **Fix**  
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- WRONG (implicit conversion prevents elimination):
 WHERE PartitionDate >= @StartDate  -- if @StartDate is DATETIME but column is DATE
@@ -3513,6 +3539,7 @@ Estimated 1.2 rebinds, actual 84,200 — a 70,000× underestimate. The outer sid
 N16 fires based on *estimated* values — useful for estimated plans. N66 fires based on *actual* evidence — confirms the problem occurred at runtime and quantifies the true extent.
 
 **Fix**  
+<!-- lint-tsql: skip fragment: alternative fixes shown side by side, not one batch -->
 ```sql
 -- Fix the cardinality error on the outer side first (update statistics):
 UPDATE STATISTICS dbo.Orders WITH FULLSCAN;

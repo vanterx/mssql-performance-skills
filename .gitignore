@@ -22,3 +22,6 @@ output/
 # Generated inventory (regenerate with: bash scripts/generate-inventory.sh)
 skill-inventory.md
 
+
+# Lint tool cache (ScriptDom assembly fetched by scripts/lint-tsql.ps1)
+.lint-cache/

@@ -697,6 +697,7 @@ MS Learn warns: "if the database is taken offline, if you have access to the dat
 
 When TRUSTWORTHY is ON and `clr strict security` is OFF (the default before SQL 2017), a `db_owner` whose database is owned by a sysadmin can load an UNSAFE CLR assembly — .NET code with no restrictions that can call OS functions, read files, and execute arbitrary commands.
 
+<!-- lint-tsql: skip fragment: binary literal elided as 0x... -->
 ```sql
 -- SQL 2016 / clr strict security = 0:
 -- UNSAFE assemblies can call unmanaged code — arbitrary OS commands, file I/O, etc.

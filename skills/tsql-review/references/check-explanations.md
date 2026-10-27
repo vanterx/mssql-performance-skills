@@ -177,6 +177,7 @@ SELECT OrderId, CustomerId, Status FROM dbo.Orders WHERE Status = 'Pending';
 A non-sargable predicate converts an index seek (fast, O(log n)) into an index or table scan (slow, O(n)). On a table with 10M rows and a good index, this is the difference between 1 ms and 30 seconds.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- All trigger T4 — function wraps the column
 WHERE YEAR(OrderDate) = 2024
@@ -221,6 +222,7 @@ The most common case: comparing a `VARCHAR` column to an `NVARCHAR` parameter (o
 Same as T4: index seeks become scans. This is also flagged at runtime by `sqlplan-review` (S12 — implicit conversion affects seek plan) — but static analysis catches it before execution.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T5
 -- If CustomerId is INT and @param is NVARCHAR
@@ -263,6 +265,7 @@ A LIKE predicate with a `%` at the start of the pattern (`LIKE '%value'` or `LIK
 Leading wildcard LIKE is O(n) — every row is evaluated. On a table with 50M rows and a 1 ms per-row evaluation, this is 50 seconds per query. It also prevents using an index seek even if an index exists on the column.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T6
 WHERE LastName LIKE '%son'          -- ends with 'son'
@@ -524,6 +527,7 @@ A JOIN condition that uses `OR` between two predicates: `ON a.id = b.id OR a.alt
 OR join conditions prevent independent seek paths for each condition. This is often much slower than the equivalent UNION ALL of two separate joins, each of which can use its own index.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T11
 FROM dbo.Orders o
@@ -563,6 +567,7 @@ JOIN dbo.Contacts c ON c.ContactId = o.ShipToContactId
 Same root cause as T4, but in a JOIN condition instead of a WHERE clause. A function call wrapping a column in the ON clause prevents index seeks on that column for the join.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T12
 FROM dbo.Orders o
@@ -573,12 +578,14 @@ JOIN dbo.Events e ON YEAR(l.EventTime) = e.EventYear AND MONTH(l.EventTime) = e.
 ```
 
 **Example — problem**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 FROM dbo.Sales s
 JOIN dbo.Regions r ON LEFT(s.RegionCode, 2) = r.CountryCode
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Store the pre-computed value as a persisted computed column
 ALTER TABLE dbo.Sales ADD CountryCode AS LEFT(RegionCode, 2) PERSISTED;
@@ -603,6 +610,7 @@ JOIN dbo.Regions r ON s.CountryCode = r.CountryCode
 `ISNULL(col, substitute)` or `COALESCE(col, substitute, ...)` in a WHERE clause wraps the column in a function, making the predicate non-sargable (same root cause as T4). SQL Server cannot seek into the index on `col` because it must evaluate ISNULL/COALESCE for every row.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T13
 WHERE ISNULL(Status, 'UNKNOWN') = 'PENDING'
@@ -734,6 +742,7 @@ In SQL, NULL represents an unknown value. Comparing anything to NULL using `=`, 
 This is a silent logic bug. A WHERE clause like `WHERE DeletedAt = NULL` intended to find undeleted records returns zero rows instead of all undeleted records, with no error message.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T16 — always returns zero rows
 WHERE DeletedAt = NULL
@@ -953,6 +962,7 @@ SELECT CustomerId FROM dbo.SilverCustomers;
 A CASE expression where different WHEN branches return values of different data types. SQL Server resolves the mismatch by converting all branches to the highest-precedence type — which may truncate values or cause runtime conversion errors.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T22 — INT branch and VARCHAR branch
 CASE WHEN Status = 'Open' THEN 1 ELSE 'None' END
@@ -963,6 +973,7 @@ CASE WHEN UseOverride = 1 THEN @overrideDate ELSE SYSDATETIME() END
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Explicit CAST to the desired output type in every branch
 CASE WHEN Status = 'Open' THEN CAST(1 AS VARCHAR(10)) ELSE 'None' END
@@ -984,6 +995,7 @@ CASE WHEN UseOverride = 1 THEN CAST(@overrideDate AS DATETIME2) ELSE SYSDATETIME
 A CASE expression with no ELSE clause implicitly returns NULL when no WHEN condition matches. This is often unintentional.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T23 — no ELSE; returns NULL for Status = 'Cancelled'
 CASE
@@ -993,6 +1005,7 @@ END AS StatusLabel
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 CASE
     WHEN Status = 'Open' THEN 'Active'
@@ -1022,6 +1035,7 @@ END AS StatusLabel
 CTEs are not materialized in SQL Server. Each reference to a CTE in the same query re-executes the CTE's definition. If the CTE is expensive, referencing it twice doubles the cost.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Triggers T24 — CTE used twice
 WITH ExpensiveCTE AS (
@@ -1032,6 +1046,7 @@ JOIN ExpensiveCTE e2 ON e1.Id = e2.ParentId;  -- runs twice
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Materialize into a temp table
 SELECT * INTO #ExpensiveResult FROM dbo.BigTable WHERE ...;
@@ -1055,6 +1070,7 @@ DROP TABLE #ExpensiveResult;
 A `WITH` clause with more than 4 CTEs, or CTEs referencing each other in a chain deeper than 4 levels. Deep CTE chains increase compile time and reduce query readability.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Triggers T25 — 5-level chain
 WITH
@@ -1067,6 +1083,7 @@ SELECT * FROM E;
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Break into named temp tables with clear intermediate checkpoints
 SELECT ... INTO #A FROM ...;
@@ -1120,6 +1137,7 @@ SELECT CustomerId, COUNT(*) AS OrderCount FROM dbo.Orders GROUP BY CustomerId;
 `SET ROWCOUNT n` limits the number of rows processed by subsequent DML statements. Its use with `DELETE`, `INSERT`, and `UPDATE` statements is deprecated — a future SQL Server release may change this behavior for those statements. Use `TOP` instead. Note: `SET ROWCOUNT` is not deprecated for `SELECT` statements, though `TOP` is still preferred for clarity.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 SET ROWCOUNT 1000;
 DELETE FROM dbo.OldData WHERE ...;
@@ -1127,6 +1145,7 @@ SET ROWCOUNT 0;  -- re-enable
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Modern equivalent using TOP in the DML statement
 DELETE TOP (1000) FROM dbo.OldData WHERE ...;
@@ -1149,6 +1168,7 @@ A query with "catch-all" parameters — parameters that are NULL to mean "any va
 A plan compiled for `@status = NULL` (return all) is usually a full scan — which is terrible for `@status = 'Open'` (return 1%). SQL Server caches whichever plan it compiled first and reuses it for all calls.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Classic catch-all parameter pattern:
 WHERE (@status IS NULL OR Status = @status)
@@ -1482,6 +1502,7 @@ EXEC dbo.GetOrderStatus @id;
 The `*=` and `=*` operators are the old Sybase-style outer join syntax. They were deprecated at compatibility level 90 (SQL Server 2005) and **removed entirely in SQL Server 2012 (11.x)**. This syntax fails to parse on any SQL Server 2012 or later instance regardless of compatibility level.
 
 **How to spot it**
+<!-- lint-tsql: skip removed-syntax: old-style *= outer join, shown deliberately as the anti-pattern T39 flags -->
 ```sql
 -- Triggers T39 — old-style outer join
 SELECT c.Name, o.OrderId
@@ -1788,6 +1809,7 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
 Two columns or a column and a parameter with different collations (e.g., `Latin1_General_CI_AS` vs `SQL_Latin1_General_CP1_CI_AS`) or different character types (`VARCHAR` vs `NVARCHAR`) are compared without explicit alignment. SQL Server must convert one side implicitly, which may block index seeks or cause runtime collation errors.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T50 — VARCHAR column joined to NVARCHAR column (or literal N'')
 FROM dbo.Customers c
@@ -1798,6 +1820,7 @@ WHERE dbo.Users.Username = @username  -- @username is NVARCHAR, column is VARCHA
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Option 1: COLLATE clause to align
 WHERE dbo.Users.Username COLLATE DATABASE_DEFAULT = @username COLLATE DATABASE_DEFAULT;
@@ -2038,6 +2061,7 @@ SELECT CustomerId, @date FROM @customers;
 Developers commonly write: `UPDATE ...; IF @something ... ; IF @@ROWCOUNT = 0 ...` — the `IF @something` already reset `@@ROWCOUNT` to 0. The `UPDATE` may have affected rows, but the check reads 0 and incorrectly treats it as "no rows updated".
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Triggers T57 — IF statement resets @@ROWCOUNT before the check
 UPDATE dbo.Orders SET Status = 'Shipped' WHERE OrderId = @id;
@@ -2048,6 +2072,7 @@ IF @@ROWCOUNT = 0  -- reads the INSERT's rowcount, not the UPDATE's
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 UPDATE dbo.Orders SET Status = 'Shipped' WHERE OrderId = @id;
 SET @rowsUpdated = @@ROWCOUNT;  -- capture immediately
@@ -2158,6 +2183,7 @@ WHEN MATCHED THEN UPDATE SET t.Price = s.Price;
 A query like `WHERE DATEDIFF(DAY, OrderDate, GETDATE()) <= 30` on a 50M-row table forces a full scan of the `OrderDate` index instead of a range seek. Rewriting as a range predicate is O(log n) vs O(n).
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T60 — DATEDIFF wraps the column
 WHERE DATEDIFF(DAY, OrderDate, GETDATE()) <= 30
@@ -2166,6 +2192,7 @@ WHERE DATEDIFF(HOUR, LastSeen, SYSDATETIME()) < 24
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Range predicate on the bare column — allows index seek
 WHERE OrderDate >= DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
@@ -2556,6 +2583,7 @@ Date string literals like `'01/15/2024'` are interpreted based on the server's `
 A procedure that works correctly on a developer's workstation (US English) may return wrong dates or throw error 241 ("Conversion failed when converting date and/or time from character string") on a production server with a different language setting. This is a common source of environment-dependent bugs.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T71 — locale-dependent
 WHERE OrderDate >= '01/15/2024'
@@ -2564,6 +2592,7 @@ INSERT INTO dbo.Events (EventDate) VALUES ('January 15, 2024')
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- ISO 8601 — language-independent
 WHERE OrderDate >= '2024-01-15'
@@ -2629,6 +2658,7 @@ END
 Fixed-length types (`CHAR`, `NCHAR`, `BINARY`) have no length prefix and use exactly their declared size. For size 1–2 columns this gives a 33–100% storage saving. The no-length-specified default-to-1 is also almost always a developer mistake — the intent is usually `VARCHAR(MAX)` or a specific business-meaningful size.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Triggers T73
 DECLARE @flag VARCHAR(1);
@@ -2637,6 +2667,7 @@ CREATE PROCEDURE dbo.Proc1 (@indicator VARCHAR) AS ...  -- defaults to VARCHAR(1
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 DECLARE @flag CHAR(1);
 CREATE TABLE dbo.Codes (TypeCode CHAR(2), CategoryFlag NCHAR(1));
@@ -2662,6 +2693,7 @@ CREATE PROCEDURE dbo.Proc1 (@indicator CHAR(1)) AS ...
 `WHERE LEN(Email) > 0` is the most common form — checking for a non-empty string. But this forces SQL Server to evaluate `LEN()` for every row before filtering. `WHERE Email <> ''` is identical in semantics and allows an index seek.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T74
 WHERE LEN(PhoneNumber) > 0          -- non-empty check (use <> '' instead)
@@ -2670,6 +2702,7 @@ WHERE LEN(PostalCode) = 5           -- length filter (use a computed column + in
 ```
 
 **Example — fix**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Sargable equivalents
 WHERE PhoneNumber <> ''
@@ -2798,6 +2831,7 @@ A function call in a WHERE clause where the argument is a variable or literal (n
 `WHERE col > ABS(@param)` evaluates `ABS(@param)` once per row. `WHERE col > DATEADD(DAY, -@n, GETDATE())` evaluates `DATEADD(...)` once per row. On a 10M-row scan this adds 10M redundant function calls. Pre-computing to a variable eliminates them and gives the optimizer a stable literal to work with, potentially improving plan quality.
 
 **How to spot it**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
 -- Triggers T78 — function on the value (parameter) side
 WHERE c2 > ABS(@param)                         -- ABS of a parameter

@@ -272,6 +272,7 @@ Average call takes 12 ms. But one execution took 148 seconds. The plan was compi
 a parameter that returns 1 row (fast nested loops), but someone passed a parameter that
 returns 2 million rows (nested loops × 2M = catastrophic).
 
+<!-- lint-tsql: skip fragment: uses ... to elide code -->
 ```sql
 -- Fix option 1: recompile per execution
 CREATE PROCEDURE dbo.usp_SearchCustomers @Status nvarchar(20)
