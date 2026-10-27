@@ -966,8 +966,10 @@ CREATE EVENT SESSION [AG_Diagnostics] ON SERVER
   ADD EVENT sqlserver.availability_replica_state_change,
   ADD EVENT sqlserver.hadr_log_block_send_complete,
   ADD EVENT sqlserver.hadr_transport_flow_control_action,
+  -- XE predicates have no IN: compare the event field once per value, joined by OR
   ADD EVENT sqlserver.error_reported
-    (WHERE sqlserver.error_number IN (35250, 35264, 35201, 19406))
+    (WHERE ([error_number] = (35250) OR [error_number] = (35264)
+         OR [error_number] = (35201) OR [error_number] = (19406)))
   ADD TARGET package0.ring_buffer (SET max_memory = 102400)
   WITH (MAX_DISPATCH_LATENCY = 5 SECONDS, STARTUP_STATE = ON);
 ALTER EVENT SESSION [AG_Diagnostics] ON SERVER STATE = START;

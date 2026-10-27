@@ -211,11 +211,10 @@ ADD ENCRYPTION BY CERTIFICATE HRPayroll_KeyProtectCert;
 **9. Fix AGEndpointCert private key encryption (A31)**
 ```sql
 USE master;
+-- Giving only the current password moves the private key's protection to the database
+-- master key; ALTER CERTIFICATE has no ENCRYPTION BY DATABASE MASTER KEY clause
 ALTER CERTIFICATE AGEndpointCert
-WITH PRIVATE KEY (
-  DECRYPTION BY PASSWORD = 'current_password',
-  ENCRYPTION BY DATABASE MASTER KEY
-);
+WITH PRIVATE KEY (DECRYPTION BY PASSWORD = 'current_password');
 ```
 
 **10. Enable ForceEncryption (A26, A27)**

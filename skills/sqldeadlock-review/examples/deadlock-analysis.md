@@ -113,7 +113,9 @@ COMMIT;  -- release locks immediately
 If the lock order cannot be made consistent (e.g., procedures are owned by different teams), use an application-level mutex or a SQL Server `sp_getapplock` to serialize concurrent access to the same `OrderId`:
 
 ```sql
-EXEC sp_getapplock @Resource = CAST(@orderId AS NVARCHAR(20)),
+-- EXEC takes a constant or a variable as a parameter value, not an expression
+DECLARE @lockResource NVARCHAR(255) = CAST(@orderId AS NVARCHAR(20));
+EXEC sp_getapplock @Resource = @lockResource,
                    @LockMode = 'Exclusive',
                    @LockOwner = 'Transaction',
                    @LockTimeout = 5000;

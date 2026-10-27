@@ -186,6 +186,7 @@ CREATE FUNCTION dbo.fn_EmployeeFilter(@ManagerId INT)
 RETURNS TABLE WITH SCHEMABINDING AS
 RETURN SELECT 1 AS fn_result
 WHERE @ManagerId = USER_ID() OR IS_MEMBER('HRAdmin') = 1;
+GO
 
 CREATE SECURITY POLICY dbo.EmployeePolicy
 ADD FILTER PREDICATE dbo.fn_EmployeeFilter(ManagerId) ON dbo.Employee

@@ -119,6 +119,7 @@
 - **Fix:** Rewrite to accept a TVP of customer IDs and return all results in one call:
   ```sql
   CREATE TYPE dbo.IdList AS TABLE (Id int NOT NULL PRIMARY KEY);
+  GO
 
   ALTER PROCEDURE dbo.usp_SearchCustomers
       @CustomerIds dbo.IdList READONLY  -- replace @SingleId
