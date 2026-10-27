@@ -252,12 +252,15 @@ DECLARE @KeyPath    NVARCHAR(500) = N'\\backup-server\certs\TDECert_' + CONVERT(
 -- In practice, pass it as an agent token or use Windows CNG / DPAPI to store the password
 DECLARE @Pwd NVARCHAR(128) = N'$(CertBackupPassword)';  -- SQLCMD token if using sqlcmd mode
 
-BACKUP CERTIFICATE TDECert_Production
-TO FILE = @BackupPath
-WITH PRIVATE KEY (
-    FILE = @KeyPath,
-    ENCRYPTION BY PASSWORD = @Pwd
-);
+-- BACKUP CERTIFICATE takes literal paths and passwords, not variables, so build the
+-- statement dynamically, doubling single quotes so no value can end its literal early
+DECLARE @sql NVARCHAR(MAX) =
+    N'BACKUP CERTIFICATE TDECert_Production TO FILE = N''' + REPLACE(@BackupPath, N'''', N'''''') + N'''
+    WITH PRIVATE KEY (
+        FILE = N''' + REPLACE(@KeyPath, N'''', N'''''') + N''',
+        ENCRYPTION BY PASSWORD = N''' + REPLACE(@Pwd, N'''', N'''''') + N'''
+    );';
+EXEC sys.sp_executesql @sql;  -- do not PRINT or log @sql: it contains the password
 
 -- Log the backup
 INSERT INTO dba.CertificateBackupLog (CertName, BackupFile, KeyFile, BackupDate)

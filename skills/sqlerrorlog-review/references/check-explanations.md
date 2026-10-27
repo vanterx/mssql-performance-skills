@@ -266,8 +266,20 @@ expected checksum in the log record.
 
 Fix — restore the secondary database from a verified backup and re-seed:
 ```sql
--- On primary: re-initialize secondary with automatic seeding
-ALTER DATABASE [SalesDB] SET HADR AVAILABILITY GROUP = [AG1] WITH (SEEDING_MODE = AUTOMATIC);
+-- On the SECONDARY: take the damaged copy out of the availability group
+ALTER DATABASE [SalesDB] SET HADR OFF;
+
+-- Restore a verified full backup and the log backups after it, leaving it restoring
+RESTORE DATABASE [SalesDB] FROM DISK = N'\\backupshare\SalesDB_full.bak' WITH NORECOVERY;
+RESTORE LOG [SalesDB] FROM DISK = N'\\backupshare\SalesDB_log_01.trn' WITH NORECOVERY;
+
+-- Rejoin the restored copy to the availability group
+ALTER DATABASE [SalesDB] SET HADR AVAILABILITY GROUP = [AG1];
+
+-- Automatic seeding instead of a manual restore is a replica setting made on the
+-- PRIMARY, and it seeds databases as they are added to the availability group:
+--   ALTER AVAILABILITY GROUP [AG1] MODIFY REPLICA ON N'<secondary>' WITH (SEEDING_MODE = AUTOMATIC);
+--   then, on the secondary: ALTER AVAILABILITY GROUP [AG1] GRANT CREATE ANY DATABASE;
 ```
 
 **Fix options**

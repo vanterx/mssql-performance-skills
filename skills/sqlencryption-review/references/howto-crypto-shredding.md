@@ -64,6 +64,7 @@ SQL Server handles thousands of symmetric keys without practical impact. Use `Ke
 
 Always Encrypted (AE) encrypts client-side using Column Encryption Keys (CEKs) protected by Column Master Keys (CMKs). Create one CEK per customer for per-subject shredding.
 
+<!-- lint-tsql: skip fragment: <placeholder> values for the reader to fill in -->
 ```sql
 -- CMK in Azure Key Vault (recommended)
 create column master key CustomerCMK
@@ -75,7 +76,7 @@ with (
 -- per-customer CEK
 create column encryption key CEK_Customer_123
 with values (
-    column_master_key_definition_name = 'CustomerCMK',
+    column_master_key = CustomerCMK,
     algorithm = 'RSA_OAEP',
     encrypted_value = <encrypted_value_from_client_driver>
 );

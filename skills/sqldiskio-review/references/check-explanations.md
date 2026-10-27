@@ -283,8 +283,15 @@ Also investigate whether the log is growing because log backups are not running 
 1. **Nightly pre-growth maintenance job**:
 ```sql
 -- Run as SQL Agent job at 02:00
-DECLARE @target_size_mb INT = (SELECT size * 8 / 1024 + 2048 FROM sys.master_files WHERE name = 'Orders');
-ALTER DATABASE Orders MODIFY FILE (NAME = Orders, SIZE = @target_size_mb);
+-- MODIFY FILE takes SIZE as a literal, not a variable, so build the statement dynamically.
+-- Logical file names are unique only within a database, so filter on database_id too.
+DECLARE @target_size_mb INT =
+    (SELECT size * 8 / 1024 + 2048 FROM sys.master_files
+     WHERE database_id = DB_ID(N'Orders') AND name = N'Orders');
+DECLARE @sql NVARCHAR(400) =
+    N'ALTER DATABASE Orders MODIFY FILE (NAME = Orders, SIZE = '
+    + CAST(@target_size_mb AS NVARCHAR(20)) + N'MB);';
+EXEC sys.sp_executesql @sql;
 ```
 2. **Implement a growth monitoring alert** that fires when a file is within 20% of its current size.
 

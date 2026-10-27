@@ -214,6 +214,33 @@ CLAIM_SENTINELS: Sequence[Dict[str, object]] = (
                               r"|(?:client|application)[- ]side\s+bottleneck,\s+always", re.I),
         "why": "ASYNC_NETWORK_IO can be the network path too (Learn lists NIC, drivers, firewalls)",
     },
+    {
+        # These Always Encrypted blocks keep <placeholder> values, so they carry a
+        # lint-tsql skip marker and ScriptDom no longer parses them; this sentinel is
+        # what keeps the shipped syntax errors from coming back inside them.
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"column_master_key_definition_name"
+                              r"|\badd\s+value\s+with\s*\("
+                              r"|create\s+column\s+master\s+key\s+\w+\s+from\s+provider", re.I),
+        "why": "not Always Encrypted syntax: CEKs take COLUMN_MASTER_KEY = name, ADD VALUE "
+               "takes no WITH, and CMKs take WITH (KEY_STORE_PROVIDER_NAME, KEY_PATH)",
+    },
+    {
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"OPTION\s*\(\s*DISABLE_OPTIMIZER_ROWGOAL\b", re.I),
+        "why": "DISABLE_OPTIMIZER_ROWGOAL is a USE HINT name: OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))",
+    },
+    {
+        # Matches the clause only inside a PRIVATE KEY (...) list, so prose that says
+        # the clause does not exist is not flagged.
+        "path": "*",
+        "kind": "must_not",
+        "pattern": re.compile(r"PRIVATE\s+KEY\s*\([^)]*ENCRYPTION\s+BY\s+DATABASE\s+MASTER\s+KEY", re.I),
+        "why": "ALTER CERTIFICATE has no ENCRYPTION BY DATABASE MASTER KEY; DECRYPTION BY "
+               "PASSWORD alone moves the private key under the DMK (MS Learn Example D)",
+    },
 )
 
 # ---------------------------------------------------------------------------

@@ -382,11 +382,11 @@ Apply these to every operator node in the plan tree.
 ### N16 — Busy Loop Pattern
 - **Trigger:** `physicalOp` = Nested Loops AND (rebinds + rewinds + 1) > `estimateRows` × 100
 - **Severity:** Warning
-- **Fix:** The optimizer expects many loops but few output rows. This is a row goal optimization gone wrong. Use `OPTION (DISABLE_OPTIMIZER_ROWGOAL)` (SQL 2016+) or restructure the query to eliminate the row goal.
+- **Fix:** The optimizer expects many loops but few output rows. This is a row goal optimization gone wrong. Use `OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))` (SQL Server 2016 SP1+) or restructure the query to eliminate the row goal.
 ### N17 — Row Goal Applied
 - **Trigger:** `EstimateRowsWithoutRowGoal` > 0
 - **Severity:** Info
-- **Fix:** The optimizer reduced its row estimate to optimize for returning the first N rows fast (e.g., due to TOP, EXISTS, FAST N hint). This is normal but can cause full-scan plans when more rows are needed. If the full result set is always consumed, use `OPTION (DISABLE_OPTIMIZER_ROWGOAL)`.
+- **Fix:** The optimizer reduced its row estimate to optimize for returning the first N rows fast (e.g., due to TOP, EXISTS, FAST N hint). This is normal but can cause full-scan plans when more rows are needed. If the full result set is always consumed, use `OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))`.
 ### N18 — Adaptive Join
 - **Trigger:** `IsAdaptive` = 1 or true
 - **Severity:** Info

@@ -213,7 +213,9 @@ OPTION (OPTIMIZE FOR (@CutoffDate = '2023-01-01'))
 
 4. **Cap the grant** — last resort via Resource Governor:
 ```sql
-ALTER RESOURCE POOL [OLTP] WITH (MAX_MEMORY_GRANT_PERCENT = 10)
+-- Grant caps are a workload group setting, a percentage of its resource pool's memory
+ALTER WORKLOAD GROUP [OLTP] WITH (REQUEST_MAX_MEMORY_GRANT_PERCENT = 10);
+ALTER RESOURCE GOVERNOR RECONFIGURE;
 ```
 
 **Related checks:** S3 (large grant), S4 (grant wait), S18 (insufficient grant), N21 (bad row estimate)
@@ -290,7 +292,9 @@ WHERE wait_type = 'RESOURCE_SEMAPHORE'
 1. **Fix over-grants** — if queries are reserving far more than they use (S2/S3), fix those first. Reducing individual grants frees memory faster.
 2. **Resource Governor** — cap per-query memory to prevent monopolization:
 ```sql
-ALTER RESOURCE POOL OLTP_POOL WITH (MAX_MEMORY_GRANT_PERCENT = 20)
+-- Grant caps are a workload group setting, a percentage of its resource pool's memory
+ALTER WORKLOAD GROUP OLTP_GROUP WITH (REQUEST_MAX_MEMORY_GRANT_PERCENT = 20);
+ALTER RESOURCE GOVERNOR RECONFIGURE;
 ```
 3. **Add RAM** — hardware fix, but may only delay the problem if root grants aren't reduced.
 4. **Reduce `max server memory`** — counterintuitively, leaving more RAM for the OS buffer reduces grant waiting in memory-constrained environments.
@@ -1386,9 +1390,13 @@ CREATE INDEX IX_Orders_CustomerId_Date ON dbo.Orders (CustomerId, OrderDate)
 -- SQL Server reads from the index in order → no Sort operator needed at all
 ```
 
-3. **Increase sort memory** (last resort, via Resource Governor):
+3. **Guarantee the query a minimum memory grant** (last resort; `MIN_GRANT_PERCENT` is a per-query hint, SQL Server 2012 SP3, 2014 SP2 and later):
 ```sql
-ALTER RESOURCE POOL OLTP_POOL WITH (MIN_MEMORY_GRANT_PERCENT = 5)
+-- MIN_GRANT_PERCENT guarantees a minimum memory grant, as a % of the configured limit
+SELECT CustomerId, OrderDate, Total
+FROM dbo.Orders
+ORDER BY CustomerId, OrderDate
+OPTION (MIN_GRANT_PERCENT = 5);
 ```
 
 **Related checks:** N41 (confirmed spill), S18 (insufficient grant — root cause), N21 (bad row estimate — root cause)
@@ -1732,10 +1740,10 @@ This often occurs when a `TOP`, `EXISTS`, or `IN` clause causes SQL Server to ap
 
 **Fix**
 ```sql
--- Disable row goal interference (SQL 2016+):
+-- Disable row goal interference (SQL Server 2016 SP1+):
 SELECT * FROM dbo.Orders o
 WHERE EXISTS (SELECT 1 FROM dbo.OrderDetails d WHERE d.OrderId = o.OrderId)
-OPTION (DISABLE_OPTIMIZER_ROWGOAL)
+OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))
 
 -- Or restructure to avoid the row goal:
 SELECT DISTINCT o.OrderId FROM dbo.Orders o
@@ -1773,8 +1781,9 @@ SELECT TOP 1000 * FROM dbo.Orders ORDER BY OrderDate DESC
 ```
 
 **Fix (when it's causing problems)**
+<!-- lint-tsql: skip fragment: clauses or expressions shown out of context, not a full statement -->
 ```sql
-OPTION (DISABLE_OPTIMIZER_ROWGOAL)  -- SQL Server 2016 SP1+; equivalent to trace flag 4138
+OPTION (USE HINT('DISABLE_OPTIMIZER_ROWGOAL'))  -- SQL Server 2016 SP1+; equivalent to trace flag 4138
 ```
 `NO_PERFORMANCE_SPOOL` is not a documented `USE HINT` name [Unverified — not found in the documented USE HINT list or `sys.dm_exec_valid_use_hints`; `DISABLE_OPTIMIZER_ROWGOAL` is the documented way to suppress row goal optimization].
 

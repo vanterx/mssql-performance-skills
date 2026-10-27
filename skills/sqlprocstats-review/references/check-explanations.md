@@ -358,6 +358,7 @@ foreach (var o in orders)
 ```sql
 -- Fix: batch lookup with TVP
 CREATE TYPE dbo.IdList AS TABLE (Id int NOT NULL PRIMARY KEY);
+GO
 
 CREATE PROCEDURE dbo.usp_GetCustomersBatch @Ids dbo.IdList READONLY
 AS

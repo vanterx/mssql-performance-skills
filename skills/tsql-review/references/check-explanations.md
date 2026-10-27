@@ -392,6 +392,7 @@ CREATE OR ALTER FUNCTION dbo.fn_GetOrderTotal_TVF (@orderId INT)
 RETURNS TABLE AS RETURN (
     SELECT SUM(LineTotal) AS Total FROM dbo.OrderLines WHERE OrderId = @orderId
 );
+GO
 
 -- Use with CROSS APPLY
 SELECT o.OrderId, t.Total
@@ -2876,6 +2877,7 @@ Scalar UDF call in query (T8) AND one of: `WHILE`, `CURSOR`, `TRY/CATCH`, `@@ROW
 ```sql
 CREATE FUNCTION dbo.fn_score(@id INT) RETURNS TABLE AS RETURN
     (SELECT score FROM dbo.ScoreTable WHERE id = @id);
+GO
 
 SELECT o.id, s.score FROM dbo.Orders o CROSS APPLY dbo.fn_score(o.id) s;
 ```

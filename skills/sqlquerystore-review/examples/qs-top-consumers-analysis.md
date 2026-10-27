@@ -71,7 +71,7 @@
   ALTER DATABASE SalesDB SET QUERY_STORE = ON (MAX_STORAGE_SIZE_MB = 2048);
 
   -- Option B — reduce retention to free space immediately
-  ALTER DATABASE SalesDB SET QUERY_STORE = ON (STALE_QUERY_THRESHOLD_DAYS = 14);
+  ALTER DATABASE SalesDB SET QUERY_STORE = ON (CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = 14));
 
   -- Check current size after change
   SELECT current_storage_size_mb, max_storage_size_mb
