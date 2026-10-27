@@ -90,11 +90,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ── Resolve script directory ──────────────────────────────────────────────────
+# -- Resolve script directory --------------------------------------------------
 $scriptDir = $PSScriptRoot
 if (-not $scriptDir) { $scriptDir = Split-Path $MyInvocation.MyCommand.Path }
 
-# ── Collector → file mapping ─────────────────────────────────────────────────
+# -- Collector -> file mapping -------------------------------------------------
 $collectorFiles = [ordered]@{
     ProcStats    = @('01_create_tables.sql', '02_usp_collect_procstats.sql', '03_usp_calculate_deltas.sql')
     WaitStats    = @('06_usp_collect_wait_stats.sql')
@@ -104,7 +104,7 @@ $collectorFiles = [ordered]@{
     PerfCounters = @('10_usp_collect_perf_counters.sql')
 }
 
-# ── Build Invoke-Sqlcmd base parameters ──────────────────────────────────────
+# -- Build Invoke-Sqlcmd base parameters --------------------------------------
 $sqlBase = @{
     ServerInstance  = $ServerInstance
     Database        = $Database
@@ -117,7 +117,7 @@ $sqlBase = @{
 if ($Credential)             { $sqlBase.Credential             = $Credential }
 if ($TrustServerCertificate) { $sqlBase.TrustServerCertificate = $true }
 
-# ── Helper: run one .sql file ─────────────────────────────────────────────────
+# -- Helper: run one .sql file -------------------------------------------------
 function Invoke-SqlFile {
     param(
         [string]    $FileName,
@@ -126,7 +126,7 @@ function Invoke-SqlFile {
 
     $filePath = Join-Path $scriptDir $FileName
     if (-not (Test-Path $filePath)) {
-        Write-Warning "File not found — skipping: $filePath"
+        Write-Warning "File not found - skipping: $filePath"
         return
     }
 
@@ -151,7 +151,7 @@ function Invoke-SqlFile {
     }
 }
 
-# ── Determine which collectors to deploy ──────────────────────────────────────
+# -- Determine which collectors to deploy --------------------------------------
 $deployAll = 'All' -in $Collectors
 
 $selectedCollectors = if ($deployAll) {
@@ -161,7 +161,7 @@ $selectedCollectors = if ($deployAll) {
     $collectorFiles.Keys | Where-Object { $_ -in $Collectors }
 }
 
-# ── Header ────────────────────────────────────────────────────────────────────
+# -- Header --------------------------------------------------------------------
 $collectorLabel = if ($deployAll) { 'All collectors' } else { $Collectors -join ', ' }
 $whatIfLabel    = if ($WhatIfPreference -or $WhatIf) { ' [WhatIf]' } else { '' }
 
@@ -178,12 +178,12 @@ Write-Host ''
 $totalSw = [System.Diagnostics.Stopwatch]::StartNew()
 $fileCount = 0
 
-# ── Step 1: Bootstrap (always) ───────────────────────────────────────────────
+# -- Step 1: Bootstrap (always) -----------------------------------------------
 Write-Host 'Step 1/3  Bootstrap prerequisites' -ForegroundColor White
 Invoke-SqlFile '00_bootstrap.sql'
 $fileCount++
 
-# ── Step 2: Deploy selected collectors ───────────────────────────────────────
+# -- Step 2: Deploy selected collectors ---------------------------------------
 Write-Host "Step 2/3  Collectors ($collectorLabel)" -ForegroundColor White
 
 foreach ($collector in $selectedCollectors) {
@@ -201,11 +201,11 @@ if ($deployAll) {
     $fileCount++
 }
 
-# ── Step 3: Agent job (optional) ─────────────────────────────────────────────
+# -- Step 3: Agent job (optional) ---------------------------------------------
 Write-Host "Step 3/3  Agent job" -ForegroundColor White
 
 if ($IncludeAgentJob) {
-    # Agent job script targets msdb — override Database and add AgentJobIntervalMinutes variable
+    # Agent job script targets msdb - override Database and add AgentJobIntervalMinutes variable
     $agentOverrides = @{
         Database = 'msdb'
         Variable = @(
@@ -217,10 +217,10 @@ if ($IncludeAgentJob) {
     Invoke-SqlFile '05_create_agent_job.sql' -ParamOverrides $agentOverrides
     $fileCount++
 } else {
-    Write-Host '  (skipped — use -IncludeAgentJob to deploy the Agent job)' -ForegroundColor DarkGray
+    Write-Host '  (skipped - use -IncludeAgentJob to deploy the Agent job)' -ForegroundColor DarkGray
 }
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# -- Summary -------------------------------------------------------------------
 $totalSw.Stop()
 Write-Host ''
 Write-Host ('Done. {0} file(s) deployed in {1} ms.' -f $fileCount, $totalSw.ElapsedMilliseconds) -ForegroundColor Cyan

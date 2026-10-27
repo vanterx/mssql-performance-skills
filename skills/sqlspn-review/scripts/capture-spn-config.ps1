@@ -80,7 +80,7 @@ param(
     [string] $ServiceAccount,
     [string] $ComputerName = $env:COMPUTERNAME,
     [string] $ServerInstance,
-    [string] $DomainController = $env:LOGONSERVER -replace '^\\\\', '',
+    [string] $DomainController = ($env:LOGONSERVER -replace '^\\\\', ''),
     [string] $OutputPath = '.'
 )
 

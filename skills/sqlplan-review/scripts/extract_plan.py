@@ -1064,7 +1064,7 @@ def main() -> int:
         if not lines:
             print("error: no statement with StatementId {}".format(args.sql), file=sys.stderr)
             return 1
-        print("\n".join(scrub(l) for l in lines))
+        print("\n".join(scrub(line) for line in lines))
         return 0
 
     out = Out()
