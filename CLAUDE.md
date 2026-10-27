@@ -179,7 +179,7 @@ Provides twenty-nine slash-command skills — twenty-five specialised review ski
 | [scripts/lint-tsql-baseline.tsv](scripts/lint-tsql-baseline.tsv) | Known-broken T-SQL blocks in docs, keyed by content hash — real or suspected recipe defects awaiting a validated fix. Shrink-only: a fixed, moved, or deleted block's entry fails the gate as stale |
 | [scripts/lint-powershell.ps1](scripts/lint-powershell.ps1) | PowerShell gate: PSScriptAnalyzer with the repo settings, every severity including ParseError |
 | [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) | PSScriptAnalyzer rule exclusions, each with its reason |
-| [ruff.toml](ruff.toml) | ruff rule selection; `target-version = "py38"` protects `extract_plan.py`'s documented Python 3.8 floor |
+| [ruff.toml](ruff.toml) | ruff rules for every `.py` in the repo — no file list, so new scripts are covered automatically. `target-version = "py38"` enforces the repo-wide Python 3.8 floor: newer syntax is a hard error |
 | [.github/workflows/lint.yml](.github/workflows/lint.yml) | CI: installs pinned ruff and PSScriptAnalyzer, runs `lint-scripts.sh --strict` on every PR |
 
 ## Installing Skills
@@ -278,6 +278,8 @@ Always credit the person, tool or document a check, threshold, formula, quote or
 
 ### Linting
 Also run `bash scripts/lint-scripts.sh` before committing a change to any `.py`, `.ps1`, `.sql`, or to a ` ```sql ` block in any `.md`. CI runs it with `--strict` on every PR (`.github/workflows/lint.yml`). Local prerequisites: `pip install ruff`, `Install-PSResource PSScriptAnalyzer -Scope CurrentUser`, and PowerShell 7 (`pwsh`), which also loads ScriptDom — no .NET SDK needed.
+
+**Python scripts: standard library only, Python 3.8+.** Shipped scripts run on whatever interpreter a DBA's jump box has, with no pip step. Any new `.py` is linted automatically — there is no list to register it in — and `ruff.toml`'s `target-version = "py38"` makes 3.9+ syntax a hard error. A script that genuinely needs a newer Python opts in by name under `[per-file-target-version]` in `ruff.toml` and documents its floor in its own docstring.
 
 **T-SQL in Markdown is linted too.** Every ` ```sql ` block must parse as a T-SQL batch. A block that is correct as documentation but not runnable gets a marker on the line directly before its fence, and the reason is mandatory — a bare `skip` fails the gate:
 
