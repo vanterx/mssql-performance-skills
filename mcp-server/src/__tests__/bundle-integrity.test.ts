@@ -26,8 +26,8 @@ function getSkillFiles(): Array<{ name: string; path: string; raw: string }> {
 describe("SKILL.md bundle integrity", () => {
   const skillFiles = getSkillFiles();
 
-  it("finds at least 26 skill directories", () => {
-    expect(skillFiles.length).toBeGreaterThanOrEqual(26);
+  it("finds at least 29 skill directories", () => {
+    expect(skillFiles.length).toBeGreaterThanOrEqual(29);
   });
 
   it.each(skillFiles)(
