@@ -187,6 +187,13 @@ Provides twenty-nine slash-command skills — twenty-five specialised review ski
 | File | Purpose |
 |------|---------|
 | [.claude/agents/mslearn-validator.md](.claude/agents/mslearn-validator.md) | Read-only subagent: validates DMV columns, enum values, T-SQL syntax, cmdlets, registry names and version gates in changed files (or a named skill, or the current diff) against Microsoft Learn MCP. Returns the audit-prompt issue table with Learn URLs, unlabelled undocumented claims, candidate `CLAIM_SENTINELS` entries, and a verified-claims list for the PR record |
+| [.claude/agents/check-author.md](.claude/agents/check-author.md) | Adds, edits or retires a check in an existing skill: three-part SKILL.md entry, five-part explanation, Learn lookups for its own claims, every count and range touch point, then `verify-docs.sh` and `lint-scripts.sh` until clean |
+| [.claude/agents/skill-scaffolder.md](.claude/agents/skill-scaffolder.md) | Creates a new skill end to end: unused two-letter prefix, the §1.5 layout, untrusted-artifact block, registration in the `P2S` map, CLAUDE.md, README, guide, version matrix, orchestrator and `ARTIFACT_SKILL_MAP`, then all gates and the MCP tests |
+| [.claude/agents/tsql-lint-triager.md](.claude/agents/tsql-lint-triager.md) | Triages `lint-tsql.ps1` failures as fragment, parser gap (confirmed on Learn), removed syntax or real defect; fixes defects, adds reasoned skip markers, removes stale baseline lines, never adds new ones |
+| [.claude/agents/citation-auditor.md](.claude/agents/citation-auditor.md) | Read-only: finds uncredited checks, thresholds, formulas, quotes and adapted work, verifies cited sources say what the repo claims, and flags credits replaced by neutral wording |
+| [.claude/agents/consistency-reviewer.md](.claude/agents/consistency-reviewer.md) | Read-only: semantic drift `verify-docs.sh` cannot see — conflicting thresholds across skills, references to retired checks, one-way companion links, routing tables that disagree, stale sample IDs and uncovered counts |
+| [.claude/agents/example-builder.md](.claude/agents/example-builder.md) | Writes or refreshes `examples/` input and `-analysis.md`: fictional but realistic data planned around a Critical/Warning/Info spread plus near misses, analysis in the exact Output Format, every quoted number recomputed |
+| [.claude/agents/mcp-sync.md](.claude/agents/mcp-sync.md) | Regenerates `skills-data.ts`, checks `ARTIFACT_SKILL_MAP`, resources and prompts cover every skill and reference file, fixes stale counts under `mcp-server/`, runs typecheck and vitest. Never deploys |
 
 ## Installing Skills
 
