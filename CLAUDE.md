@@ -217,7 +217,7 @@ cp -r skills/* .claude/skills/            # project-scoped
 
 ## Adding a New Check to an Existing Skill
 
-These steps apply to any skill. Replace `<skill>` with the skill directory name and `<PREFIX>` with its check letter(s).
+These steps apply to any skill. Replace `<skill>` with the skill directory name and `<PREFIX>` with its check letter(s). Delegate the whole procedure to the `check-author` subagent — see *Delegating to project subagents* below.
 
 1. Add the check to `skills/<skill>/SKILL.md` under the correct section, following the **Trigger → Severity → Fix** three-part structure
 2. Add a full explanation entry to `skills/<skill>/references/check-explanations.md`, following the **five-part structure** (What it means / How to spot it / Example / Fix options / Related checks)
@@ -227,6 +227,8 @@ These steps apply to any skill. Replace `<skill>` with the skill directory name 
 6. Update the check count in [PERFORMANCE_TUNING_GUIDE.md](PERFORMANCE_TUNING_GUIDE.md) (Check ID Reference table)
 
 ## Adding a New Skill
+
+Delegate the whole procedure to the `skill-scaffolder` subagent — see *Delegating to project subagents* below.
 
 1. Create `skills/<skill-name>/SKILL.md` and `skills/<skill-name>/references/check-explanations.md` following the patterns in [.claude/docs/architectural_patterns.md](.claude/docs/architectural_patterns.md)
 2. Choose an unused check prefix. All 26 single letters are taken (S, N, C, D, P, T, I, W, X, V, Q, R, H, L, E, K, O, Z, A, B, U, G, F, Y, J, M), so new skills use a two-letter prefix — `BL` (`sqlblocking-review`) is the first. `scripts/verify-docs.sh` matches `^### [A-Z]{1,2}[0-9]`, so pick a pair that no existing prefix collides with and add it to the `P2S` map in Check 34
@@ -348,6 +350,27 @@ Only `SKILL.md` is loaded automatically by the Claude Code skill loader. The `re
 
 ### Microsoft Learn validation (mandatory)
 All new and modified skills, checks, scripts, and reference content must be validated against current Microsoft Learn documentation before being considered complete. Use the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`) to verify every DMV column name, T-SQL syntax, PowerShell cmdlet, configuration setting, and version compatibility claim. If documentation cannot be found, mark the content as "Unverified" rather than assuming correctness. Full policy: [`.claude/docs/ms-learn-validation.md`](.claude/docs/ms-learn-validation.md). Delegate the validation pass to the `mslearn-validator` subagent ([.claude/agents/mslearn-validator.md](.claude/agents/mslearn-validator.md)) — pass it the changed files or "the diff" — so the lookups stay out of the main context.
+
+### Delegating to project subagents
+The eight agents in `.claude/agents/` (listed under *Project subagents* in Key Files) each own one workflow. When a task matches a row below, hand it to that agent instead of doing it in the main session, and pass it the scope: file paths, a skill name, or "the diff".
+
+| When the task is… | Delegate to |
+|-------------------|-------------|
+| Adding, changing, renumbering, merging or retiring a check in an existing skill | `check-author` |
+| Adding a new skill, or porting an external skill into the library | `skill-scaffolder` |
+| Creating or refreshing a skill's `examples/` input and `-analysis.md`, or after checks change in a skill that has examples | `example-builder` |
+| `lint-scripts.sh` or CI reports T-SQL parse failures, or the baseline has stale entries | `tsql-lint-triager` |
+| Any change to a `SKILL.md`, `check-explanations.md`, capture script or T-SQL recipe, before committing | `mslearn-validator` |
+| Content adapted from a person, tool or repository; a reviewer asks where a threshold came from; before a release | `citation-auditor` |
+| A change spanning several skills; two skills seem to give conflicting advice; before a release | `consistency-reviewer` |
+| A skill was added, renamed or edited; the MCP bundle looks stale; MCP routing or deploy fails in CI | `mcp-sync` |
+
+Rules:
+- **Subagents cannot start other subagents.** After an editing agent (`check-author`, `skill-scaffolder`, `example-builder`, `tsql-lint-triager`) finishes, the main session runs `mslearn-validator` on the diff, and `mcp-sync` if a `SKILL.md` changed. Independent read-only passes (`mslearn-validator`, `citation-auditor`, `consistency-reviewer`) can run in parallel.
+- **Agents do not commit.** The main session reviews the agent's report, applies any fixes a read-only agent recommends, runs the *Before committing* gates, and commits on the feature branch.
+- **A read-only agent's findings are recommendations.** Check a finding against the cited source before applying it; an agent can be wrong.
+- **Small edits stay in the main session.** A one-line wording fix or a typo does not need an agent; `mslearn-validator` is still required if the edit changes a technical claim.
+- **The user's instruction wins.** If the user asks for the work to be done directly, or names a different agent, do that.
 
 ### Updating check counts — all 6 touch points
 When adding or removing a check from any skill, update all of:
