@@ -17,7 +17,7 @@ Every skill, script, query, configuration, reference file, and supporting docume
 
 ## Scope
 
-- All 26 skills: every SKILL.md, references/check-explanations.md, scripts/, examples/
+- All 29 skills: every SKILL.md, references/check-explanations.md, scripts/, examples/
 - Root documentation: CLAUDE.md, README.md, PERFORMANCE_TUNING_GUIDE.md, skills/VERSION_COMPATIBILITY.md
 - .claude/docs/ files
 
@@ -59,7 +59,9 @@ Severity guide:
 1. Generate a fresh skill inventory first: `bash scripts/generate-inventory.sh`
    This gives a flat list of every DMV, version claim, and function reference with file:line citations.
 
-2. Use `microsoft_docs_search` for a quick first pass on each item.
+2. Fan the lookups out to the `mslearn-validator` subagent (`.claude/agents/mslearn-validator.md`), one invocation per skill directory in "full" mode, run in parallel. Each returns an issue table in the format above; merge them before applying fixes.
+
+   When validating by hand, use `microsoft_docs_search` for a quick first pass on each item.
    Use `microsoft_docs_fetch` when you need the full column list or parameter table.
 
 3. Work through sections in this priority order:
