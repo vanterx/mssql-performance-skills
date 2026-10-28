@@ -182,6 +182,12 @@ Provides twenty-nine slash-command skills — twenty-five specialised review ski
 | [ruff.toml](ruff.toml) | ruff rules for every `.py` in the repo — no file list, so new scripts are covered automatically. `target-version = "py38"` enforces the repo-wide Python 3.8 floor: newer syntax is a hard error |
 | [.github/workflows/lint.yml](.github/workflows/lint.yml) | CI: installs pinned ruff and PSScriptAnalyzer, runs `lint-scripts.sh --strict` on every PR |
 
+### Project subagents
+
+| File | Purpose |
+|------|---------|
+| [.claude/agents/mslearn-validator.md](.claude/agents/mslearn-validator.md) | Read-only subagent: validates DMV columns, enum values, T-SQL syntax, cmdlets, registry names and version gates in changed files (or a named skill, or the current diff) against Microsoft Learn MCP. Returns the audit-prompt issue table with Learn URLs, unlabelled undocumented claims, candidate `CLAIM_SENTINELS` entries, and a verified-claims list for the PR record |
+
 ## Installing Skills
 
 **Option 1: Plugin Marketplace (recommended)**
@@ -334,7 +340,7 @@ New skills must choose an unused prefix — a single uppercase letter if one is 
 Only `SKILL.md` is loaded automatically by the Claude Code skill loader. The `references/check-explanations.md` file is human reference and on-demand context — Claude may load it when a user asks "explain check X" or for deeper fix-option detail. Do not put trigger conditions or thresholds there that Claude needs to act on without prompting.
 
 ### Microsoft Learn validation (mandatory)
-All new and modified skills, checks, scripts, and reference content must be validated against current Microsoft Learn documentation before being considered complete. Use the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`) to verify every DMV column name, T-SQL syntax, PowerShell cmdlet, configuration setting, and version compatibility claim. If documentation cannot be found, mark the content as "Unverified" rather than assuming correctness. Full policy: [`.claude/docs/ms-learn-validation.md`](.claude/docs/ms-learn-validation.md)
+All new and modified skills, checks, scripts, and reference content must be validated against current Microsoft Learn documentation before being considered complete. Use the Microsoft Learn MCP tools (`microsoft_docs_search`, `microsoft_docs_fetch`) to verify every DMV column name, T-SQL syntax, PowerShell cmdlet, configuration setting, and version compatibility claim. If documentation cannot be found, mark the content as "Unverified" rather than assuming correctness. Full policy: [`.claude/docs/ms-learn-validation.md`](.claude/docs/ms-learn-validation.md). Delegate the validation pass to the `mslearn-validator` subagent ([.claude/agents/mslearn-validator.md](.claude/agents/mslearn-validator.md)) — pass it the changed files or "the diff" — so the lookups stay out of the main context.
 
 ### Updating check counts — all 6 touch points
 When adding or removing a check from any skill, update all of:
