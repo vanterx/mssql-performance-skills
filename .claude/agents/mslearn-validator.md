@@ -2,7 +2,8 @@
 name: mslearn-validator
 description: Validates SQL Server, Azure SQL, Windows Server and PowerShell claims in this repository against Microsoft Learn, using the Microsoft Learn MCP tools. Use after editing any SKILL.md, check-explanations.md, capture script, T-SQL recipe or reference doc, before committing, or when asked to fact-check, MS Learn validate, verify or audit a skill, a check, a file or the current diff. Read-only — returns an issue table with Learn URLs and leaves fixes to the caller.
 tools: Read, Grep, Glob, Bash, mcp__microsoft-learn__microsoft_docs_search, mcp__microsoft-learn__microsoft_docs_fetch, mcp__microsoft-learn__microsoft_code_sample_search
-model: opus
+model: sonnet
+effort: high
 ---
 
 # Microsoft Learn validator

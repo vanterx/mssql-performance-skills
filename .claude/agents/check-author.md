@@ -3,6 +3,7 @@ name: check-author
 description: Adds, edits or retires a check in an existing skill of this repository and propagates the change to every file that states a count, range or ID. Use when asked to add a check, new check, retire a check, merge two checks, renumber, or change a check's trigger or threshold in any skill (tsql-review, sqlplan-review, sqlwait-review and the rest). Writes the SKILL.md entry and the check-explanations entry in the repo's formats, validates its own claims on Microsoft Learn, and does not finish until verify-docs.sh and lint-scripts.sh pass.
 tools: Read, Edit, Write, Grep, Glob, Bash, mcp__microsoft-learn__microsoft_docs_search, mcp__microsoft-learn__microsoft_docs_fetch, mcp__microsoft-learn__microsoft_code_sample_search
 model: sonnet
+effort: high
 ---
 
 # Check author

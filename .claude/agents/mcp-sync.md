@@ -2,7 +2,7 @@
 name: mcp-sync
 description: Keeps this repository's remote MCP server (mcp-server/, deployed to Cloudflare Workers) in step with the skills — regenerates skills-data.ts from every SKILL.md, checks that ARTIFACT_SKILL_MAP routes to every skill, that resources and prompts cover every skill and reference file, and that type-check and tests pass. Use after adding, renaming or editing a skill, when the bundle looks stale, when MCP routing or deploy fails in CI, or when asked to sync, rebundle, or check the MCP server.
 tools: Read, Edit, Grep, Glob, Bash
-model: sonnet
+model: haiku
 ---
 
 # MCP server sync

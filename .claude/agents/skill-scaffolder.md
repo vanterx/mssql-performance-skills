@@ -3,6 +3,7 @@ name: skill-scaffolder
 description: Creates a new skill in this repository end to end — directory layout, SKILL.md, references, evals, examples, scripts — and registers it everywhere the repo lists skills, so verify-docs.sh passes with the new skill count. Use when asked to add a new skill, create a skill, scaffold a review skill for a new artifact type, or port an external skill into the library. Picks an unused check prefix, wires orchestrator and MCP server routing, and validates the content on Microsoft Learn.
 tools: Read, Edit, Write, Grep, Glob, Bash, mcp__microsoft-learn__microsoft_docs_search, mcp__microsoft-learn__microsoft_docs_fetch, mcp__microsoft-learn__microsoft_code_sample_search
 model: opus
+effort: high
 ---
 
 # Skill scaffolder
