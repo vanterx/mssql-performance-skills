@@ -3,6 +3,7 @@ name: citation-auditor
 description: Audits this repository's credit-and-cite rule — finds checks, thresholds, formulas, quotes, parameter names and adapted work that do not say where they came from, checks that cited sources exist and say what the repo claims, and flags credits that were replaced by neutral wording. Use when asked to check credits, citations, attribution or sources for a skill, a diff or the whole repo, before merging content adapted from another person, tool or repository, or when a reviewer asks where a threshold came from. Read-only.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: sonnet
+effort: medium
 ---
 
 # Citation auditor

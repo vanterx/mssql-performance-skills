@@ -3,6 +3,7 @@ name: consistency-reviewer
 description: Finds semantic drift across this repository's 29 skills and root docs that verify-docs.sh cannot detect — the same metric given different thresholds in two skills, references to retired or renumbered checks, one-way companion links, routing tables that disagree with the skill list, and README or guide samples that use stale check IDs or counts. Use after a multi-skill change, before a release, when two skills seem to give conflicting advice, or when asked to check consistency, cross-skill drift, or contradictions. Read-only.
 tools: Read, Grep, Glob, Bash
 model: sonnet
+effort: medium
 ---
 
 # Consistency reviewer

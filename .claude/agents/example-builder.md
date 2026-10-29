@@ -2,7 +2,8 @@
 name: example-builder
 description: Builds or refreshes a skill's worked example in this repository — a realistic, fictional input artifact that triggers a deliberate spread of checks, and the matching -analysis.md that follows the skill's Output Format exactly. Use when a new skill needs examples, when checks were added, renumbered or retired and an existing example is stale, or when asked to create, update or regenerate an example, sample input, reference output or evals for a skill.
 tools: Read, Edit, Write, Grep, Glob, Bash
-model: opus
+model: sonnet
+effort: high
 ---
 
 # Example builder

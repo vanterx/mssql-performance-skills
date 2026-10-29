@@ -3,6 +3,7 @@ name: tsql-lint-triager
 description: Triages failures from the repository's T-SQL lint gate (scripts/lint-tsql.ps1, run by lint-scripts.sh) — classifies each failing .sql file or sql fenced block in Markdown as a fragment, a ScriptDom parser gap, deliberately removed syntax, or a real defect, then fixes real defects, adds correctly reasoned skip markers, and removes fixed entries from the baseline. Use when lint-scripts.sh or CI reports T-SQL parse failures, when the baseline has stale entries, or when asked to fix, triage or shrink lint-tsql-baseline.tsv.
 tools: Read, Edit, Grep, Glob, Bash, mcp__microsoft-learn__microsoft_docs_search, mcp__microsoft-learn__microsoft_docs_fetch, mcp__microsoft-learn__microsoft_code_sample_search
 model: sonnet
+effort: medium
 ---
 
 # T-SQL lint triager
